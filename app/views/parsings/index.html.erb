@@ -2,7 +2,16 @@
     <h2 class='text-center font-semibold mb-[20px]'>Выгрузка данных с источника <%= link_to 'Galacentre', 'https://www.galacentre.ru/', target: 'blank', class: 'text-blue-900' %></h2>
 
     <p class='text-[#747474]'>1.Выберите шаблон: *</p>
-    <%= select_tag 'temp', options_for_select(@templates), class: 'cat_temp w-[100%] mt-[7px] mb-[20px] p-[10px] bg-[#eee] rounded-[5px]', include_blank: true, required: true %>
+    <select name='temp' class='cat_temp w-[100%] mt-[7px] mb-[20px] p-[10px] bg-[#eee] rounded-[5px]' required>
+        <option></option>
+        <% @templates.each do |group| %>
+        <optgroup label="<%= group[0] %>">
+            <% group[1].each do |item| %>
+                <option value='<%= item %>'><%= item %></option>
+            <% end %>
+        </optgroup>
+        <% end %>
+    </select>
 
     <p class='text-[#747474]'>2. Список штрих-кодов: *</p>
     <span class='block text-[#535353] text-[11px]'>Через пробел или построчно</span>
