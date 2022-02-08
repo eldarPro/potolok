@@ -25,6 +25,10 @@ gem "jbuilder"
 
 gem 'spreadsheet'
 
+gem 'caxlsx'
+
+gem 'caxlsx_rails'
+
 gem 'sidekiq', '~> 6.4.0'
 
 # Use Redis adapter to run Action Cable in production

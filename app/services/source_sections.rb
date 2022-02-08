@@ -1,7 +1,7 @@
 require 'nokogiri'
 require 'open-uri'
 
-class SourceCatalog
+class SourceSections
 
     KEY = '7dc4e624f3811b5d195a1712374912a4'
     

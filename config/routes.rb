@@ -4,9 +4,6 @@ Rails.application.routes.draw do
   # Defines the root path route ("/")
   root "parsings#index"
 
-
-  get 'get_category' => 'parsings#get_category'
-
-  get 'parsing_start' => 'parsings#parsing_start'  
+  post 'parsings/launch'   
 
 end
