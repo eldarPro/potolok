@@ -12,8 +12,7 @@ class ParsingsController < ApplicationController
         @res = GetSourceCatalog.new(130).call # Загрузка каталога (Текстиль)
         @res.select!{ |i| list_barcodes.include?(i['barcode']) } # Выборка из списка соответствующим по штрих-кодам
 
-        puts list_barcodes
-        puts @res.length
+        render xlsx: 'launch', filename: "nomenkl_#{DateTime.current}.xlsx"
     end
 
 end
