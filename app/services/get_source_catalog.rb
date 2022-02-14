@@ -48,7 +48,7 @@ class GetSourceCatalog
 
             end
 
-            item['Изображение'] = ''
+            item['Изображение'] = []
 
             res << item
         end
