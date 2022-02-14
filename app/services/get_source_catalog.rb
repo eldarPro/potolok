@@ -48,6 +48,8 @@ class GetSourceCatalog
 
             end
 
+            item['Изображение'].flatten!
+
             res << item
         end
 
