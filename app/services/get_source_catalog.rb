@@ -22,7 +22,7 @@ class GetSourceCatalog
             item['Наименование'] = offer.at_css('name').content
             item['Описание']     = offer.at_css('description').content
             item['Изображение']  = []
-            item['Изображение'] << offer.at_css('picture').content]
+            item['Изображение'] << offer.at_css('picture').content
 
             offer.css("param").each do |off_param| 
 
