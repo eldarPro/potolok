@@ -48,7 +48,7 @@ class GetSourceCatalog
 
             end
 
-            item['Изображение'].flatten!
+            item['Изображение'] = ''
 
             res << item
         end
