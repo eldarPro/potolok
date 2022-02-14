@@ -18,9 +18,11 @@ class GetSourceCatalog
         doc.css("offer").each.with_index do |offer, inx| 
             item = {}
 
+            item['articul']      = offer['articul']
             item['Наименование'] = offer.at_css('name').content
             item['Описание']     = offer.at_css('description').content
-            item['Изображение']  = offer.at_css('picture').content
+            item['Изображение']  = []
+            item['Изображение'] << offer.at_css('picture').content]
 
             offer.css("param").each do |off_param| 
 
@@ -38,6 +40,10 @@ class GetSourceCatalog
                         var_item = var.content.split('=')
                         item[var_item[0]] = var_item[1]  
                     end
+                end
+
+                if off_param['name'] == 'images'
+                    off_param.css("variant").each{ |var| item['Изображение'] << var.content }
                 end
 
             end
