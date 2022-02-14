@@ -48,7 +48,7 @@ class GetSourceCatalog
 
             end
 
-            item['Изображение'] = []
+            item['Изображение'] = item['Изображение'].join("\n")
 
             res << item
         end

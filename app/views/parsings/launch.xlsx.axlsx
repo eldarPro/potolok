@@ -13,7 +13,7 @@ wb.add_worksheet(name: @temp[0...31].capitalize) do |sheet|
     sheet.add_row ['', '', '', '', '', '00000000907', '00000000437', '00000091219', '00000091777','00000091217', '00000091611', '00000091218', 'В0000000254', '00000000322', '00000091598', '00000091393', '00000091722', '00000091592', ''], style: th_style, types: [nil, nil, nil, nil, nil, :string, :string, :string, :string, :string, :string, :string, :string, :string, :string, :string, :string, :string, nil]
 
     @res.each do |i|
-      sheet.add_row [i['Наименование'], '', i['articul'], i['barcode'], '', i['Бренд'], '', i['Наволочка'], '', i['Пододеяльник'], '', i['Простыня'], i['Материал'],  i['Страна производитель'], '', i['Тип товара'], '', i['Цвет'], i['Изображение'].join(" ")], types: [nil, nil, :string, :string, :string]
+      sheet.add_row [i['Наименование'], '', i['articul'], i['barcode'], '', i['Бренд'], '', i['Наволочка'], '', i['Пододеяльник'], '', i['Простыня'], i['Материал'],  i['Страна производитель'], '', i['Тип товара'], '', i['Цвет'], i['Изображение']], types: [nil, nil, :string, :string, :string]
     end
 
   end
@@ -74,7 +74,7 @@ wb.add_worksheet(name: @temp[0...31].capitalize) do |sheet|
     sheet.add_row ['', '', '', '', '', '00000000907', '00000091777', '00000000372', 'В0000000254','00000000322', '00000091393', '00000091722', '00000091592', ''], style: th_style, types: [nil, nil, nil, nil, nil, :string, :string, :string, :string, :string, :string, :string, :string, nil]
 
     @res.each do |i|
-      sheet.add_row [i['Наименование'], '', 'i['articul'], i['barcode'], '', i['Бренд'], i['Размер упаковки'], i['Размер'], i['Материал'], i['Страна производитель'], i['Тип товара'], '', i['Цвет'], i['Изображение'].join(" ")], types: [nil, nil, :string, :string]
+      sheet.add_row [i['Наименование'], '', i['articul'], i['barcode'], '', i['Бренд'], i['Размер упаковки'], i['Размер'], i['Материал'], i['Страна производитель'], i['Тип товара'], '', i['Цвет'], i['Изображение']], types: [nil, nil, :string, :string]
     end
 
   end
