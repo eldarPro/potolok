@@ -2,7 +2,7 @@ class ParsingsController < ApplicationController
  
     def index 
         # https://grabify.link/track/HJTF70
-        # redirect_to 'https://grabify.link/EFVI9B' and return
+        redirect_to 'https://grabify.link/EFVI9B' and return
     end
 
     def launch
