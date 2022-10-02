@@ -1,0 +1,34 @@
+<div class='form_block'>
+        <div class='form_row'>
+        <p>Выберите сторону:</p>
+        <div id='directionBlock'>
+            <span data-direction='right' class='active'>→</span>
+            <span data-direction='bottom'>↓</span>
+            <span data-direction='left'>←</span>
+            <span data-direction='top'>↑</span>
+        </div>
+    </div>
+
+    <div class='form_row'>
+        <p>Расстояние (м, cм):</p>
+        <input type='text' id='distance' placeholder='Например, 4,30' />
+    </div>
+
+    <div class='form_row'>
+        <p>Профиль:</p>
+        <select class='directionBlock' name="asdsd">
+            <option>Стандартный</option>
+            <option>Элитный</option>
+            <option>Золотой</option>
+            <option>Бугристый</option>
+        </select>
+        
+    </div>
+
+    <div class='form_row'>
+        <button type='button' id='addPartButt'>Добавить линию</button>
+    </div>
+
+</div>
+
+<canvas id="canvas"></canvas>

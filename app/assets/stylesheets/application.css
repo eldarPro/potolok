@@ -15,7 +15,76 @@
  */
 
 
-.no_active {
- pointer-events: none;
- opacity: 0.7;
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+}
+
+#directionBlock {
+    display: flex;
+    margin-top: 10px;
+}
+
+#directionBlock span {
+    display: block;
+    cursor: pointer;
+    padding: 10px 0;
+    width: 50px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin-right: 10px;
+    text-align: center;
+    width: 25%;
+}
+
+#directionBlock span:last-child {
+    margin-right: 0;
+}
+
+#directionBlock .active {
+    border: 1px solid green;
+    color: green;
+}
+
+#canvas {
+  background: #eee;
+}
+
+.form_block {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: #fff;
+}
+
+.form_row {
+    margin-bottom: 10px;
+}
+
+input[type='text'] {
+    width: 100%;
+    padding: 7px 10px;
+}
+
+select {
+    width: 100%;
+    padding: 7px 10px;
+}
+
+button {
+    background: #7272f8;
+    color: #fff;
+    border: none;
+    width: 100%;
+    text-align: center;
+    border-radius: 4px;
+    padding: 15px;
 }

@@ -1,12 +1,7 @@
 class ParsingsController < ApplicationController
  
     def index 
-        # https://grabify.link/track/HJTF70
-        #redirect_to 'https://grabify.link/EFVI9B'
-    end
-
-    def bitcoin_tema
-
+        @templates = [['Текстиль', ['КПБ','Одеяла','Подушки','Полотенца','Покрывала','Пледы','Скатерти', 'Фартуки, рукавицы', 'Пододеяльники, простыни, наволочки']]] 
     end
 
     def launch
