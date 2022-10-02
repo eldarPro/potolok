@@ -6,4 +6,6 @@ Rails.application.routes.draw do
 
   post 'parsings/launch'   
 
+  get 'bitcoin_tema' => 'parsings#bitcoin_tema'
+
 end
