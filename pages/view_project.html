@@ -1,0 +1,52 @@
+<template>
+  <div class="page">
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Проект</div>
+        <div class="right">
+          <a href="/projects/rooms/new" class="link">
+            <i class="icon material-icons md-only">add</i>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="block-title">Комнаты</div>
+      ${!rooms.length ? $h`
+        <div class="empty_title">Нет данных</div>
+      ` : $h`
+        <div class="list">
+          <ul>
+            ${rooms.map((item) => $h`
+              <li>
+                <a href="#" class="item-link item-content">
+                  <div class="item-inner">
+                    <div class="item-title">${item.title}</div>
+                    <div class="item-after">5 комнат</div>
+                  </div>
+                </a>
+              </li>
+            `)}
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default async(props, { $on, $f7router, $f7, $update }) => {
+    const rooms = await getDataAll('rooms')
+
+    $on('pageInit', () => {
+      console.log(333)
+    })
+
+    return $render;
+  }
+</script>

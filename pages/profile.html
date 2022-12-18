@@ -1,0 +1,73 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="title">Мой профиль</div>
+        <div class="right">
+          <a href="/profile/edit" class="link">
+            <i class="icon material-icons md-only">edit</i>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="page-content">
+      ${profile && $h`
+        <div class="list">
+          <ul>
+            <li>
+              <div class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Фамилия</div>
+                  <div class="item-after">${profile.lastname}</div>
+                </div>
+              </div>
+            </li>
+            <li>
+              <div class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Имя</div>
+                  <div class="item-after">${profile.name}</div>
+                </div>
+              </div>
+            </li>
+            <li>
+              <div class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Отчество</div>
+                  <div class="item-after">${profile.patronymic}</div>
+                </div>
+              </div>
+            </li>
+            <li>
+              <div class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Компания</div>
+                  <div class="item-after">${profile.company}</div>
+                </div>
+              </div>
+            </li>
+            <li>
+              <div class="block">
+                <button class="button button-small button-fill color-red">Выйти</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default (props, { $on, $f7, $update }) => {
+    let profile;
+
+    $on('pageInit', async() => {
+      profile = await getDataAll('profile')
+      profile = profile[0]
+      $update();
+    })
+
+    return $render;
+  }
+</script>

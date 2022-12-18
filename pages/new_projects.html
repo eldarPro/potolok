@@ -1,0 +1,52 @@
+<template>
+  <div class="page" data-name="new_projects">
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Новый проект</div>
+      </div>
+    </div>
+
+    <div class="page-content">
+        <form class="list" id="new_project_form">
+          <ul>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-input-wrap">
+                  <input type="text" name='title' placeholder="Название проекта" required />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </form>
+
+        <div class="block ">
+          <button type='submit' @click=${addData} class="button button-fill">Добавить</button>
+        </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  export default async(props, { $f7, $f7router, $onMounted, $el, $theme, $on, $update }) => {
+
+    app.on(() => {
+      alert(3333)
+    })
+
+    async function addData() {
+      const validate = app.input.validateInputs('#new_project_form')
+      if(!validate) return;
+      await setDbData('projects', { title: $$('input[name="title"]').val() })
+      $f7router.navigate('/')     
+    }
+
+    return $render;
+  }
+</script>

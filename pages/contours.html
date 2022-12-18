@@ -1,0 +1,96 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Профили</div>
+        <div class="right">
+          <a href="/price_lists/contours/new" class="link">
+            <i class="icon material-icons md-only">add</i>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="page-content">
+      ${!contours.length ? $h`
+        <div class="empty_title">Нет данных</div>
+      ` : $h`
+        <div class="list">
+          <ul>
+            ${contours.map((item) => $h`
+              <li class="accordion-item">
+                <a href="#" class="item-link item-content">
+                  <div class="item-inner">
+                    <div class="item-title">${item.title}</div>
+                  </div>
+                </a>
+                <div class="accordion-item-content">
+                  <div class="list">
+                    <ul>
+                      <li>
+                        <div class="item-content">
+                          <div class="item-inner">
+                            <div class="item-title">Цена</div>
+                            <div class="item-after">${item.price} ₽</div>
+                          </div>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="item-content">
+                          <div class="item-inner">
+                            <div class="item-title">Цена за установку</div>
+                            <div class="item-after">${item.price_install} ₽</div>
+                          </div>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="item-content">
+                          <div class="item-inner">
+                            <div class="item-title">Цена за угол</div>
+                            <div class="item-after">${item.price_corner} ₽</div>
+                          </div>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="block block-strong">
+                          <p class="row">
+                            <button class="col button button-small button-fill">Изменить</button>
+                            <button class="col button button-small button-fill color-red">Удалить</button>
+                          </p>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </li>
+            `)}
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default async(props, { $on, $f7, $update }) => {
+    const contours = await getDataAll('contours')
+
+    const openCountours = (id) => {
+
+      $f7router.navigate('/contours/show', {
+        props: { id: id }
+      })  
+
+    }
+    
+    $on('pageInit', () => {
+
+    })
+
+    return $render;
+  }
+</script>

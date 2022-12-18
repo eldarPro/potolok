@@ -1,0 +1,76 @@
+<template>
+  <div class="page" data-name="new_projects">
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Новый профиль</div>
+      </div>
+    </div>
+
+    <div class="page-content">
+        <form class="list" id="form">
+          <ul>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Название профиля</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='title' />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Цена</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='price' />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Цена за установку</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='price_install' />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Цена за угол</div>
+                <div class="item-input-wrap">
+                  <input type="text" name='price_corner' required />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </form>
+
+        <div class="block">
+          <button type='submit' @click=${addData} class="button button-fill">Добавить</button>
+        </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  export default async(props, { $f7, $f7router, $el, $theme, $on, $update }) => {
+    async function addData() {
+      const validate = app.input.validateInputs('#form')
+      if(!validate) return;
+      const formData = $f7.form.convertToData('#form');
+      await setDbData('contours', formData)
+      $f7router.navigate('/price_lists/contours')     
+    }
+
+    return $render;
+  }
+</script>
