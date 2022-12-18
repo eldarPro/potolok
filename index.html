@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2196f3">
+    <title>Potolok</title>
+    <script src="https://cdn.jsdelivr.net/npm/idb@3.0.2/build/idb.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.framework7.io/packages/core/framework7-bundle.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">   
+    <link rel="stylesheet" href="css/app.css">
+  </head>
+  <body>
+    <div id="app" class='color-theme-lightblue'>
+       <div class="views tabs">
+        <div id='main' class="view view-main tab tab-active"></div>
+        <div id='price_lists' class="view view-price-lists tab"></div>
+        <div id='profile' class="view view-profile tab"></div>
+
+        <div class="main_toolbar toolbar tabbar-labels toolbar-bottom">
+          <div class="toolbar-inner">
+            <a href="#main" class="tab-link tab-link-active">
+              <i class="icon material-icons md-only">folder</i>
+              <span class="tabbar-label">Проекты</span>
+            </a>
+            <a href="#price_lists" class="tab-link">
+              <i class="icon material-icons md-only">list_alt</i>
+              <span class="tabbar-label">Ценники</span>
+            </a>
+            <a href="#profile" class="tab-link">
+              <i class="icon material-icons md-only">person</i>
+              <span class="tabbar-label">Профиль</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript" src="https://cdn.framework7.io/packages/core/framework7-bundle.min.js"></script>
+    <script type="text/javascript" src='main.js'></script>
+  </body>
+</html>

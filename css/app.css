@@ -1,0 +1,105 @@
+*{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+#directionBlock {
+  display: flex;
+  margin-top: 10px;
+}
+
+#directionBlock span {
+  display: block;
+  cursor: pointer;
+  padding: 10px 0;
+  width: 50px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-right: 10px;
+  text-align: center;
+  width: 25%;
+}
+
+#directionBlock span:last-child {
+  margin-right: 0;
+}
+
+#directionBlock .active {
+  border: 1px solid #86c6f5;
+  color: #86c6f5;
+}
+
+#canvas {
+  background: #eee;
+  width: 100%;
+}
+
+.action_block {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+}
+
+.action_block .submit {
+  margin: 15px 0 -15px 0;
+}
+
+.form_block {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  width: 100%;
+  background: #fff;
+}
+
+.form_row {
+  margin-bottom: 10px;
+}
+
+.form_row p {
+  margin: 0 0 10px 0;
+}
+
+.join_row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.join_row div:first-child {
+  width: 50%;
+}
+
+.join_row div:last {
+  width: 50%;
+}
+
+#join_line_butt {
+  position: absolute;
+  top: -60px;
+  width: 90%;
+  margin: auto;
+  left: 0;
+  right: 0;
+  cursor: pointer;
+}
+
+.display_none {
+  display: none;
+}
+
+.empty_title {
+	background: #9f9b9b;
+  padding: 10px;
+  text-align: center;
+  margin: 20px;
+  color: #000;
+  font-size: 19px;
+  opacity: 0.3;
+}
+
+

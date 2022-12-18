@@ -1,0 +1,49 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="title">Проекты</div>
+        <div class="right">
+          <a href="/projects/new" class="link">
+            <i class="icon material-icons md-only">add</i>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="page-content">
+      ${!projects.length ? $h`
+        <div class="empty_title">Нет данных</div>
+      ` : $h`
+        <div class="list">
+          <ul>
+            ${projects.map((item) => $h`
+              <li>
+                <a href="/projects/${item.id}" class="item-link item-content">
+                  <div class="item-inner">
+                    <div class="item-title">${item.title}</div>
+                    <div class="item-after">${rooms.filter((i) => i.id == item.title).length} комнат</div>
+                  </div>
+                </a>
+              </li>
+            `)}
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default async(props, { $on, $f7, $update }) => {
+    const projects = await getDataAll('projects')
+    const rooms = await getDataAll('rooms')
+
+
+    
+    $on('pageInit', () => {
+
+    })
+
+    return $render;
+  }
+</script>

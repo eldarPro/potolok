@@ -1,0 +1,84 @@
+<template>
+  <div class="page" data-name="new_projects">
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Редактирование</div>
+      </div>
+    </div>
+
+    <div class="page-content">
+        <form class="list" id="form">
+          <ul>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Фамилия</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='lastname' />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Имя</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='name' />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Отчество</div>
+                <div class="item-input-wrap">
+                  <input type="text" required name='patronymic'  />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Компания</div>
+                <div class="item-input-wrap">
+                  <input type="text" name='company' required />
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </form>
+
+        <div class="block">
+          <button type='submit' @click=${saveData} class="button button-fill">Сохранить</button>
+        </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  export default async(props, { $f7, $f7router, $el, $theme, $on, $update }) => {
+    let profile = {};
+
+    $on('pageInit', async() => {
+      profile = await getDataAll('profile')
+      $f7.form.fillFromData('#form', profile[0]);
+      $update();
+    })
+
+    async function saveData() {
+      const validate = app.input.validateInputs('#form')
+      if(!validate) return;
+      const formData = $f7.form.convertToData('#form');
+      await setDbData('profile', formData)
+      $f7router.navigate('/profile')     
+    }
+
+    return $render;
+  }
+</script>

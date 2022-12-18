@@ -1,0 +1,72 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="title">Ценники</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="list">
+        <ul>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Профили</div>
+                <div class="item-after">${contours.length} шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Полотно</div>
+                <div class="item-after">0 шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Освещение</div>
+                <div class="item-after">0 шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Ниша</div>
+                <div class="item-after">0 шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Профильное освещение</div>
+                <div class="item-after">0 шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/contours" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Доп. услуги</div>
+                <div class="item-after">0 шт.</div>
+              </div>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  export default async(props, { $f7, $el, $theme, $on, $update }) => {
+    const contours = await getDataAll('contours')
+
+    return $render;
+  }
+</script>
