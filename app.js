@@ -5,6 +5,8 @@ app.use(express.static(path.join(__dirname)))
 app.get('/', (req, res) => {
     res.sendFile(`${__dirname}/index.html`);
 });
-app.listen(3333, () => {
-    console.log('Application listening on port 3333!');
-});
+
+const router = express.Router();
+//add the router
+app.use('/', router);
+app.listen(process.env.port || 3000);
