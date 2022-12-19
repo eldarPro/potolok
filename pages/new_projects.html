@@ -36,10 +36,6 @@
 <script>
   export default async(props, { $f7, $f7router, $onMounted, $el, $theme, $on, $update }) => {
 
-    app.on(() => {
-      alert(3333)
-    })
-
     async function addData() {
       const validate = app.input.validateInputs('#new_project_form')
       if(!validate) return;

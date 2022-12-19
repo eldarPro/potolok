@@ -100,7 +100,14 @@
     })
 
 
-    $on('pageInit', (e, page) => {
+    $on('pageInit', () => {
+      document.querySelector("form").onkeypress = function(e) {
+        var key = e.charCode || e.keyCode || 0;     
+        if (key == 13) {
+          e.preventDefault();
+        }
+      }
+
       $$('.main_toolbar').css('display', 'none')
       const canvas = document.getElementById('canvas')
       const form = document.getElementById('form')

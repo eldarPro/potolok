@@ -66,6 +66,13 @@
     let profile = {};
 
     $on('pageInit', async() => {
+      document.querySelector("form").onkeypress = function(e) {
+        var key = e.charCode || e.keyCode || 0;     
+        if (key == 13) {
+          e.preventDefault();
+        }
+      }
+
       profile = await getDataAll('profile')
       $f7.form.fillFromData('#form', profile[0]);
       $update();

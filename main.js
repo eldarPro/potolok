@@ -108,3 +108,10 @@ var priceListView = app.views.create('.view-price-lists', { url: '/price_lists/'
 var profileView = app.views.create('.view-profile', { url: '/profile/' })
 
 
+window.addEventListener("keypress", function(e) {
+  var key = e.charCode || e.keyCode || 0;     
+  if (key == 13) {
+    e.preventDefault();
+  }
+})
+

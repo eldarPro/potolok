@@ -63,6 +63,16 @@
 
 <script>
   export default async(props, { $f7, $f7router, $el, $theme, $on, $update }) => {
+
+    $on('pageInit', (e, page) => {
+       document.querySelector("form").onkeypress = function(e) {
+        var key = e.charCode || e.keyCode || 0;     
+        if (key == 13) {
+          e.preventDefault();
+        }
+      }
+    })
+    
     async function addData() {
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
