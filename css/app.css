@@ -93,13 +93,11 @@ html, body {
 }
 
 .empty_title {
-	background: #9f9b9b;
   padding: 10px;
   text-align: center;
   margin: 20px;
-  color: #000;
+  color: #b8b7b7;
   font-size: 19px;
-  opacity: 0.3;
 }
 
 

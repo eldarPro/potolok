@@ -1,79 +1,125 @@
 <template>
   <div class="page" data-name="new_projects">
-    <div class="navbar">
-      <div class="navbar-bg"></div>
-      <div class="navbar-inner">
-        <div class="left">
-          <a href="#" class="link back">
-            <i class="icon material-icons md-only">arrow_back</i>
-          </a>
+    ${loaded ? $h`
+      <div class="preloader"></div>
+    ` : $h`
+      <div class="navbar">
+        <div class="navbar-bg"></div>
+        <div class="navbar-inner">
+          <div class="left">
+            <a href="#" class="link back">
+              <i class="icon material-icons md-only">arrow_back</i>
+            </a>
+          </div>
+          <div class="title">${now ? 'Новый профиль' : 'Редактирование'}</div>
         </div>
-        <div class="title">Новый профиль</div>
       </div>
-    </div>
 
-    <div class="page-content">
-        <form class="list" id="form">
-          <ul>
-            <li class="item-content item-input item-input-outline">
-              <div class="item-inner">
-                <div class="item-title item-floating-label">Название профиля</div>
-                <div class="item-input-wrap">
-                  <input type="text" required name='title' />
-                  <span class="input-clear-button"></span>
+      <div class="page-content">
+          <form class="list" id="form">
+            <ul>
+              <li class="item-content item-input item-input-outline">
+                <div class="item-inner">
+                  <div class="item-title item-floating-label">Название профиля</div>
+                  <div class="item-input-wrap">
+                    <input type="text" required name='title' value=${contour.title} />
+                    <span class="input-clear-button"></span>
+                  </div>
+                </div>
+              </li>
+              <li class="item-content item-input item-input-outline">
+                <div class="item-inner">
+                  <div class="item-title item-floating-label">Цена</div>
+                  <div class="item-input-wrap">
+                    <input type="text" required name='price' />
+                    <span class="input-clear-button"></span>
+                  </div>
+                </div>
+              </li>
+              <li class="item-content item-input item-input-outline">
+                <div class="item-inner">
+                  <div class="item-title item-floating-label">Цена за установку</div>
+                  <div class="item-input-wrap">
+                    <input type="text" required name='price_install' />
+                    <span class="input-clear-button"></span>
+                  </div>
+                </div>
+              </li>
+              <li class="item-content item-input item-input-outline">
+                <div class="item-inner">
+                  <div class="item-title item-floating-label">Цена за угол</div>
+                  <div class="item-input-wrap">
+                    <input type="text" name='price_corner' required />
+                    <span class="input-clear-button"></span>
+                  </div>
+                </div>
+              </li>
+              <li>
+              <div class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">По умолчанию</div>
+                  <div class="item-after">
+                    <label class="toggle toggle-init">
+                      <input type="checkbox" name="default" value="yes" /><i class="toggle-icon"></i>
+                    </label>
+                  </div>
                 </div>
               </div>
             </li>
-            <li class="item-content item-input item-input-outline">
-              <div class="item-inner">
-                <div class="item-title item-floating-label">Цена</div>
-                <div class="item-input-wrap">
-                  <input type="text" required name='price' />
-                  <span class="input-clear-button"></span>
-                </div>
-              </div>
-            </li>
-            <li class="item-content item-input item-input-outline">
-              <div class="item-inner">
-                <div class="item-title item-floating-label">Цена за установку</div>
-                <div class="item-input-wrap">
-                  <input type="text" required name='price_install' />
-                  <span class="input-clear-button"></span>
-                </div>
-              </div>
-            </li>
-            <li class="item-content item-input item-input-outline">
-              <div class="item-inner">
-                <div class="item-title item-floating-label">Цена за угол</div>
-                <div class="item-input-wrap">
-                  <input type="text" name='price_corner' required />
-                  <span class="input-clear-button"></span>
-                </div>
-              </div>
-            </li>
-          </ul>
-        </form>
+            </ul>
+          </form>
 
-        <div class="block">
-          <button type='submit' @click=${addData} class="button button-fill">Добавить</button>
-        </div>
-    </div>
+          <div class="block">
+            ${now ? $h`
+              <button type='submit' @click=${add} class="button button-fill">Добавить</button>
+            ` : $h`
+              <button type='submit' @click=${save} class="button button-fill">Сохранить</button>
+            `}
+          </div>
+      </div>
+    `}
   </div>
 </template>
 
 <script>
-  export default async(props, { $f7, $f7router, $el, $theme, $on, $update }) => {
+  export default async(props, { $f7, $f7router, $f7route, $el, $theme, $on, $update }) => {
+    let title = 'Новый профиль'
+    let contour = {}
+    let now = true
+    let loaded = false
 
-    $on('pageInit', (e, page) => {
-       document.querySelector("form").onkeypress = function(e) {
+    $on('pageInit', async(e, page) => {
+      
+      const path = $f7router.currentRoute.path
+
+      if(lastRoutePath(path) === 'edit') {
+        title = 'Редактирование'
+        now = false
+        contour = await findData('contours', { id: parseInt($f7route.params.id) })
+        console.log(contour.title)
+        loaded = false
+        $update()
+      }
+
+  
+      document.querySelector("form").onkeypress = function(e) {
         var key = e.charCode || e.keyCode || 0;     
         if (key == 13) {
           e.preventDefault();
         }
       }
+
     })
     
-    async function addData() {
+    async function add() {
+      const validate = app.input.validateInputs('#form')
+      if(!validate) return;
+      const formData = $f7.form.convertToData('#form');
+      await setDbData('contours', formData)
+      $f7router.navigate('/price_lists/contours')     
+    }
+
+    async function save() {
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
       const formData = $f7.form.convertToData('#form');

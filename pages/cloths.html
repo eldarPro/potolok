@@ -8,7 +8,7 @@
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">Профили</div>
+        <div class="title">Полотна</div>
         <div class="right">
           <a href="/price_lists/contours/new" class="link">
             <i class="icon material-icons md-only">add</i>
@@ -17,12 +17,12 @@
       </div>
     </div>
     <div class="page-content">
-      ${!contours.length ? $h`
+      ${!cloths.length ? $h`
         <div class="empty_title">Нет данных</div>
       ` : $h`
         <div class="list">
           <ul>
-            ${contours.map((item) => $h`
+            ${cloths.map((item) => $h`
               <li class="accordion-item">
                 <a href="#" class="item-link item-content">
                   <div class="item-inner">
@@ -57,18 +57,10 @@
                         </div>
                       </li>
                       <li>
-                        <div class="item-content">
-                          <div class="item-inner">
-                            <div class="item-title">По умолчанию</div>
-                            <div class="item-after">${booleanTitle(item.default)}</div>
-                          </div>
-                        </div>
-                      </li>
-                      <li>
                         <div class="block block-strong">
                           <p class="row">
-                            <button @click=${() => edit(item.id)} class="col button button-small button-fill">Изменить</button>
-                            <button @click=${() => destroy(item.id)} class="col button button-small button-fill color-red">Удалить</button>
+                            <button @click=${() => edit(id) } class="col button button-small button-fill">Изменить</button>
+                            <button @click=${() => destroy(id) } class="col button button-small button-fill color-red">Удалить</button>
                           </p>
                         </div>
                       </li>
@@ -84,11 +76,15 @@
   </div>
 </template>
 <script>
-  export default async(props, { $on, $f7, $f7router, $update }) => {
-    const contours = await getDataAll('contours')
+  export default async(props, { $on, $f7, $update }) => {
+    const cloths = await getDataAll('cloths')
 
     const edit = (id) => {
-      $f7router.navigate('/price_lists/contours/' + id + '/edit')  
+
+      $f7router.navigate('/cloths/show', {
+        props: { id: id }
+      })  
+
     }
 
     const destroy = (id) => {

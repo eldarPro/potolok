@@ -24,12 +24,24 @@ const dbPromise = idb.openDb('potolokDB', 1, function (upgradeDb) {
   }
 })
 
-async function getDataAll(name) {
+async function getDataAll(table) {
   return await dbPromise.then(function (db) {
-    const tx = db.transaction(name);
-    const store = tx.objectStore(name);
+    const tx = db.transaction(table);
+    const store = tx.objectStore(table);
     return store.getAll()
   })
+} 
+
+async function findData(table, query) {
+  const all = await getDataAll(table)
+  const res = all.filter(function(el) {
+    for (const name in query) {
+      if (query.hasOwnProperty(name) && el[name] !== query[name]) return false;
+    }
+    return true;
+  });
+
+ return res[0]
 } 
 
 async function setDbData(name, item) {
@@ -83,6 +95,10 @@ var app = new Framework7({
       componentUrl: './pages/contours.html',
     },
     {
+      path: '/price_lists/contours/:id/edit',
+      componentUrl: './pages/new_countour.html',
+    },
+    {
       path: '/price_lists/contours/new',
       componentUrl: './pages/new_countour.html',
     },
@@ -115,3 +131,10 @@ window.addEventListener("keypress", function(e) {
   }
 })
 
+const booleanTitle = (bool) => {
+  return bool ? 'Да' : 'Нет'
+}
+
+const lastRoutePath = (path) => {
+  return path.split('/')[path.split('/').length - 1]
+}
