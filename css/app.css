@@ -80,7 +80,7 @@ html, body {
 
 #join_line_butt {
   position: absolute;
-  top: -60px;
+  top: -20px;
   width: 90%;
   margin: auto;
   left: 0;
@@ -100,4 +100,32 @@ html, body {
   font-size: 19px;
 }
 
+.point_elems_block .item-input {
+  width: 100%
+}
+
+.point_elems_block .item-inner {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.directions_block {
+  margin: 5px 0 10px 0;
+}
+
+.directions_block .button {
+  border: 1px solid;
+}
+
+.point_elems_block ul::before {
+  background: none;
+}
+
+.point_elems_block ul::after {
+  background: none;
+}
+
+.error_title {
+  color: red !important;
+}
 

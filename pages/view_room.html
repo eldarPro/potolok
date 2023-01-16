@@ -1,0 +1,76 @@
+<template>
+  <div class="page">
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back">
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">${props.title}</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="list">
+        <ul>
+          <li>
+            <a href="#" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Рассчет для заказчика</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Рассчет для производителя</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <div class="block block-strong">
+              <p class="row">
+                <button @click=${openRoomProcess} class="col button button-small button-fill">Изменить</button>
+                <button @click=${destroy} class="col button button-small button-fill color-red">Удалить</button>
+              </p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+  export default(props, { $on, $f7router, $f7route, $f7, $update }) => {
+
+    const openRoomProcess = () => {
+      $f7router.navigate('/rooms/' + props.id + '/process')
+    }
+
+    const destroy = () => {
+      $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
+        fetch('http://127.0.0.1:3000/rooms/' + props.id, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => {
+          if (response.ok) {
+            console.log('success delete')
+            $f7router.back({ force: true });
+          } else {
+            throw new Error('Error deleting item');
+          }
+        })
+        .then(data => console.log(data) )
+        .catch(error => console.error(error));
+      })
+    }
+
+    $on('pageInit', async() => {
+
+    })
+
+    return $render;
+  }
+</script>

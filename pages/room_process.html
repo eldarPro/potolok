@@ -9,6 +9,14 @@
           </a>
         </div>
         <div class="title">Комната</div>
+        <div class="right">
+          <a href="#" class="link" @click=${undo}>
+            <i class="icon material-icons md-only">undo</i>
+          </a>
+          <a href="#" class="link">
+            <i class="icon material-icons md-only">more_vert</i>
+          </a>
+        </div>
       </div>
     </div>
 
@@ -17,8 +25,29 @@
 
       <div class='action_block'>
         <button id='join_line_butt' class='button button-fill display_none'>Соединить</button>
-        <form class="list" id='form'>
+        <form class="list point_elems_block" id='form'>
           <ul>
+            <li class="item-content item-input">
+              <div class="item-inner">
+                <div class="item-title item-label direction_title">Направление:</div>
+                <div class="item-input">
+                  <div class="segmented directions_block">
+                    <div class='button button-outline color-gray' data-type='right'>
+                      <i class="icon material-icons md-only">arrow_forward</i>
+                    </div>
+                    <div class='button button-outline color-gray' data-type='bottom'>
+                      <i class="icon material-icons md-only">arrow_downward</i>
+                    </div>
+                    <div class='button button-outline color-gray' data-type='left'>
+                      <i class="icon material-icons md-only">arrow_back</i>
+                    </div>
+                    <div class='button button-outline color-gray' data-type='top'>
+                      <i class="icon material-icons md-only">arrow_upward</i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </li>
             <li class="item-content item-input">
               <div class="item-inner">
                 <div class="item-title item-label">Расстояние (cм):</div>
@@ -28,7 +57,7 @@
                 </div>
               </div>
             </li>
-            <li>
+<!--             <li>
               <a class="item-link smart-select smart-select-init" data-open-in="popover">
                 <select name="direction">
                    <option value="right" selected>Направо</option>
@@ -42,8 +71,8 @@
                   </div>
                 </div>
               </a>
-            </li>
-            <li>
+            </li> -->
+<!--             <li>
               <a class="item-link smart-select smart-select-init" data-open-in="popover">
                 <select name="direction">
                   <option value="right" selected>Стандартный</option>
@@ -56,7 +85,7 @@
                   </div>
                 </div>
               </a>
-            </li>
+            </li> -->
             <li class="block submit">
               <div class='add_part button button-fill'>Добавить линию</button>
             </li>
@@ -99,8 +128,16 @@
       $$('.main_toolbar').css('display', 'block')
     })
 
+    let undo = function() {
+      
+    }
 
     $on('pageInit', () => {
+      undo = () => {
+        parts.pop()
+        reDraw()
+      }
+
       document.querySelector("form").onkeypress = function(e) {
         var key = e.charCode || e.keyCode || 0;     
         if (key == 13) {
@@ -113,7 +150,7 @@
       const form = document.getElementById('form')
 
       canvas.width = window.innerWidth
-      canvas.height = window.innerHeight - 310
+      canvas.height = window.innerHeight - 250
 
       const ctx = canvas.getContext('2d')
       ctx.lineWidth = 3
@@ -123,12 +160,22 @@
       let canvasWidth = canvas.width // Canvas wide
       let canvasHeight = canvas.height // High canvas
 
+
+      $$('.directions_block .button').on('click', function(){
+        $$('.directions_block .button').removeClass('button-fill active');
+        $$(this).addClass('button-fill active')
+      })
+
       $el.value.find('.add_part')[0].addEventListener('click', function() {
-
         const validate = app.input.validateInputs('#form')
-        if(!validate) return;
+ 
+        let direction = $$('.directions_block .button.active')
 
-        const direction = $el.value.find('select[name="direction"]')[0].value
+        if(!direction.length || !validate) {
+          if(!direction.length) $$('.direction_title').addClass('error_title')
+          return;
+        }
+      
         let distance = $el.value.find('input[name="distance"]')[0].value
         distance = parseFloat(distance)
 
@@ -137,9 +184,11 @@
           return false
         }
 
-        setPart(direction, distance)
+        setPart(direction.data('type'), distance)
 
         document.getElementById('distance').value = ''
+        $$('.direction_title').removeClass('error_title')
+        $$('.directions_block .button').removeClass('button-fill active');
       })
 
       function setPart(direction, distance) {

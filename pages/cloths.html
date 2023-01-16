@@ -77,7 +77,7 @@
 </template>
 <script>
   export default async(props, { $on, $f7, $update }) => {
-    const cloths = await getDataAll('cloths')
+    const cloths = getDataAll('cloths')
 
     const edit = (id) => {
 

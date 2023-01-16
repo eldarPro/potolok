@@ -39,8 +39,22 @@
     async function addData() {
       const validate = app.input.validateInputs('#new_project_form')
       if(!validate) return;
-      await setDbData('projects', { title: $$('input[name="title"]').val() })
-      $f7router.navigate('/')     
+
+      fetch('http://127.0.0.1:3000/projects', {
+        method: 'POST', 
+        body: JSON.stringify({
+          title: $$('input[name="title"]').val()
+        }), 
+        headers:{
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(res => res.json())
+      .then(response => { 
+        console.log('Success:', JSON.stringify(response))
+        $f7router.navigate('/')  
+      })
+      .catch(error => console.error('Error:', error));
     }
 
     return $render;

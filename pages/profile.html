@@ -59,12 +59,17 @@
   </div>
 </template>
 <script>
-  export default (props, { $on, $f7, $update }) => {
+  export default async(props, { $on, $f7, $update }) => {
     let profile;
 
     $on('pageInit', async() => {
-      profile = await getDataAll('profile')
-      profile = profile[0]
+      await fetch('http://127.0.0.1:3000/users/1')
+      .then(response => response.json())
+      .then(data => { 
+        profile = data
+      })
+      .catch(error => console.error(error))
+
       $update();
     })
 

@@ -1,64 +1,8 @@
-if (!('indexedDB' in window)) {
-  console.log("This browser doesn't support IndexedDB");
-}
-
-const dbPromise = idb.openDb('potolokDB', 1, function (upgradeDb) {
-  if (!upgradeDb.objectStoreNames.contains('projects')) {
-    const projects = upgradeDb.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
-  }
-  if (!upgradeDb.objectStoreNames.contains('rooms')) {
-    const rooms = upgradeDb.createObjectStore('rooms', { keyPath: 'id', autoIncrement: true });
-    rooms.createIndex('project_id', 'project_id');
-  }
-  if (!upgradeDb.objectStoreNames.contains('contours')) { 
-    const rooms = upgradeDb.createObjectStore('contours', { keyPath: 'id', autoIncrement: true });
-  }
-  if (!upgradeDb.objectStoreNames.contains('profile')) { 
-    const profile = upgradeDb.createObjectStore('profile', { keyPath: 'id', autoIncrement: true });
-    profile.add({ 
-      lastname: 'test',
-      name: 'test',
-      patronymic: 'test',
-      company: 'test',
-    })
-  }
-})
-
-async function getDataAll(table) {
-  return await dbPromise.then(function (db) {
-    const tx = db.transaction(table);
-    const store = tx.objectStore(table);
-    return store.getAll()
-  })
-} 
-
-async function findData(table, query) {
-  const all = await getDataAll(table)
-  const res = all.filter(function(el) {
-    for (const name in query) {
-      if (query.hasOwnProperty(name) && el[name] !== query[name]) return false;
-    }
-    return true;
-  });
-
- return res[0]
-} 
-
-async function setDbData(name, item) {
-  return await dbPromise.then(function (db) {
-    const tx = db.transaction(name, 'readwrite');
-    const store = tx.objectStore(name);
-    item['created_at'] = new Date()
-    store.put(item)
-    return tx.complete
-  });
-}
-
-
 var app = new Framework7({
   el: '#app',
   name: 'Potolok',
   id: 'com.myapp.test',
+  pushState: true,
   smartSelect: {
     sheetCloseLinkText: 'Готово',
     closeOnSelect: true
@@ -83,8 +27,8 @@ var app = new Framework7({
       componentUrl: './pages/view_project.html',
     },
     {
-      path: '/projects/rooms/new',
-      componentUrl: './pages/new_room.html',
+      path: '/rooms/:id/process',
+      componentUrl: './pages/room_process.html',
     },
     {
       path: '/price_lists/',
@@ -103,14 +47,17 @@ var app = new Framework7({
       componentUrl: './pages/new_countour.html',
     },
     {
-      path: '/profile/',
+      path: '/profile',
       componentUrl: './pages/profile.html',
     },
     {
       path: '/profile/edit',
       componentUrl: './pages/edit_profile.html',
     },
-
+    {
+      path: '/rooms/:id',
+      componentUrl: './pages/view_room.html',
+    },
 
   ],
 });
@@ -118,7 +65,7 @@ var app = new Framework7({
 var $$ = Dom7;       
 
 var mainView = app.views.create('.view-main', { 
-  url: '/'
+  url: '/rooms/8/process'
 })
 var priceListView = app.views.create('.view-price-lists', { url: '/price_lists/' })
 var profileView = app.views.create('.view-profile', { url: '/profile/' })
@@ -138,3 +85,28 @@ const booleanTitle = (bool) => {
 const lastRoutePath = (path) => {
   return path.split('/')[path.split('/').length - 1]
 }
+
+
+// const dbPromise = idb.openDb('potolokDB', 1, function (upgradeDb) {
+//   if (!upgradeDb.objectStoreNames.contains('projects')) {
+//     const projects = upgradeDb.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
+//   }
+//   if (!upgradeDb.objectStoreNames.contains('rooms')) {
+//     const rooms = upgradeDb.createObjectStore('rooms', { keyPath: 'id', autoIncrement: true });
+//     rooms.createIndex('project_id', 'project_id');
+//   }
+//   if (!upgradeDb.objectStoreNames.contains('contours')) { 
+//     const rooms = upgradeDb.createObjectStore('contours', { keyPath: 'id', autoIncrement: true });
+//   }
+//   if (!upgradeDb.objectStoreNames.contains('profile')) { 
+//     const profile = upgradeDb.createObjectStore('profile', { keyPath: 'id', autoIncrement: true });
+//     profile.add({ 
+//       lastname: 'test',
+//       name: 'test',
+//       patronymic: 'test',
+//       company: 'test',
+//     })
+//   }
+// })
+
+

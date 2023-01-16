@@ -73,17 +73,36 @@
         }
       }
 
-      profile = await getDataAll('profile')
-      $f7.form.fillFromData('#form', profile[0]);
+      await fetch('http://127.0.0.1:3000/users/1')
+      .then(response => response.json())
+      .then(data => { 
+        profile = data
+      })
+      .catch(error => console.error(error))
+
+      $f7.form.fillFromData('#form', profile);
       $update();
     })
 
-    async function saveData() {
+    function saveData() {
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
       const formData = $f7.form.convertToData('#form');
-      await setDbData('profile', formData)
-      $f7router.navigate('/profile')     
+      fetch('http://127.0.0.1:3000/users/1', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ user: formData })
+      })
+      .then(response => response.json())
+      .then(data => { 
+        console.log('data', data)
+        $f7router.navigate('/profile');
+      })
+      .catch(error => console.log(error));
+      
     }
 
     return $render;

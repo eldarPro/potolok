@@ -84,17 +84,46 @@
   </div>
 </template>
 <script>
-  export default async(props, { $on, $f7, $f7router, $update }) => {
-    const contours = await getDataAll('contours')
+  export default (props, { $on, $f7, $f7router, $update }) => {
+    let contours = []
 
     const edit = (id) => {
       $f7router.navigate('/price_lists/contours/' + id + '/edit')  
     }
 
     const destroy = (id) => {
+      fetch('http://127.0.0.1:3000/contours/' + id, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('success delete')
+          // $f7router.navigate('/price_lists/contours')
+          $f7.views.current.router.refreshPage() 
+        } else {
+          throw new Error('Error deleting item');
+        }
+      })
+      .then(data => {
+        console.log(data);
+      })
+      .catch(error => {
+        console.error(error);
+      });
     }
     
-    $on('pageInit', () => {
+    $on('pageInit', async() => {
+
+      await fetch('http://127.0.0.1:3000/contours')
+      .then(response => response.json())
+      .then(data => { 
+        contours = data
+        $update()
+      })
+      .catch(error => console.error(error))
 
     })
 

@@ -8,16 +8,16 @@
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">Проект</div>
+        <div class="title">Комнаты</div>
         <div class="right">
-          <a href="/projects/rooms/new" class="link">
+          <a href="#" class="link open-prompt">
             <i class="icon material-icons md-only">add</i>
           </a>
         </div>
       </div>
     </div>
     <div class="page-content">
-      <div class="block-title">Комнаты</div>
+      <div class="block-title">Комнаты проекта "${projectTitle}"</div>
       ${!rooms.length ? $h`
         <div class="empty_title">Нет данных</div>
       ` : $h`
@@ -25,10 +25,9 @@
           <ul>
             ${rooms.map((item) => $h`
               <li>
-                <a href="#" class="item-link item-content">
+                <a href="#" @click=${() => openRoom(item)} class="item-link item-content">
                   <div class="item-inner">
                     <div class="item-title">${item.title}</div>
-                    <div class="item-after">5 комнат</div>
                   </div>
                 </a>
               </li>
@@ -40,11 +39,52 @@
   </div>
 </template>
 <script>
-  export default async(props, { $on, $f7router, $f7, $update }) => {
-    const rooms = await getDataAll('rooms')
+  export default async(props, { $on, $f7router, $f7route, $f7, $update }) => {
+    let rooms = []
+    let romms_count = 0
+    const projectTitle = props.title
 
-    $on('pageInit', () => {
-      console.log(333)
+    const openRoom = (item) => {
+      $f7router.navigate(`/rooms/${item.id}`, { 
+        props: {
+          title: item.title
+        }
+      })
+    }
+
+    $on('pageInit', async() => {
+      
+      $$('.open-prompt').on('click', function () {
+        $f7.dialog.prompt('', 'Новая комната', function (title) {
+
+          fetch('http://127.0.0.1:3000/rooms', {
+            method: 'POST', 
+            body: JSON.stringify({
+              project_id: $f7route.params.id,
+              title: title
+            }), 
+            headers:{
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(res => res.json())
+          .then(response => { 
+            console.log('Success:', JSON.stringify(response))
+            $f7router.navigate('/rooms/' + response.id + '/process') 
+          })
+          .catch(error => console.error('Error:', error));
+        }, function() {}, 'Комната #' + (romms_count + 1));
+      });
+
+      await fetch('http://127.0.0.1:3000/projects/' + $f7route.params.id + '/rooms')
+      .then(response => response.json())
+      .then(data => { 
+        rooms = data
+        romms_count = rooms.length
+      })
+      .catch(error => console.error(error))
+
+      $update()
     })
 
     return $render;

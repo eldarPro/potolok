@@ -19,10 +19,10 @@
           <ul>
             ${projects.map((item) => $h`
               <li>
-                <a href="/projects/${item.id}" class="item-link item-content">
+                <a href="#" @click=${() => openProject(item)} class="item-link item-content">
                   <div class="item-inner">
                     <div class="item-title">${item.title}</div>
-                    <div class="item-after">${rooms.filter((i) => i.id == item.title).length} комнат</div>
+                    <div class="item-after">${rooms.filter((i) => i.project_id == item.id).length} комнат</div>
                   </div>
                 </a>
               </li>
@@ -34,13 +34,35 @@
   </div>
 </template>
 <script>
-  export default async(props, { $on, $f7, $update }) => {
-    const projects = await getDataAll('projects')
-    const rooms = await getDataAll('rooms')
+  export default async(props, { $on, $f7, $f7router, $update }) => {
+    let projects = [];
+    let rooms = [];
 
-
+    const openProject = (item) => {
+      $f7router.navigate(`/projects/${item.id}`, { 
+        props: {
+          title: item.title
+        }
+      })
+    }
     
-    $on('pageInit', () => {
+    $on('pageInit', async() => {
+
+      await fetch('http://127.0.0.1:3000/projects')
+      .then(response => response.json())
+      .then(data => { 
+        projects = data
+      })
+      .catch(error => console.error(error))
+
+      await fetch('http://127.0.0.1:3000/rooms')
+      .then(response => response.json())
+      .then(data => { 
+        rooms = data
+      })
+      .catch(error => console.error(error))
+
+      $update()
 
     })
 
