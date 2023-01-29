@@ -10,9 +10,6 @@ var app = new Framework7({
   panel: {
     swipe: true,
   },
-  view: {
-    stackPages: true,
-  },
   routes: [
     {
       path: '/',
@@ -65,7 +62,7 @@ var app = new Framework7({
 var $$ = Dom7;       
 
 var mainView = app.views.create('.view-main', { 
-  url: '/rooms/8/process'
+  url: '/'
 })
 var priceListView = app.views.create('.view-price-lists', { url: '/price_lists/' })
 var profileView = app.views.create('.view-profile', { url: '/profile/' })
@@ -78,6 +75,7 @@ window.addEventListener("keypress", function(e) {
   }
 })
 
+
 const booleanTitle = (bool) => {
   return bool ? 'Да' : 'Нет'
 }
@@ -86,27 +84,67 @@ const lastRoutePath = (path) => {
   return path.split('/')[path.split('/').length - 1]
 }
 
+const toBool = (param) => {
+  return param[0] === 'on'
+}
 
-// const dbPromise = idb.openDb('potolokDB', 1, function (upgradeDb) {
-//   if (!upgradeDb.objectStoreNames.contains('projects')) {
-//     const projects = upgradeDb.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
-//   }
-//   if (!upgradeDb.objectStoreNames.contains('rooms')) {
-//     const rooms = upgradeDb.createObjectStore('rooms', { keyPath: 'id', autoIncrement: true });
-//     rooms.createIndex('project_id', 'project_id');
-//   }
-//   if (!upgradeDb.objectStoreNames.contains('contours')) { 
-//     const rooms = upgradeDb.createObjectStore('contours', { keyPath: 'id', autoIncrement: true });
-//   }
-//   if (!upgradeDb.objectStoreNames.contains('profile')) { 
-//     const profile = upgradeDb.createObjectStore('profile', { keyPath: 'id', autoIncrement: true });
-//     profile.add({ 
-//       lastname: 'test',
-//       name: 'test',
-//       patronymic: 'test',
-//       company: 'test',
-//     })
-//   }
-// })
+const toast = (title, success = false, position = 'top') => {
 
+  const cssClass = success ? 'success_toast' : ''
 
+  app.toast.create({
+    text: title,
+    position: position,
+    closeTimeout: 2000,
+    cssClass: cssClass
+  }).open();
+
+}
+
+const isFinishRoom = (item) => {
+  let res = false
+  if(item.data) {
+    item.data.forEach(i => {
+      const el = Object.values(i)[0]
+      if(el.type === 'contour' && el.finish) res = true
+    })
+  }
+  return res
+}
+
+const сalcLinearMtrs = (item) => {
+  console.log(item)
+  let res = 0
+  if(item.data && isFinishRoom(item)) {
+    item.data.forEach(i => {
+      if(Object.values(i)[0].type === 'contour') {
+        res += i.contour.distance
+      }
+    })
+  }
+  return res / 100
+}
+
+const сalcSquareMtrs = (item) => {
+  let res = 0
+  if(item.data && isFinishRoom(item)) {
+    item.data.forEach(i => {
+      if(Object.values(i)[0].type === 'contour') {
+        res += i.contour.distance
+      }
+    })
+  }
+  return res / 100
+}
+
+const priceRoom = (item) => {
+  let res = 0
+  if(item.data && isFinishRoom(item)) {
+    item.data.forEach(i => {
+      if(Object.values(i)[0].type === 'contour') {
+        res += i.contour.distance
+      }
+    })
+  }
+  return res / 100
+}

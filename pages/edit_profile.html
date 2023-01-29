@@ -55,7 +55,7 @@
         </form>
 
         <div class="block">
-          <button type='submit' @click=${saveData} class="button button-fill">Сохранить</button>
+          <button type='submit' @click=${saveData} class="button button-large button-fill">Сохранить</button>
         </div>
     </div>
   </div>
@@ -100,6 +100,12 @@
       .then(data => { 
         console.log('data', data)
         $f7router.navigate('/profile');
+        $f7.toast.create({
+          text: 'Данные успешно сохранены',
+          position: 'top',
+          closeTimeout: 2000,
+          cssClass: 'success_toast'
+        }).open();
       })
       .catch(error => console.log(error));
       

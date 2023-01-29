@@ -4,16 +4,78 @@
       <div class="navbar-bg"></div>
       <div class="navbar-inner">
         <div class="left">
-          <a href="#" class="link back">
+          <a href="#" class="link" @click=${backPage}>
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">${props.title}</div>
+        <div class="title">${props.item.title}</div>
+        <div class="right">
+          <a href="#" class="link panel-open" data-panel=".panel-right-room">
+            <i class="icon material-icons md-only">more_vert</i>
+          </a>
+        </div>
       </div>
     </div>
+
+    <div class="panel panel-right panel-right-room panel-cover panel-resizable panel-init">
+      <div class="block">
+        <p><a class="panel-close color-black" href="#">Закрыть</a></p>
+        <div class="list">
+          <ul>
+            <li>
+              <a href="#" class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Редактировать название</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a href="#" @click=${destroy} class="item-content color-red">
+                <div class="item-inner">
+                  <div class="item-title">Удалить комнату</div>
+                </div>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <div class="page-content">
       <div class="list">
         <ul>
+          <li>
+            <div class="item item-content">
+              <div class="item-inner">
+                <div class="item-title">Квадратные метры</div>
+                <div class="item-after">${сalcSquareMtrs(room)} м</div>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="item item-content">
+              <div class="item-inner">
+                <div class="item-title">Погонные метры</div>
+                <div class="item-after">${сalcLinearMtrs(room)} м</div>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="item item-content">
+              <div class="item-inner">
+                <div class="item-title">Цена за установку</div>
+                <div class="item-after">30000 руб.</div>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="item item-content">
+              <div class="item-inner">
+                <div class="item-title">Общая цена</div>
+                <div class="item-after">5000 руб.</div>
+              </div>
+            </div>
+          </li>
           <li>
             <a href="#" class="item-link item-content">
               <div class="item-inner">
@@ -28,15 +90,21 @@
               </div>
             </a>
           </li>
-          <li>
-            <div class="block block-strong">
-              <p class="row">
-                <button @click=${openRoomProcess} class="col button button-small button-fill">Изменить</button>
-                <button @click=${destroy} class="col button button-small button-fill color-red">Удалить</button>
-              </p>
-            </div>
-          </li>
+          ${!isFinishRoom(room) && $h`
+            <li>
+              <div class="item item-content">
+                <div class="item-inner">
+                  <div class="item-title">Статус</div>
+                  <div class="item-after"><span class="badge color-red">Незавершен</span></div>
+                </div>
+              </div>
+            </li>
+          `}
         </ul>
+      </div>
+
+        <div class="block">
+          <button @click=${openRoomProcess} class="button button-large button-fill">Открыть</button>
       </div>
     </div>
   </div>
@@ -44,20 +112,31 @@
 <script>
   export default(props, { $on, $f7router, $f7route, $f7, $update }) => {
 
+    const room = props.item
+
     const openRoomProcess = () => {
-      $f7router.navigate('/rooms/' + props.id + '/process')
+      $f7router.navigate(`/rooms/${props.item.id}/process`, {
+        props: { iem: room }
+      })
+    }
+
+    const backPage = () => {
+      $f7router.navigate(`/projects/${room.project_id}`)
     }
 
     const destroy = () => {
       $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
-        fetch('http://127.0.0.1:3000/rooms/' + props.id, {
+        app.preloader.show();
+        fetch('http://127.0.0.1:3000/rooms/' + room.id, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' }
         })
         .then(response => {
           if (response.ok) {
             console.log('success delete')
-            $f7router.back({ force: true });
+            app.preloader.hide();
+            app.panel.close();
+            $f7router.navigate(`/projects/${room.project_id}`)
           } else {
             throw new Error('Error deleting item');
           }

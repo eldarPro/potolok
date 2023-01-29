@@ -100,6 +100,11 @@ html, body {
   font-size: 19px;
 }
 
+.point_elems_block {
+  padding: 10px 0 0;
+  background: #FFF;
+}
+
 .point_elems_block .item-input {
   width: 100%
 }
@@ -129,3 +134,78 @@ html, body {
   color: red !important;
 }
 
+.room_add_details_butt > a {
+  width: 50px !important;
+  height: 50px !important;
+}
+
+.list_elems_block {
+  margin: 0;
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+}
+
+.bg_gray_light {
+  background: #eee !important;
+}
+
+.gray_header {
+  background: #eeee;
+}
+
+.card_button {
+  color: #fff;
+  justify-content: center;
+}
+
+.font_14 {
+  font-size: 14px;
+}
+
+.success_toast {
+  background: #37c437;
+}
+
+
+.popover li {
+  border: 1px solid #ddd;
+}
+
+.popover li:last-child {
+  border: none;
+}
+
+.text_color_red {
+  color: red !important;
+}
+
+.accordion-item-content ul {
+  background: #eee;
+}
+
+.list_elems_block ul {
+  background: #fff;
+}
+
+.list_buttons_block {
+  padding-bottom: 5px;
+  background: #eee;
+}
+
+
+.page-content {
+  padding-bottom: 50px;
+}
+
+.dialog_input {
+  border: 1px solid #ddd !important;
+  padding: 10px !important;
+  margin-top: 10px !important;
+  border-radius: 5px !important;
+  width: 230px !important;
+}
+
+.border_color {
+  border-color: red;
+}

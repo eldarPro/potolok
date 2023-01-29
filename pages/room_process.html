@@ -1,26 +1,70 @@
 <template>
-  <div class="page" data-name="new_projects">
+  <div class="page">
     <div class="navbar">
       <div class="navbar-bg"></div>
       <div class="navbar-inner">
         <div class="left">
-          <a href="#" class="link back">
+          <a href="#" class="link" @click=${exitPage}>
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">Комната</div>
+        <div class="title">${props.item.title}</div>
         <div class="right">
-          <a href="#" class="link" @click=${undo}>
+          <a href="#" class="link undo disabled" @click=${undo}>
             <i class="icon material-icons md-only">undo</i>
           </a>
-          <a href="#" class="link">
+          <a href="#" class="link panel-open" data-panel=".panel-right-process">
             <i class="icon material-icons md-only">more_vert</i>
           </a>
         </div>
       </div>
     </div>
 
+    <div class="panel panel-right panel-right-process panel-cover panel-resizable panel-init">
+      <div class="block not_margin_padding">
+        <a class="panel-close color-black" href="#">Закрыть</a>
+      </div>
+      <div class="list">
+        <ul>
+          <li>
+            <a href="#" @click=${() => save(false)} class="item-content save_link disabled">
+              <div class="item-inner">
+                <div class="item-title">Сохранить</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="#" @click=${() => save(true)} class="item-content save_link disabled">
+              <div class="item-inner">
+                <div class="item-title">Сохранить и выйти</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="#" @click=${exitPage} class="link item-content color-red">
+              <div class="item-inner">
+                <div class="item-title">Выйти</div>
+              </div>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
     <div class="page-content">
+      <div class="fab fab-right-top room_add_details_butt display_none">
+        <a href="#">
+          <i class="icon f7-icons if-not-md">plus</i>
+          <i class="icon f7-icons if-not-md">xmark</i>
+          <i class="icon material-icons md-only">add</i>
+          <i class="icon material-icons md-only">close</i>
+        </a>
+        <div class="fab-buttons fab-buttons-bottom">
+          <a class="fab-label-button" href="#"><span>+</span><span class="fab-label">Профильное освещение</span></a>
+          <a class="fab-label-button" href="#"><span>+</span><span class="fab-label">Дополнительные услуги</span></a>
+        </div>
+      </div>
+
       <canvas id="canvas"></canvas>
 
       <div class='action_block'>
@@ -57,48 +101,49 @@
                 </div>
               </div>
             </li>
-<!--             <li>
-              <a class="item-link smart-select smart-select-init" data-open-in="popover">
-                <select name="direction">
-                   <option value="right" selected>Направо</option>
-                  <option value="bottom">Вниз</option>
-                  <option value="left">Налево</option>
-                  <option value="top">Вверх</option>
-                </select>
-                <div class="item-content">
-                  <div class="item-inner">
-                    <div class="item-title">Сторона:</div>
-                  </div>
-                </div>
-              </a>
-            </li> -->
-<!--             <li>
-              <a class="item-link smart-select smart-select-init" data-open-in="popover">
-                <select name="direction">
-                  <option value="right" selected>Стандартный</option>
-                  <option value="bottom">Коричневый</option>
-                  <option value="left">Золотой</option>
-                </select>
-                <div class="item-content">
-                  <div class="item-inner">
-                    <div class="item-title">Профиль:</div>
-                  </div>
-                </div>
-              </a>
-            </li> -->
             <li class="block submit">
-              <div class='add_part button button-fill'>Добавить линию</button>
+              <div class='add_contour button button-fill'>Добавить линию</div>
             </li>
           </ul>
         </form>
+      </div>
+
+      <div class="list accordion-list list_elems_block display_none">
+        <ul>
+          <li class="accordion-item">
+            <a class="item-content item-link" href="#">
+              <div class="item-inner">
+                <div class="item-title">Список добавленного</div>
+              </div>
+            </a>
+            <div class="accordion-item-content">
+            <div class="list">
+              <ul>
+                <li class='accordion-item' data-type='contour'>
+                  <a href="#" class="item-link item-content">
+                    <div class="item-inner">
+                      <div class="item-title">Стороны</div>
+                      <div class="item-after"><span class='elem_count'>0</span> шт.</div>
+                    </div>
+                  </a>
+                  <div class="accordion-item-content">
+                  <div class="list media-list">
+                    <ul class="contour_lists bg_gray_light"></ul>
+                  </div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            </div>
+          </li>
+        </ul>
       </div>
     </div>
   </div>
 </template>
 
-<script type="text/javascript" src='./canvas.js'></script>
 <script>
-  export default(props, { $f7, $f7router, $el, $theme, $on, $update }) => {
+  export default(props, { $f7, $f7router, $f7route, $el, $theme, $on, $update }) => {
     let addPart;
     let scale = 1 // Current zoom
     let preScale = 1
@@ -111,8 +156,6 @@
 
     const MAX_DISTANCE = 3000
 
-    let polygon_stage = true
-
     // Judgment whether the mobile terminal, the mobile terminal uses a touch event
     const isTouchPad = /hp-tablet/gi.test(navigator.appVersion);
     const hasTouch   = "ontouchstart" in window && !isTouchPad;
@@ -121,6 +164,7 @@
     const touchEnd   = hasTouch ? "touchend" : "mouseup";
 
     const parts = []
+    let contoursDB = []
 
     const marks = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
 
@@ -128,45 +172,137 @@
       $$('.main_toolbar').css('display', 'block')
     })
 
-    let undo = function() {
-      
-    }
+    let undo = () => {}
+    let save = () => {}
+    let exitPage = () => {}
 
-    $on('pageInit', () => {
+    let saved = true
+
+    let updatedRoom = props.item;
+
+    $on('pageInit', async() => {
+
+      app.preloader.show()
+
+      exitPage = () => {
+
+        if(!saved) {
+          $f7.dialog.create({
+            text: 'Данные изменились. Хотите сохранить перед выходом?',
+            closeByBackdropClick: true,
+            buttons: [
+              { 
+                text: 'Сохранить',
+                onClick: function() {
+                  save(true)
+                }
+              },
+              { 
+                text: 'Не сохранить',
+                onClick: function() {
+                  app.panel.close();
+                  $f7router.navigate(`/projects/${props.item.project_id}`) 
+                }
+              },
+            ]
+          }).open();
+        } else {
+          app.preloader.hide()
+          app.panel.close();
+          $f7router.navigate(`/projects/${props.item.project_id}`) 
+        }
+      
+      }
+
+      save = async(backPage) => {
+        app.preloader.show()
+
+        await fetch(`http://127.0.0.1:3000/rooms/${$f7route.params.id}/set_data`, {
+          method: 'POST', 
+          body: JSON.stringify({
+            parts: Part.lists
+          }), 
+          headers:{
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(res => res.json())
+        .then(response => { 
+          console.log('Success:', JSON.stringify(response))
+          saved = true
+          $f7.toast.create({
+            text: 'Данные успешно сохранены',
+            position: 'top',
+            closeTimeout: 2000,
+            cssClass: 'success_toast'
+          }).open();
+        })
+        .catch(error => { 
+          console.error('Error:', error)
+        });
+
+        app.preloader.hide()
+        app.panel.close();
+
+        console.log('backPage', backPage)
+
+        if(backPage) {
+          $f7router.navigate(`/projects/${props.item.project_id}`) 
+        }
+      }
+
+
       undo = () => {
-        parts.pop()
-        reDraw()
+        const parts = Part.lists
+
+        saved = false
+
+        if(parts.length) {
+          lastEl = parts[parts.length - 1]
+
+          const lastPart = Object.values(lastEl)[0]
+
+          if(lastPart.type === 'contour' && lastPart.finish) {
+            lastEl.contour.finish = false
+            $$('.action_block').removeClass('display_none')
+            $$('.room_add_details_butt').addClass('display_none')
+            $$('.list_elems_block').addClass('display_none')
+            joinLineButt.addClass('display_none')
+          }
+
+          Part.removeLastElem()
+          checkShowJoinLineButt()
+          if(!parts.length) $$('.undo, .save_link').addClass('disabled')
+          Part.reDraw()
+        }
       }
 
       document.querySelector("form").onkeypress = function(e) {
         var key = e.charCode || e.keyCode || 0;     
-        if (key == 13) {
-          e.preventDefault();
-        }
+        if (key == 13) e.preventDefault();
       }
 
       $$('.main_toolbar').css('display', 'none')
       const canvas = document.getElementById('canvas')
-      const form = document.getElementById('form')
-
       canvas.width = window.innerWidth
-      canvas.height = window.innerHeight - 250
+      canvas.height = window.innerHeight - $$('.action_block').height()
+
+      console.log('canvas', canvas, $$('.action_block').height())
 
       const ctx = canvas.getContext('2d')
       ctx.lineWidth = 3
 
-      const joinLineButt = document.getElementById('join_line_butt')
+      const joinLineButt = $$('#join_line_butt')
 
       let canvasWidth = canvas.width // Canvas wide
       let canvasHeight = canvas.height // High canvas
-
 
       $$('.directions_block .button').on('click', function(){
         $$('.directions_block .button').removeClass('button-fill active');
         $$(this).addClass('button-fill active')
       })
 
-      $el.value.find('.add_part')[0].addEventListener('click', function() {
+      $$('.add_contour').on('click', function() {
         const validate = app.input.validateInputs('#form')
  
         let direction = $$('.directions_block .button.active')
@@ -175,40 +311,297 @@
           if(!direction.length) $$('.direction_title').addClass('error_title')
           return;
         }
+
+        direction = direction.data('type') 
       
         let distance = $el.value.find('input[name="distance"]')[0].value
         distance = parseFloat(distance)
 
         if(distance > MAX_DISTANCE) {
-          alert("Допустимое максимальное расстояние - 30м")
+          toast("Допустимое максимальное расстояние - 3000 см", false, 'center')
           return false
         }
 
-        setPart(direction.data('type'), distance)
+        if(isNegativeDirection(direction)) {
+          toast('Нельзя задавать противоположную сторону', false, 'center')
+          return false
+        }
 
-        document.getElementById('distance').value = ''
+        const contour = new Contour(direction, distance)
+        Part.add(contour)
+        checkes()
+        saved = false
+
+        $$('#distance').val('')
         $$('.direction_title').removeClass('error_title')
         $$('.directions_block .button').removeClass('button-fill active');
       })
 
-      function setPart(direction, distance) {
-        part = setPartData(direction, distance)
-        parts.push(part)
-        drawPart(part)
-        correctionVisible()
-        checkShowJoinLineButt()
+      function isNegativeDirection(direction) {
+
+        let res = false
+        const lastEl = Part.lists[Part.lists.length - 1]
+
+        if(direction === 'right' && lastEl.contour.direction === 'left') res = true
+        if(direction === 'left' && lastEl.contour.direction === 'right') res = true
+        if(direction === 'bottom' && lastEl.contour.direction === 'top') res = true
+        if(direction === 'top' && lastEl.contour.direction === 'bottom') res = true
+
+        return res
+      } 
+
+      class Part {
+
+        static lists = [];
+
+        static add(elem) {
+          Part.lists.push(elem)
+          Part.reDraw()
+          console.log('add part', elem)
+        }
+        
+        static removeLastElem() {
+          let lastEl = Part.lists[Part.lists.length - 1]
+          lastEl.remove()
+        }
+
+        static getLists(type) {
+          return Part.lists.filter(elem => Object.values(elem)[0].type === type);
+        }
+
+        static reDraw(){
+          clearCanvas();
+          ctx.translate(offset.x, offset.y);
+          ctx.scale(scale, scale);
+          Part.lists.forEach(item => item.render())
+        }
+
       }
 
-      function setPartData(direction, distance) {
-        const mark = setMark()
-        const [moveTo, lineTo] = setMoveLine(direction, distance)
+      class Rendering {
 
-        return {
-          mark: mark,
-          direction: direction,
-          distance: distance,
-          moveTo: moveTo,
-          lineTo: lineTo
+        render() {
+          console.log('render part')
+        }
+
+        remove() {
+
+        }
+
+      }
+
+      class Contour extends Rendering {
+
+        constructor(direction, distance, elem = null) {
+          super()
+          
+          if(elem) {
+            this.contour = elem
+          } else {
+            this.contour = this.setContourData(direction, distance)
+          }
+
+          this.plusCountEl()
+          this.plusListEl()
+        }
+        
+        plusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="contour"] .elem_count');
+          countEl.text(parseInt(countEl.text()) + 1)
+        }
+
+        plusListEl() {
+          const profile = this.contour.profile ? "<b>" + this.contour.profile.title + "<b>" : "<i>Отсутствует<i>" 
+
+          const endMark = this.contour.mark.end ? this.contour.mark.end : 'A'
+
+          $$('.contour_lists').append('<li data-type="contour" data-num="' + this.contour.num + '"><a href="#" class="item-link item-content"><div class="item-inner"><div class="item-title-row"><div class="item-title">' + this.contour.mark.start + ' - ' + endMark + ': ' + this.contour.distance + ' см</div></div><div class="item-subtitle">Профиль: ' + profile + '</div></div></a></li>')
+        }
+
+        minusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="contour"] .elem_count');
+          countEl.text(parseInt(countEl.text()) - 1)
+        }
+
+        render() {
+          this.drawPart(this.contour)
+        }
+
+        remove() {
+          this.minusCountEl()
+          Part.lists.pop()
+        }
+
+        drawPart(contour) {
+          this.drawMark(contour)
+          this.drawElement(contour)
+          this.drawDistance(contour)
+        }
+
+        drawDistance(contour) {
+          ctx.font = "normal 10px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = 'gray';
+          ctx.save();
+
+          let endPointX, endPointY = 0;
+
+          if(contour.direction == 'right') {
+            endPointX = (contour.lineTo.x - contour.moveTo.x) / 2
+            endPointY = contour.lineTo.y - 10
+          }
+
+          if(contour.direction == 'bottom') {
+            endPointX = 50 
+            endPointY = contour.lineTo.x
+            ctx.rotate( Math.PI / 2 );
+          }
+
+          // if(contour.direction == 'left') {
+          //   endPointX = contour.lineTo.x 
+          //   endPointY = contour.lineTo.y + 20
+          // }
+
+          // if(contour.direction == 'top') {
+          //   endPointX = contour.lineTo.x 
+          //   endPointY = contour.lineTo.y - 10
+          // }
+
+          ctx.fillText(contour.distance + 'см', endPointX, endPointY);
+          ctx.restore();
+        }
+
+        drawMark(contour) {
+          ctx.font = "normal 16px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = 'black';
+
+          const contours = Part.getLists('contour')
+          const isfirstContour = !contours.length || JSON.stringify(contours[0].contour) === JSON.stringify(contour)
+          const nextContour = contours[contour.num + 1]
+
+          // Если первая линия, то добавляет в начале букву
+          if(isfirstContour) {
+
+            const startPointX = contour.moveTo.x 
+            const startPointY = contour.moveTo.y - 10
+            
+            ctx.fillText(contour.mark.start, startPointX, startPointY);
+          }
+
+          let endPointX, endPointY = 0;
+
+          if(contour.direction == 'right') {
+            if(nextContour && nextContour.contour.direction == 'top') {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y + 20
+            } else {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y - 10
+            }
+          }
+
+          if(contour.direction == 'bottom') {
+            if(nextContour && nextContour.contour.direction == 'bottom') {
+              endPointX = contour.lineTo.x + 10
+              endPointY = contour.lineTo.y 
+            } else {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y + 20
+            }
+          }
+
+          if(contour.direction == 'left') {
+            if(nextContour && nextContour.contour.direction == 'bottom') {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y - 10
+            } else {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y + 20
+            }
+          }
+
+          if(contour.direction == 'top') {
+            
+            if(nextContour && nextContour.contour.direction == 'top') {
+              endPointX = contour.lineTo.x + 10
+              endPointY = contour.lineTo.y 
+            } else {
+              endPointX = contour.lineTo.x 
+              endPointY = contour.lineTo.y - 10
+            }
+          }
+
+          if(contour.mark.end) {
+            ctx.fillText(contour.mark.end, endPointX, endPointY);
+          }
+        }
+
+        drawElement(contour) {
+          ctx.beginPath()
+          ctx.lineWidth = 1
+          ctx.moveTo(contour.moveTo.x, contour.moveTo.y)
+          ctx.lineTo(contour.lineTo.x, contour.lineTo.y)
+          ctx.stroke()
+        }
+
+        setContourData(direction, distance) {
+          const mark = this.setMark()
+          const [moveTo, lineTo] = this.setMoveLine(direction, distance)
+
+          const num = Part.getLists('contour').length
+          const profile = contoursDB.find(i => i.default)
+          console.log(profile)
+
+          return {
+            num: num,
+            mark: mark,
+            direction: direction,
+            distance: distance,
+            profile: profile,
+            moveTo: moveTo,
+            lineTo: lineTo,
+            finish: false,
+            type: 'contour'
+          }
+        }
+
+        setMark() {
+          let start, end;
+
+          const contours = Part.getLists('contour')
+
+          if(contours.length) {
+            const lastPart = contours[contours.length - 1].contour
+            start = lastPart.mark.end
+            end = marks[contours.length + 1]
+          } else {
+            start = marks[0]
+            end = marks[1]
+          }
+
+          return { start, end }
+        }
+
+        setMoveLine(direction, distance) {
+          let moveTo, lineTo;
+
+          const contours = Part.getLists('contour')
+          
+          // Если первая линия
+          if(!contours.length) {
+            moveTo = { x: 0 , y: 0 }
+          } else {
+            const lastPart = contours[contours.length - 1].contour
+            moveTo = lastPart.lineTo
+          }
+
+          if(direction === 'right') lineTo = { x: moveTo.x + distance, y: moveTo.y }
+          if(direction === 'bottom') lineTo = { x: moveTo.x, y: moveTo.y + distance }
+          if(direction === 'left') lineTo = { x: moveTo.x - distance, y: moveTo.y }
+          if(direction === 'top') lineTo = { x: moveTo.x, y: moveTo.y - distance }
+
+          return [moveTo, lineTo]
         }
       }
 
@@ -219,7 +612,10 @@
         let maxWidthY = 0
         let minWidthY = 500
 
-        parts.forEach(part => {
+        const contours = Part.getLists('contour')
+
+        contours.forEach(part => {
+          part = part.contour
           if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
           if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
 
@@ -233,11 +629,11 @@
           if(part.moveTo.y < minWidthY) minWidthY = part.moveTo.y 
         })
 
-        maxPolygonWidth = maxWidthX - minWidthX
-        maxPolygonheight = maxWidthY - minWidthY
+        const maxPolygonWidth = maxWidthX - minWidthX
+        const maxPolygonheight = maxWidthY - minWidthY
 
-        normalWidth = canvasWidth - 40
-        normalHeight = canvasHeight - 40
+        const normalWidth = canvasWidth - 40
+        const normalHeight = canvasHeight - 40
 
         if(maxPolygonWidth >= normalWidth) {
           while (true) {
@@ -261,105 +657,84 @@
           preScale = scale
         }
 
-        trX = (canvasWidth / 2) - (maxPolygonWidth / 2)
-        trY = (canvasHeight / 2) - (maxPolygonheight / 2)
+        const trX = (canvasWidth / 2) - (maxPolygonWidth / 2)
+        const trY = (canvasHeight / 2) - (maxPolygonheight / 2)
 
         offset = { x: trX, y: trY }
         curOffset = { x: trX, y: trY }
-        reDraw()
+        Part.reDraw()
       }
 
-      function setMark() {
-        let start, end;
+      // Проверяет нужно ли показывать кнопку соединения линий
+      function checkShowJoinLineButt() {
+        const contours = Part.getLists('contour')
 
-        if(parts.length) {
-          const lastPart = parts[parts.length - 1]
-          start = lastPart.mark.end
-          end = marks[parts.length + 1]
+        const firstPart = contours[0].contour
+        const lastPart  = contours[contours.length - 1].contour
+
+        const leftPoint   = firstPart.moveTo.x - 20
+        const rightPoint  = firstPart.moveTo.x + 20
+        const topPoint    = firstPart.moveTo.y - 20
+        const bottomPoint = firstPart.moveTo.y + 20
+
+        if(lastPart.lineTo.x >= leftPoint && lastPart.lineTo.x <= rightPoint
+          && lastPart.lineTo.y >= topPoint && lastPart.lineTo.y <= bottomPoint) {
+          joinLineButt.removeClass('display_none')
         } else {
-          start = marks[0]
-          end = marks[1]
-        }
-
-        return { start, end }
-      }
-
-      function setMoveLine(direction, distance) {
-        let moveTo, lineTo;
-        
-        // Если первая линия
-        if(!parts.length) {
-          moveTo = { x: 0 , y: 0 }
-        } else {
-          const lastPart = parts[parts.length - 1]
-          moveTo = lastPart.lineTo
-        }
-
-        if(direction === 'right') lineTo = { x: moveTo.x + distance, y: moveTo.y }
-        if(direction === 'bottom') lineTo = { x: moveTo.x, y: moveTo.y + distance }
-        if(direction === 'left') lineTo = { x: moveTo.x - distance, y: moveTo.y }
-        if(direction === 'top') lineTo = { x: moveTo.x, y: moveTo.y - distance }
-
-        return [moveTo, lineTo]
-      }
-
-      function drawPart(part) {
-        drawMark(part)
-        drawElement(part)
-      }
-
-      function isFirstPart(part){
-        return !parts.length || JSON.stringify(parts[0]) === JSON.stringify(part)
-      }
-
-      function drawMark(part) {
-        ctx.font = "normal 16px sans-serif";
-        ctx.textAlign = "center";
-        
-        // Если первая линия, то добавляет в начале букву
-        if(isFirstPart(part)) {
-
-          const startPointX = part.moveTo.x 
-          const startPointY = part.moveTo.y - 10
-          
-          ctx.fillText(part.mark.start, startPointX, startPointY);
-        }
-
-        let endPointX, endPointY = 0;
-
-        if(part.direction == 'right') {
-          endPointX = part.lineTo.x 
-          endPointY = part.lineTo.y - 10
-        }
-
-        if(part.direction == 'bottom') {
-          endPointX = part.lineTo.x 
-          endPointY = part.lineTo.y + 20
-        }
-
-        if(part.direction == 'left') {
-          endPointX = part.lineTo.x 
-          endPointY = part.lineTo.y + 20
-        }
-
-        if(part.direction == 'top') {
-          endPointX = part.lineTo.x 
-          endPointY = part.lineTo.y - 10
-        }
-
-        if(part.mark.end) {
-          ctx.fillText(part.mark.end, endPointX, endPointY);
+          joinLineButt.addClass('display_none')
         }
       }
 
-      function drawElement(part) {
-        ctx.beginPath()
-        ctx.lineWidth = 1
-        ctx.moveTo(part.moveTo.x, part.moveTo.y)
-        ctx.lineTo(part.lineTo.x, part.lineTo.y)
-        ctx.stroke()
+      function setElemContourData() {
+        const contours = Part.getLists('contour')
+        $$('.list_elems_block li[data-type="contour"] .elem_count').text(contours.length)
       }
 
+      function removeDisabledClassLink() {
+        $$('.undo, .save_link').removeClass('disabled')
+      }
+
+      // Соединяет конечные линии, если они соприкасаются
+      function checkLastLine() {
+        const contours = Part.getLists('contour')
+
+        const firstPart = contours[0].contour
+        const lastPart  = contours[contours.length - 1].contour
+
+        const leftPoint   = firstPart.moveTo.x - 1
+        const rightPoint  = firstPart.moveTo.x + 1
+        const topPoint    = firstPart.moveTo.y - 1
+        const bottomPoint = firstPart.moveTo.y + 1
+
+        if(lastPart.lineTo.x >= leftPoint && lastPart.lineTo.x <= rightPoint
+          && lastPart.lineTo.y >= topPoint && lastPart.lineTo.y <= bottomPoint) {
+          joinLastLines()
+        }
+      }
+
+      function joinLastLines() {
+        const contours = Part.getLists('contour')
+        let firstPart = contours[0].contour
+        let lastPart = contours[contours.length - 1].contour
+        lastPart.lineTo.y = firstPart.lineTo.y
+        lastPart.mark.end = null
+        lastPart.finish = true
+        firstPart.moveTo.x = lastPart.lineTo.x
+        joinLineButt.addClass('display_none')
+        $$('.action_block').addClass('display_none')
+        $$('.room_add_details_butt').removeClass('display_none')
+        $$('.list_elems_block').removeClass('display_none')
+        canvas.height = window.innerHeight - $$('.list_elems_block').height();
+        Part.reDraw()
+      }
+
+      function checkes() {
+        correctionVisible()
+        checkLastLine()
+        checkShowJoinLineButt()
+        setElemContourData()
+        removeDisabledClassLink()
+      }
 
       function zoomIn() {
         scale += scaleStep;
@@ -384,7 +759,7 @@
       function zoom() {
         offset.x = mousePos.x - ((mousePos.x - offset.x) * scale) / preScale
         offset.y = mousePos.y - ((mousePos.y - offset.y) * scale) / preScale
-        reDraw()
+        Part.reDraw()
         preScale = scale
         curOffset.x = offset.x
         curOffset.y = offset.y
@@ -399,7 +774,7 @@
           offset.x = curOffset.x + (e.x - x)
           offset.y = curOffset.y + (e.y - y)
           console.log('dragMove', offset)
-          reDraw();
+          Part.reDraw()
         }
         function dragEnd() {
           curOffset.x = offset.x;
@@ -425,39 +800,9 @@
         canvas.width = canvasWidth
       }
 
-      // Перерисовка
-      function reDraw() {
-        clearCanvas();
-        ctx.translate(offset.x, offset.y);
-        ctx.scale(scale, scale);
-        parts.forEach(part => drawPart(part))
-      }
-
-      // Проверяет нужно ли показывать кнопку соединения линий
-      function checkShowJoinLineButt() {
-        firstPart = parts[0]
-        lastPart  = parts[parts.length - 1]
-
-        leftPoint   = firstPart.moveTo.x - 20
-        rightPoint  = firstPart.moveTo.x + 20
-        topPoint    = firstPart.moveTo.y - 20
-        bottomPoint = firstPart.moveTo.y + 20
-
-        if(lastPart.lineTo.x >= leftPoint && lastPart.lineTo.x <= rightPoint
-          && lastPart.lineTo.y >= topPoint && lastPart.lineTo.y <= bottomPoint) {
-          joinLineButt.classList.remove('display_none')
-        } else {
-          joinLineButt.classList.add('display_none')
-        }
-      }
-
-      const partsPattern = document.querySelectorAll('#directionBlock span')
-
-      partsPattern.forEach((item) => {
-        item.addEventListener('click', function() {
-          partsPattern.forEach((i) => i.classList.remove('active'))
-          item.classList.add('active')
-        });
+      $$('#directionBlock span').on('click', function() {
+        $$('#directionBlock span').removeClass('active')
+        $$(this).addClass('active')
       });
 
       canvas.addEventListener('mousewheel', function(e) {
@@ -482,17 +827,42 @@
         return false;
       });
 
-
-      joinLineButt.addEventListener("click", function(e) {
-        const firstPart = parts[0]
-        const lastPart = parts[parts.length - 1]
-        lastPart.lineTo.y = firstPart.lineTo.y
-        lastPart.mark.end = null
-        firstPart.moveTo.x = lastPart.lineTo.x
-        joinLineButt.classList.add('display_none')
-        $el.value.find('.action_block')[0].classList.add('display_none')
-        reDraw()
+      joinLineButt.on("click", function(e) {
+        joinLastLines()        
       })
+
+
+      await fetch('http://127.0.0.1:3000/contours')
+      .then(response => response.json())
+      .then(data => { 
+        contoursDB = data
+      })
+      .catch(error => console.error(error))
+
+      await fetch(`http://127.0.0.1:3000/rooms/${$f7route.params.id}`)
+      .then(response => response.json())
+      .then(res => { 
+        console.log('room get data:', res)
+
+        if(Object.keys(res.data).length) {
+
+          res.data.forEach(i => {
+
+            if(Object.values(i)[0].type === 'contour') {
+              const contour = new Contour(null, null, i.contour)
+              Part.add(contour)
+              checkes()
+            }
+
+          })
+        }
+      })
+      .catch(error => console.error(error))
+      
+
+      $update();
+
+      app.preloader.hide()
 
     })
 

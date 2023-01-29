@@ -68,9 +68,9 @@
 
         <div class="block">
           ${now ? $h`
-            <button type='submit' @click=${add} class="button button-fill">Добавить</button>
+            <button type='submit' @click=${add} class="button button-large button-fill">Добавить</button>
           ` : $h`
-            <button type='submit' @click=${save} class="button button-fill">Сохранить</button>
+            <button type='submit' @click=${save} class="button button-large button-fill">Сохранить</button>
           `}
         </div>
     </div>
@@ -88,7 +88,7 @@
       if(!validate) return;
       
       const formData = app.form.convertToData('#form');
-      console.log(formData)
+      formData.default = toBool(formData.default)
       fetch('http://127.0.0.1:3000/contours', {
         method: 'POST', 
         body: JSON.stringify(formData), 
@@ -99,7 +99,15 @@
       .then(res => res.json())
       .then(response => { 
         console.log('Success:', JSON.stringify(response))
-        $f7router.navigate('/price_lists/contours')    
+        $f7router.navigate('/price_lists/contours')  
+
+        $f7.toast.create({
+          text: 'Профиль успешно добавлен',
+          position: 'top',
+          closeTimeout: 2000,
+          cssClass: 'success_toast'
+        }).open();
+
       })
       .catch(error => console.error('Error:', error));
     }
@@ -108,8 +116,8 @@
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
       const formData = app.form.convertToData('#form');
-      formData['id'] = contour.id
-      fetch('http://127.0.0.1:3000/contours/1', {
+      formData.default = toBool(formData.default)
+      fetch('http://127.0.0.1:3000/contours/' + contour.id, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -121,6 +129,12 @@
       .then(data => { 
         console.log('data', data)
         $f7router.navigate('/price_lists/contours')   
+        $f7.toast.create({
+          text: 'Профиль успешно сохранен',
+          position: 'top',
+          closeTimeout: 2000,
+          cssClass: 'success_toast'
+        }).open();
       })
       .catch(error => console.log(error));
     }
@@ -132,7 +146,7 @@
       if(lastRoutePath(path) === 'edit') {
         title = 'Редактирование'
         now = false
-        await fetch('http://127.0.0.1:3000/contours/1')
+        await fetch(`http://127.0.0.1:3000/contours/${$f7route.params.id}`)
         .then(response => response.json())
         .then(data => contour = data)
         .catch(error => console.error(error))

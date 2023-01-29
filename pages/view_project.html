@@ -4,11 +4,11 @@
       <div class="navbar-bg"></div>
       <div class="navbar-inner">
         <div class="left">
-          <a href="#" class="link back">
+          <a href="#" class="link" @click=${backPage}>
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">Комнаты</div>
+        <div class="title">${projectTitle}</div>
         <div class="right">
           <a href="#" class="link open-prompt">
             <i class="icon material-icons md-only">add</i>
@@ -16,40 +16,195 @@
         </div>
       </div>
     </div>
+
     <div class="page-content">
-      <div class="block-title">Комнаты проекта "${projectTitle}"</div>
+      <div class="block-title">Комнаты проекта</div>
       ${!rooms.length ? $h`
         <div class="empty_title">Нет данных</div>
       ` : $h`
-        <div class="list">
-          <ul>
-            ${rooms.map((item) => $h`
-              <li>
-                <a href="#" @click=${() => openRoom(item)} class="item-link item-content">
-                  <div class="item-inner">
-                    <div class="item-title">${item.title}</div>
-                  </div>
+        ${rooms.map((item) => $h`
+          <div class="popover popover-links-${item.id}">
+            <div class="popover-inner">
+              <div class="list">
+                <ul>
+                  <li><a @click=${() => renameRoom(item)} class="list-button item-link" href="#">Редактировать название</a></li>
+                  <li><a @click=${() => destroyRoom(item)} class="list-button item-link text_color_red" href="#">Удалить</a></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header gray_header">
+              <div>${item.title}</div>
+              <div>
+                <a href="#" class="link popover-open color-gray" data-popover=".popover-links-${item.id}">
+                  <i class="icon material-icons md-only">more_vert</i>
                 </a>
-              </li>
-            `)}
-          </ul>
-        </div>
-      `}
-    </div>
+              </div>
+            </div>
+            <div class="card-content">
+              <div class="list">
+                <ul class='font_14'>
+                  ${!isFinishRoom(item) && $h`
+                    <li>
+                      <div class="item item-content">
+                        <div class="item-inner">
+                          <div class="item-title">Статус</div>
+                          <div class="item-after">
+                            <div class="chip chip-outline color-red">
+                              <div class="chip-label">Незавершенный</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  `}
+                  <li>
+                    <div class="item item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Размеры</div>
+                        <div class="item-after">${сalcLinearMtrs(item)} пог.м / ${сalcSquareMtrs(item)} кв.м</div>
+                      </div>
+                    </div>
+                  </li>
+                  <li>
+                    <div class="item item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Общая цена</div>
+                        <div class="item-after">${priceRoom(item)} руб.</div>
+                      </div>
+                    </div>
+                  </li>
+                  <li>
+                    <div class="item item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Цена за установку</div>
+                        <div class="item-after">${priceRoom(item)} руб.</div>
+                      </div>
+                    </div>
+                  </li>
+                  <li>
+                    <a href="#" class="item-link item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Макет для производителя</div>
+                      </div>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#" class="item-link item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Рассчет для заказчика</div>
+                      </div>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div @click=${() => openRoomProcess(item)} class='card-footer button button-fill card_button'>Открыть</div>
+          </div>
+        `)}
+      `} 
+      </div>
   </div>
 </template>
 <script>
   export default async(props, { $on, $f7router, $f7route, $f7, $update }) => {
     let rooms = []
     let romms_count = 0
-    const projectTitle = props.title
+    let projectTitle
 
     const openRoom = (item) => {
       $f7router.navigate(`/rooms/${item.id}`, { 
-        props: {
-          title: item.title
-        }
+        props: { item: item }
       })
+    }
+
+    const backPage = () => {
+      $f7router.navigate(`/`)
+    }
+
+    const openRoomProcess = (item) => {
+      $f7router.navigate(`/rooms/${item.id}/process`, {
+        props: { item: item }
+      })
+    }
+
+    const renameRoom = (item) => {
+      $f7.popover.close()
+      $f7.dialog.create({
+        text: 'Редактирование',
+        closeByBackdropClick: true,
+        content: '<input class="dialog_input" type="text" value="' + item.title + '"/>',
+        buttons: [
+          { 
+            text: 'Сохранить',
+            onClick: function() {
+              const title = $$('.dialog_input').val()
+              editTitle(item, title)
+            }
+          },
+          { 
+            text: 'Отмена'
+          },
+        ]
+      }).open();
+    }
+
+    const destroyRoom = (item) => {
+      $f7.popover.close()
+      $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
+        app.preloader.show();
+        fetch('http://127.0.0.1:3000/rooms/' + item.id, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => {
+          if (response.ok) {
+            console.log('success delete')
+            app.preloader.hide();
+            $f7router.refreshPage()
+          } else {
+            throw new Error('Error deleting item');
+          }
+        })
+        .then(data => console.log(data) )
+        .catch(error => console.error(error));
+      })
+    }
+
+    const editTitle = (item, title) => {
+
+      if(title.length < 2) {
+        $$('.dialog_input').addClass('border_color')
+        return false
+      } 
+
+      app.preloader.show()
+
+      fetch(`http://127.0.0.1:3000/rooms/${item.id}/edit_title`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ title: title })
+      })
+      .then(response => response.json())
+      .then(data => { 
+        console.log('data', data)
+        app.preloader.hide()
+        $f7.dialog.close() 
+        item.title = title
+        $f7.toast.create({
+          text: 'Название успешно сохранено',
+          position: 'top',
+          closeTimeout: 2000,
+          cssClass: 'success_toast'
+        }).open();
+        $update()
+      })
+      .catch(error => console.log(error));
     }
 
     $on('pageInit', async() => {
@@ -76,10 +231,11 @@
         }, function() {}, 'Комната #' + (romms_count + 1));
       });
 
-      await fetch('http://127.0.0.1:3000/projects/' + $f7route.params.id + '/rooms')
+      await fetch(`http://127.0.0.1:3000/projects/${$f7route.params.id}/rooms`)
       .then(response => response.json())
       .then(data => { 
-        rooms = data
+        projectTitle = data.project.title
+        rooms = data.rooms
         romms_count = rooms.length
       })
       .catch(error => console.error(error))
