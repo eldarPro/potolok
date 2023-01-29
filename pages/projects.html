@@ -48,7 +48,7 @@
     
     $on('pageInit', async() => {
 
-      await fetch('http://127.0.0.1:3000/projects')
+      await fetch(`${host}/projects`)
       .then(response => response.json())
       .then(data => { 
         projects = data
