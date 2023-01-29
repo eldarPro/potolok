@@ -73,7 +73,7 @@
         }
       }
 
-      await fetch('http://127.0.0.1:3000/users/1')
+      await fetch(`${host}/users/1`)
       .then(response => response.json())
       .then(data => { 
         profile = data
@@ -88,7 +88,7 @@
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
       const formData = $f7.form.convertToData('#form');
-      fetch('http://127.0.0.1:3000/users/1', {
+      fetch(`${host}/users/1`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

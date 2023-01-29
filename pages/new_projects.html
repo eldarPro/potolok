@@ -40,7 +40,7 @@
       const validate = app.input.validateInputs('#new_project_form')
       if(!validate) return;
 
-      fetch('http://127.0.0.1:3000/projects', {
+      fetch(`${host}/projects`, {
         method: 'POST', 
         body: JSON.stringify({
           title: $$('input[name="title"]').val()

@@ -127,7 +127,7 @@
     const destroy = () => {
       $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
         app.preloader.show();
-        fetch('http://127.0.0.1:3000/rooms/' + room.id, {
+        fetch(`${host}/rooms/${room.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' }
         })

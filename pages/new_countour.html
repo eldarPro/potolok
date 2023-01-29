@@ -89,7 +89,7 @@
       
       const formData = app.form.convertToData('#form');
       formData.default = toBool(formData.default)
-      fetch('http://127.0.0.1:3000/contours', {
+      fetch(`${host}/contours`, {
         method: 'POST', 
         body: JSON.stringify(formData), 
         headers:{
@@ -117,7 +117,7 @@
       if(!validate) return;
       const formData = app.form.convertToData('#form');
       formData.default = toBool(formData.default)
-      fetch('http://127.0.0.1:3000/contours/' + contour.id, {
+      fetch(`${host}/contours/${contour.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +146,7 @@
       if(lastRoutePath(path) === 'edit') {
         title = 'Редактирование'
         now = false
-        await fetch(`http://127.0.0.1:3000/contours/${$f7route.params.id}`)
+        await fetch(`${host}/contours/${$f7route.params.id}`)
         .then(response => response.json())
         .then(data => contour = data)
         .catch(error => console.error(error))

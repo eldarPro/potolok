@@ -63,7 +63,7 @@
     let profile;
 
     $on('pageInit', async() => {
-      await fetch('http://127.0.0.1:3000/users/1')
+      await fetch(`${host}/users/1`)
       .then(response => response.json())
       .then(data => { 
         profile = data

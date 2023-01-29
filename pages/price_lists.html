@@ -69,7 +69,7 @@
 
     $on('pageInit', async() => {
 
-      await fetch('http://127.0.0.1:3000/contours')
+      await fetch(`${host}/contours`)
       .then(response => response.json())
       .then(data => { 
         contours = data

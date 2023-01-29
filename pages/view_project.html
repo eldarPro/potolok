@@ -155,7 +155,7 @@
       $f7.popover.close()
       $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
         app.preloader.show();
-        fetch('http://127.0.0.1:3000/rooms/' + item.id, {
+        fetch(`${host}/rooms/${item.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -182,7 +182,7 @@
 
       app.preloader.show()
 
-      fetch(`http://127.0.0.1:3000/rooms/${item.id}/edit_title`, {
+      fetch(`${host}/rooms/${item.id}/edit_title`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -212,7 +212,7 @@
       $$('.open-prompt').on('click', function () {
         $f7.dialog.prompt('', 'Новая комната', function (title) {
 
-          fetch('http://127.0.0.1:3000/rooms', {
+          fetch(`${host}/rooms`, {
             method: 'POST', 
             body: JSON.stringify({
               project_id: $f7route.params.id,
@@ -231,7 +231,7 @@
         }, function() {}, 'Комната #' + (romms_count + 1));
       });
 
-      await fetch(`http://127.0.0.1:3000/projects/${$f7route.params.id}/rooms`)
+      await fetch(`${host}/projects/${$f7route.params.id}/rooms`)
       .then(response => response.json())
       .then(data => { 
         projectTitle = data.project.title

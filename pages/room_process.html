@@ -217,7 +217,7 @@
       save = async(backPage) => {
         app.preloader.show()
 
-        await fetch(`http://127.0.0.1:3000/rooms/${$f7route.params.id}/set_data`, {
+        await fetch(`${host}/rooms/${$f7route.params.id}/set_data`, {
           method: 'POST', 
           body: JSON.stringify({
             parts: Part.lists
@@ -832,14 +832,14 @@
       })
 
 
-      await fetch('http://127.0.0.1:3000/contours')
+      await fetch(`${host}/contours`)
       .then(response => response.json())
       .then(data => { 
         contoursDB = data
       })
       .catch(error => console.error(error))
 
-      await fetch(`http://127.0.0.1:3000/rooms/${$f7route.params.id}`)
+      await fetch(`${host}/rooms/${$f7route.params.id}`)
       .then(response => response.json())
       .then(res => { 
         console.log('room get data:', res)
