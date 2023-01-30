@@ -149,5 +149,5 @@ const priceRoom = (item) => {
   return res / 100
 }
 
-//var host = 'http://127.0.0.1:3000'
-var host = 'https://potolokapi-production.up.railway.app'
+var host = 'http://127.0.0.1:3000'
+//var host = 'https://potolokapi-production.up.railway.app'
