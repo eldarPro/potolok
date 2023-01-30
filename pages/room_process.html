@@ -446,23 +446,23 @@
 
           if(contour.direction == 'right') {
             console.log('right position')
-            endPointX = (contour.lineTo.x - contour.moveTo.x) / 2
+            endPointX = contour.moveTo.x + ((contour.lineTo.x - contour.moveTo.x) / 2)
             endPointY = contour.lineTo.y - 10
           }
 
           if(contour.direction == 'bottom') {
-            endPointX = (contour.lineTo.y - contour.moveTo.y) / 2
+            endPointX = contour.moveTo.y +  ((contour.lineTo.y - contour.moveTo.y) / 2)
             endPointY = -(contour.lineTo.x) - 10
             ctx.rotate( Math.PI / 2 );
           }
 
           if(contour.direction == 'left') {
-            endPointX = (contour.moveTo.x - contour.lineTo.x) / 2
+            endPointX = contour.lineTo.x + ((contour.moveTo.x - contour.lineTo.x) / 2)
             endPointY = contour.lineTo.y + 15
           }
 
           if(contour.direction == 'top') {
-            endPointX = (contour.moveTo.y - contour.lineTo.y) / 2
+            endPointX = contour.lineTo.y + ((contour.moveTo.y - contour.lineTo.y) / 2)
             endPointY = -(contour.lineTo.x) - 10
             ctx.rotate( Math.PI / 2 );
           }
