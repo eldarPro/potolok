@@ -178,8 +178,6 @@
 
     let saved = true
 
-    let updatedRoom = props.item;
-
     $on('pageInit', async() => {
 
       app.preloader.show()
@@ -322,10 +320,10 @@
           return false
         }
 
-        if(isNegativeDirection(direction)) {
-          toast('Нельзя задавать противоположную сторону', false, 'center')
-          return false
-        }
+        // if(isNegativeDirection(direction)) {
+        //   toast('Нельзя задавать противоположную сторону', false, 'center')
+        //   return false
+        // }
 
         const contour = new Contour(direction, distance)
         Part.add(contour)
@@ -439,23 +437,23 @@
         }
 
         drawDistance(contour) {
-          ctx.font = "normal 10px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillStyle = 'gray';
-          ctx.save();
+          // ctx.font = "normal 10px sans-serif";
+          // ctx.textAlign = "center";
+          // ctx.fillStyle = 'gray';
+          // ctx.save();
 
-          let endPointX, endPointY = 0;
+          // let endPointX, endPointY = 0;
 
-          if(contour.direction == 'right') {
-            endPointX = (contour.lineTo.x - contour.moveTo.x) / 2
-            endPointY = contour.lineTo.y - 10
-          }
+          // if(contour.direction == 'right') {
+          //   endPointX = (contour.lineTo.x - contour.moveTo.x) / 2
+          //   endPointY = contour.lineTo.y - 10
+          // }
 
-          if(contour.direction == 'bottom') {
-            endPointX = 50 
-            endPointY = contour.lineTo.x
-            ctx.rotate( Math.PI / 2 );
-          }
+          // if(contour.direction == 'bottom') {
+          //   endPointX = 50 
+          //   endPointY = contour.lineTo.x
+          //   ctx.rotate( Math.PI / 2 );
+          // }
 
           // if(contour.direction == 'left') {
           //   endPointX = contour.lineTo.x 
@@ -467,8 +465,8 @@
           //   endPointY = contour.lineTo.y - 10
           // }
 
-          ctx.fillText(contour.distance + 'см', endPointX, endPointY);
-          ctx.restore();
+          //ctx.fillText(contour.distance + 'см', endPointX, endPointY);
+         // ctx.restore();
         }
 
         drawMark(contour) {

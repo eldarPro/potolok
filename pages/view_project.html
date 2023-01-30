@@ -225,7 +225,9 @@
           .then(res => res.json())
           .then(response => { 
             console.log('Success:', JSON.stringify(response))
-            $f7router.navigate('/rooms/' + response.id + '/process') 
+            $f7router.navigate(`/rooms/${response.id}/process`, {
+              props: { item: response }  
+            }) 
           })
           .catch(error => console.error('Error:', error));
         }, function() {}, 'Комната #' + (romms_count + 1));
