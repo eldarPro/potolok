@@ -101,6 +101,7 @@ const toast = (title, success = false, position = 'top') => {
 
 }
 
+// Определяет завершенное ли помещение
 const isFinishRoom = (item) => {
   let res = false
   if(item.data) {
@@ -127,14 +128,97 @@ const сalcLinearMtrs = (item) => {
 
 const сalcSquareMtrs = (item) => {
   let res = 0
+  
+  let maxWidthX = 0
+  let minWidthX = 500
+
+  let maxWidthY = 0
+  let minWidthY = 500
+
   if(item.data && isFinishRoom(item)) {
     item.data.forEach(i => {
       if(Object.values(i)[0].type === 'contour') {
-        res += i.contour.distance
+        part = i.contour
+        if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
+        if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
+
+        if(part.lineTo.x < minWidthX) minWidthX = part.lineTo.x
+        if(part.moveTo.x < minWidthX) minWidthX = part.moveTo.x 
+
+        if(part.lineTo.y > maxWidthY) maxWidthY = part.lineTo.y
+        if(part.moveTo.y > maxWidthY) maxWidthY = part.moveTo.y
+
+        if(part.lineTo.y < minWidthY) minWidthY = part.lineTo.y
+        if(part.moveTo.y < minWidthY) minWidthY = part.moveTo.y 
       }
     })
+
+    res = minWidthX + ' - ' + maxWidthX + ' : ' +  minWidthY + ' - ' + maxWidthY
+
+    const minX = Math.min(minWidthX, maxWidthX)
+    const minY = Math.min(minWidthY, maxWidthY)
+
+    const maxX = Math.max(minWidthX, maxWidthX)
+    const maxY = Math.max(minWidthY, maxWidthY)
+
+    ////////////////////////////////////////////////////
+    // maxWidthX // 140
+
+    let listSquares = []
+
+    let a = 0
+    let b = 0
+
+    for (let i = minY; i < maxY; i++) {
+
+      a = i
+
+      for (let n = minX; n < maxX; n++) {
+          
+        b = n
+
+        let findContourNum = null
+
+        item.data.forEach(i => {
+          if(Object.values(i)[0].type === 'contour') {
+            part = i.contour
+            if(part.lineTo.x === n && part.moveTo.x === n) {
+              listSquares.push(a, b)
+              findContourNum = part.num
+            }
+          }
+        })
+
+      }
+    }
+
+    ////////////////////////////////////////////////////
+
+    item.data.forEach(i => {
+      if(Object.values(i)[0].type === 'contour') {
+        part = i.contour
+
+        for (let i = 0; i < maxWidthY; i++) {
+          console.log(i);
+        }
+
+        // const x = Math.max(part.moveTo.x, part.LineTo.x)
+        // const y = Math.max(part.moveTo.y, part.LineTo.y)
+
+        // const a = maxWidthX - x
+        // const b = maxWidthY - y
+
+        if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
+        if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
+
+      }
+    })
+
   }
-  return res / 100
+
+
+
+  return res
 }
 
 const priceRoom = (item) => {

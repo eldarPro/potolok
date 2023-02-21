@@ -249,7 +249,6 @@
         }
       }
 
-
       undo = () => {
         const parts = Part.lists
 
@@ -300,7 +299,7 @@
         $$(this).addClass('button-fill active')
       })
 
-      $$('.add_contour').on('click', function() {
+      $$(document).on('click', '.add_contour', function() {
         const validate = app.input.validateInputs('#form')
  
         let direction = $$('.directions_block .button.active')
@@ -477,7 +476,7 @@
           ctx.fillStyle = 'black';
 
           const contours = Part.getLists('contour')
-          const isfirstContour = !contours.length || JSON.stringify(contours[0].contour) === JSON.stringify(contour)
+          const isfirstContour = !contours.length || contours[0].contour.num === contour.num
           const nextContour = contours[contour.num + 1]
 
           // Если первая линия, то добавляет в начале букву
@@ -725,6 +724,9 @@
         $$('.room_add_details_butt').removeClass('display_none')
         $$('.list_elems_block').removeClass('display_none')
         canvas.height = window.innerHeight - $$('.list_elems_block').height();
+
+        console.log(Part.lists)
+
         Part.reDraw()
       }
 
@@ -808,14 +810,14 @@
       canvas.addEventListener('mousewheel', function(e) {
         mousePos.x = e.offsetX;
         mousePos.y = e.offsetY;
-
+        
         let b = true;
         if(e.wheelDelta) {
           b = e.wheelDelta > 0;
         } else {
           b = e.detail < 0;
         }
-
+        
         if(b) {
           zoomIn();
         } else {
@@ -827,10 +829,9 @@
         return false;
       });
 
-      joinLineButt.on("click", function(e) {
+      joinLineButt.on('click', function(e) {
         joinLastLines()        
       })
-
 
       await fetch(`${host}/contours`)
       .then(response => response.json())
@@ -859,7 +860,6 @@
       })
       .catch(error => console.error(error))
       
-
       $update();
 
       app.preloader.hide()
