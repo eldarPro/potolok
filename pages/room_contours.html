@@ -1,0 +1,188 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link" @click=${exitPage}>
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Профили комнаты</div>
+      </div>
+    </div>
+    <div class="page-content">
+      ${!roomContours.length ? $h`
+        <div class="empty_title">Нет данных</div>
+      ` : $h`
+        <div class="list">
+          <ul>
+            ${roomContours.map((item, inx) => $h`
+              <li class="accordion-item">
+                <a class="item-link item-content">
+                  <div class="item-inner">
+                    <div class="item-title">
+                      <b>${item.mark.start}</b> - <b>${item.mark.end}</b> ${item.distance} см.
+                    </div>
+                  </div>
+                </a>
+                <div class="accordion-item-content">
+                  <div class="list">
+                    <ul>
+                      <li>
+                        <a class="item-link smart-select smart-select-init" data-open-in="sheet" data-id="${item.num}">
+                          <select name='profile'>
+                            <option value='0'>Отсутствует</option>
+                            ${contours.map((i) => {
+                              if(item.profile_id === i.id) {
+                                return $h`<option value="${i.id}" selected>${i.title}</option>`
+                              } else {
+                                return $h`<option value="${i.id}">${i.title}</option>`
+                              }
+                            })}             
+                          </select>
+                          <div class="item-content">
+                            <div class="item-inner">
+                              <div class="item-title">Профиль</div>
+                            </div>
+                          </div>
+                        </a>
+                      </li>
+                      <li class="${item.distance < 15 ? 'display-none' : ''}">
+                        <div class="list list-strong-ios list-outline-ios simple-list">
+                          <ul>
+                            <li>
+                              <div>
+                                ${item.mark.start}
+                              </div>
+                              <div style="width: 100%; margin: 0 16px">
+                                <div class="range-slider range-slider-init" data-label="true">
+                                  <input type="range" min="${5}" max="${item.distance - 5}" step="1" value="${item.distance / 2}" data-id="${item.num}" />
+                                </div>
+                              </div>
+                              <div>
+                                ${item.mark.end}
+                              </div>
+                            </li>
+                          </ul>
+                        </div>
+                        <div class="block block-strong block-outline-ios">
+                          <button class="button button-tonal color-blue" @click=${() => divide(item)}>Разделить на две части</button>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </li>
+            `)}
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default (props, { $on, $f7, $f7router, $f7route, $update }) => {
+    let contours = []
+    let roomContours = []
+
+    let divide = (item) = {}
+
+    const exitPage = () => {
+      $f7router.back({ force: true, animatePages: false })
+    }
+
+    $on('pageInit', async() => {      
+
+      divide = (item) => {
+        const value = $$('[type="range"][data-id="' + item.num + '"]').val()
+
+        console.log(value)
+
+        app.preloader.show()
+
+        fetch(`${host}/rooms/${$f7route.params.id}/divide_contour`, {
+          method: 'POST', 
+          body: JSON.stringify({ 
+            num: item.num,
+            value: value
+          }), 
+          headers: {'Content-Type': 'application/json'}
+        })
+        .then(response => { 
+          const result = JSON.stringify(response)
+          console.log('Success:', result)
+          if(!response.ok || result.success === false) throw new Error();
+          app.preloader.hide()
+          $f7router.refreshPage()
+        })
+        .catch(error => { 
+          console.error('Error:', error)
+          $f7.toast.create({
+            text: 'Произошла неизвестная ошибка при разделении',
+            position: 'top',
+            closeTimeout: 2000,
+            cssClass: 'failed_toast'
+          }).open();
+          app.preloader.hide()
+        });
+      }
+
+      $$(document).on('smartselect:closed', '.smart-select', function (e) {
+        const id = e.target.getAttribute('data-id');
+        const smartSelect = app.smartSelect.get('.smart-select[data-id="' + id + '"]');
+
+        fetch(`${host}/rooms/${$f7route.params.id}/change_contour`, {
+          method: 'POST', 
+          body: JSON.stringify({ 
+            num: id,
+            value: smartSelect.getValue()
+          }), 
+          headers: {'Content-Type': 'application/json'}
+        })
+        .then(res => res.json())
+        .then(response => { 
+          console.log('Success:', JSON.stringify(response))  
+          if(!response.success) throw new Error();
+        })
+        .catch(error => { 
+          console.error('Error:', error)
+          $f7.toast.create({
+            text: 'Произошла неизвестная ошибка при сохранении',
+            position: 'top',
+            closeTimeout: 2000,
+            cssClass: 'failed_toast'
+          }).open();
+        });
+        
+      })
+
+      await fetch(`${host}/contours`)
+      .then(response => response.json())
+      .then(data => { 
+        contours = data
+        console.log('contours', contours)
+      })
+      .catch(error => console.error(error))
+
+      await fetch(`${host}/rooms/${$f7route.params.id}/get_data`)
+      .then(response => response.json())
+      .then(data => { 
+        data.forEach(i => {  
+          if(i.type === 'contour') roomContours.push(i)
+        })
+
+        $update()
+      })
+      .catch(error => console.error(error))
+
+    })
+
+    $on('pageBeforeRemove', () => {
+      $$(document).off('smartselect:closed', '.smart-select')
+    })
+
+
+    return $render;
+  }
+</script>

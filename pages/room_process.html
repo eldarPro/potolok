@@ -27,21 +27,14 @@
       <div class="list">
         <ul>
           <li>
-            <a href="#" @click=${() => save(false)} class="item-content save_link disabled">
+            <a href="#" @click=${destroyRoom} class="link item-content color-red">
               <div class="item-inner">
-                <div class="item-title">Сохранить</div>
+                <div class="item-title text-color-red">Удалить</div>
               </div>
             </a>
           </li>
           <li>
-            <a href="#" @click=${() => save(true)} class="item-content save_link disabled">
-              <div class="item-inner">
-                <div class="item-title">Сохранить и выйти</div>
-              </div>
-            </a>
-          </li>
-          <li>
-            <a href="#" @click=${exitPage} class="link item-content color-red">
+            <a href="#" @click=${exitPage} class="link item-content">
               <div class="item-inner">
                 <div class="item-title">Выйти</div>
               </div>
@@ -60,8 +53,8 @@
           <i class="icon material-icons md-only">close</i>
         </a>
         <div class="fab-buttons fab-buttons-bottom">
-          <a class="fab-label-button" href="#"><span>+</span><span class="fab-label">Профильное освещение</span></a>
-          <a class="fab-label-button" href="#"><span>+</span><span class="fab-label">Дополнительные услуги</span></a>
+          <a class="fab-label-button" href="#" @click=${addLusters}><span>+</span><span class="fab-label">Профильное освещение</span></a>
+          <a class="fab-label-button" href="#" @click=${addService}><span>+</span><span class="fab-label">Дополнительные услуги</span></a>
         </div>
       </div>
 
@@ -71,7 +64,7 @@
         <button id='join_line_butt' class='button button-fill display_none'>Соединить</button>
         <form class="list point_elems_block" id='form'>
           <ul>
-            <li class="item-content item-input">
+            <li class="item-content item-input direction_block">
               <div class="item-inner">
                 <div class="item-title item-label direction_title">Направление:</div>
                 <div class="item-input">
@@ -113,24 +106,50 @@
           <li class="accordion-item">
             <a class="item-content item-link" href="#">
               <div class="item-inner">
-                <div class="item-title">Список добавленного</div>
+                <div class="item-title">Список элементов</div>
               </div>
             </a>
             <div class="accordion-item-content">
             <div class="list">
               <ul>
-                <li class='accordion-item' data-type='contour'>
-                  <a href="#" class="item-link item-content">
+                <li>
+                  <a class="item-link smart-select cloth-select">
+                    <select name='profile'>
+                      <option value='0'>Отсутствует</option>
+                      ${cloths.map((i) => $h`
+                        <option value="${i.id}">${i.title}</option>
+                      `)}             
+                    </select>
+                    <div class="item-content">
+                      <div class="item-inner">
+                        <div class="item-title">Полотно</div>
+                      </div>
+                    </div>
+                  </a>
+                </li>
+                <li data-type='contour'>
+                  <a href='#' @click=${openRoomCountours} class='item-link item-content'>
                     <div class="item-inner">
-                      <div class="item-title">Стороны</div>
+                      <div class="item-title">Профили</div>
                       <div class="item-after"><span class='elem_count'>0</span> шт.</div>
                     </div>
                   </a>
-                  <div class="accordion-item-content">
-                  <div class="list media-list">
-                    <ul class="contour_lists bg_gray_light"></ul>
-                  </div>
-                  </div>
+                </li>
+                <li data-type='luster'>
+                  <a href='#' class='item-content'>
+                    <div class="item-inner">
+                      <div class="item-title">Профильное освещение</div>
+                      <div class="item-after"><span class='elem_count'>0</span> шт.</div>
+                    </div>
+                  </a>
+                </li>
+                <li data-type='service'>
+                  <a href='#' @click=${openRoomServices} class='item-link item-content'>
+                    <div class="item-inner">
+                      <div class="item-title">Доп.услуги</div>
+                      <div class="item-after"><span class='elem_count'>0</span> шт.</div>
+                    </div>
+                  </a>
                 </li>
               </ul>
             </div>
@@ -139,6 +158,44 @@
         </ul>
       </div>
     </div>
+
+    <div class="popup services-popup">
+      <div class="page">
+        <div class="page-content">
+          <ul class="list">
+            <li>
+              <a class="item-link smart-select service-select smart-select-init" data-open-in="sheet">
+                <select name='service_id'>
+                  <option value="0"> - Выберите значение -</option>
+                  ${services.map((i) => $h`
+                    <option value="${i.id}">${i.title}</option>
+                  `)}      
+                </select>
+                <div class="item-content">
+                  <div class="item-inner">
+                    <div class="item-title">Услуга</div>
+                  </div>
+                </div>
+              </a>
+            </li>
+            <li class="item-content item-input item-input-outline">
+              <div class="item-inner">
+                <div class="item-title item-floating-label">Комментарий</div>
+                <div class="item-input-wrap">
+                  <textarea type="text" class='service_comment'></textarea>
+                  <span class="input-clear-button"></span>
+                </div>
+              </div>
+            </li>
+          </ul>
+
+          <div class="block">
+            <button type='submit' @click=${createService} class="button button-large button-fill">Добавить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -164,61 +221,136 @@
     const touchEnd   = hasTouch ? "touchend" : "mouseup";
 
     const parts = []
-    let contoursDB = []
+    let cloths  = []
+    let lusters = []
+    let services = []
+    let room
+    let roomCloth
+
+    let default_contour
+    let default_cloth
+    let default_luster
+
+    let addLusterEvent = false
 
     const marks = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
 
-    $$(document).on('page:beforeremove', function (e) {
-      $$('.main_toolbar').css('display', 'block')
-    })
+    let square_mtrs = 0
+    let linear_mtrs = 0
 
     let undo = () => {}
     let save = () => {}
     let exitPage = () => {}
+    let destroyRoom = () => {}
+    let addLusters = () => {}
+    let addService = () => {}
+    let createService = () => {}
 
-    let saved = true
+    const openRoomCountours = () => {
+      $f7router.navigate(`/rooms/${$f7route.params.id}/contours`) 
+    }
+
+    const openRoomServices = () => {
+      $f7router.navigate(`/rooms/${$f7route.params.id}/services`) 
+    }
 
     $on('pageInit', async() => {
 
       app.preloader.show()
 
       exitPage = () => {
-
-        if(!saved) {
-          $f7.dialog.create({
-            text: 'Данные изменились. Хотите сохранить перед выходом?',
-            closeByBackdropClick: true,
-            buttons: [
-              { 
-                text: 'Сохранить',
-                onClick: function() {
-                  save(true)
-                }
-              },
-              { 
-                text: 'Не сохранить',
-                onClick: function() {
-                  app.panel.close();
-                  $f7router.navigate(`/projects/${props.item.project_id}`) 
-                }
-              },
-            ]
-          }).open();
-        } else {
-          app.preloader.hide()
-          app.panel.close();
-          $f7router.navigate(`/projects/${props.item.project_id}`) 
-        }
-      
+        app.preloader.hide()
+        app.panel.close();
+        $f7router.navigate(`/projects/${props.item.project_id}`) 
       }
 
-      save = async(backPage) => {
-        app.preloader.show()
+      destroyRoom = () => {
+        
+        $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
+          app.preloader.show()
+          fetch(`${host}/rooms/${$f7route.params.id}`, {
+            method: 'DELETE', 
+            headers:{ 'Content-Type': 'application/json' }
+          })
+          .then(response => { 
+            const result = JSON.stringify(response)
+            console.log('Destroy:', response, result)
+            if(!response.ok || result.success === false) throw new Error();
+            app.preloader.hide()
+            app.panel.close();
+            $f7router.navigate(`/projects/${props.item.project_id}`) 
+          })
+          .catch(error => { 
+            console.error('Error:', error)
+            app.preloader.hide()
+            app.panel.close();
+          });
+        })
+      }
 
-        await fetch(`${host}/rooms/${$f7route.params.id}/set_data`, {
+      addLusters = () => {
+        app.fab.close()
+
+        if(!lusters.length) {
+          toast('Профильное освещение отсутствует. Добавьте его в прайс-листе!', false)
+          return
+        }
+
+        addLusterEvent = true
+
+        app.toast.create({
+          text: 'Установите нажимая на области, а потом нажимте на кнопку',
+          closeButton: true,
+          closeButtonText: 'Готово',
+          on: {
+            close: function () {
+              addLusterEvent = false
+              save()
+            },
+          }
+        }).open();
+      }
+
+      addService = () => {
+        app.fab.close()
+
+        if(!services.length) {
+          toast('Услуги отсутствуют. Добавьте их в прайс-листе!', false)
+          return
+        }
+
+        app.popup.create({
+          el: '.services-popup',
+          swipeToClose: true,
+          push: true,
+          closeOnEscape: true,
+        }).open()
+      }
+
+      createService = () => {
+        const service_id = app.smartSelect.get('.service-select').getValue();
+
+        if(service_id == 0) {
+          toast('Выберите услугу!', false)
+          return
+        }
+
+        const comment = $$('.service_comment').val()
+        console.log('service formData', service_id, comment)
+        const service = new Service(service_id, comment)
+        Part.add(service)
+        save()
+        app.popup.close()
+      }
+      
+      save = () => {
+        fetch(`${host}/rooms/${$f7route.params.id}/set_data`, {
           method: 'POST', 
           body: JSON.stringify({
-            parts: Part.lists
+            parts: Part.lists,
+            cloth_id: roomCloth && roomCloth.id,
+            square_mtrs: square_mtrs,
+            linear_mtrs: linear_mtrs,
           }), 
           headers:{
             'Content-Type': 'application/json'
@@ -227,49 +359,37 @@
         .then(res => res.json())
         .then(response => { 
           console.log('Success:', JSON.stringify(response))
-          saved = true
-          $f7.toast.create({
-            text: 'Данные успешно сохранены',
-            position: 'top',
-            closeTimeout: 2000,
-            cssClass: 'success_toast'
-          }).open();
         })
         .catch(error => { 
           console.error('Error:', error)
         });
-
-        app.preloader.hide()
-        app.panel.close();
-
-        console.log('backPage', backPage)
-
-        if(backPage) {
-          $f7router.navigate(`/projects/${props.item.project_id}`) 
-        }
       }
 
       undo = () => {
         const parts = Part.lists
 
-        saved = false
-
         if(parts.length) {
-          lastEl = parts[parts.length - 1]
+          const lastEl = parts[parts.length - 1]
 
-          const lastPart = Object.values(lastEl)[0]
-
-          if(lastPart.type === 'contour' && lastPart.finish) {
-            lastEl.contour.finish = false
+          if(lastEl.type === 'contour' && lastEl.finish) {
+            lastEl.finish = false
             $$('.action_block').removeClass('display_none')
             $$('.room_add_details_butt').addClass('display_none')
             $$('.list_elems_block').addClass('display_none')
             joinLineButt.addClass('display_none')
+            addLusterEvent = false
+            app.toast.close()
           }
 
           Part.removeLastElem()
-          checkShowJoinLineButt()
-          if(!parts.length) $$('.undo, .save_link').addClass('disabled')
+          save()
+
+          if(Part.lists.length) {
+            checkShowJoinLineButt()
+            if(!parts.length) $$('.undo').addClass('disabled')
+            correctionVisible()
+          }
+
           Part.reDraw()
         }
       }
@@ -279,7 +399,6 @@
         if (key == 13) e.preventDefault();
       }
 
-      $$('.main_toolbar').css('display', 'none')
       const canvas = document.getElementById('canvas')
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight - $$('.action_block').height()
@@ -315,19 +434,19 @@
         distance = parseFloat(distance)
 
         if(distance > MAX_DISTANCE) {
-          toast("Допустимое максимальное расстояние - 3000 см", false, 'center')
+          toast("Допустимое максимальное расстояние - 3000 см", false)
           return false
         }
 
-        // if(isNegativeDirection(direction)) {
-        //   toast('Нельзя задавать противоположную сторону', false, 'center')
-        //   return false
-        // }
+        if(isNegativeDirection(direction)) {
+          toast('Нельзя задавать противоположную сторону', false)
+          return false
+        }
 
         const contour = new Contour(direction, distance)
         Part.add(contour)
         checkes()
-        saved = false
+        save()
 
         $$('#distance').val('')
         $$('.direction_title').removeClass('error_title')
@@ -335,15 +454,13 @@
       })
 
       function isNegativeDirection(direction) {
-
         let res = false
-        const lastEl = Part.lists[Part.lists.length - 1]
-
-        if(direction === 'right' && lastEl.contour.direction === 'left') res = true
-        if(direction === 'left' && lastEl.contour.direction === 'right') res = true
-        if(direction === 'bottom' && lastEl.contour.direction === 'top') res = true
-        if(direction === 'top' && lastEl.contour.direction === 'bottom') res = true
-
+        const lastEl = Part.getLists('contour')[Part.lists.length - 1]
+        if(!lastEl) return false 
+        if(direction === 'right'  && lastEl.direction === 'left')   res = true
+        if(direction === 'left'   && lastEl.direction === 'right')  res = true
+        if(direction === 'bottom' && lastEl.direction === 'top')    res = true
+        if(direction === 'top'    && lastEl.direction === 'bottom') res = true
         return res
       } 
 
@@ -354,6 +471,7 @@
         static add(elem) {
           Part.lists.push(elem)
           Part.reDraw()
+          console.log('Part.lists', Part.lists)
           console.log('add part', elem)
         }
         
@@ -363,7 +481,8 @@
         }
 
         static getLists(type) {
-          return Part.lists.filter(elem => Object.values(elem)[0].type === type);
+          console.log('Part.lists', Part.lists)
+          return Part.lists.filter(i => i.type === type);
         }
 
         static reDraw(){
@@ -387,32 +506,93 @@
 
       }
 
+      class Service extends Rendering {
+
+        constructor(service_id, comment) {
+          super()
+          const service = { 
+            type: 'service',
+            service_id: service_id, 
+            comment: comment 
+          }
+          Object.assign(this, service);
+          this.plusCountEl()
+        }
+
+        plusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="service"] .elem_count');
+          countEl.text(parseInt(countEl.text()) + 1)
+        }
+
+        minusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="service"] .elem_count');
+          countEl.text(parseInt(countEl.text()) - 1)
+        }
+
+        render() {
+         
+        }
+
+        remove() {
+          this.minusCountEl()
+          Part.lists.pop()
+        }
+
+      }
+
+      class Luster extends Rendering {
+
+        constructor(x, y) {
+          super()
+          const luster = { 
+            type: 'luster',
+            coord: { x: x, y: y } 
+          }
+          Object.assign(this, luster);
+          this.plusCountEl()
+        }
+        
+        plusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="luster"] .elem_count');
+          countEl.text(parseInt(countEl.text()) + 1)
+        }
+
+        minusCountEl() {
+          const countEl = $$('.list_elems_block li[data-type="luster"] .elem_count');
+          countEl.text(parseInt(countEl.text()) - 1)
+        }
+
+        render() {
+          this.draw()
+        }
+
+        remove() {
+          this.minusCountEl()
+          Part.lists.pop()
+        }
+
+        draw() {
+          ctx.beginPath();
+          ctx.arc(this.coord.x, this.coord.y, 4, 0, 2 * Math.PI, false);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = default_luster ? default_luster.color : '#000000';
+          ctx.stroke();
+        }
+
+      }
+
       class Contour extends Rendering {
 
         constructor(direction, distance, elem = null) {
           super()
-          
-          if(elem) {
-            this.contour = elem
-          } else {
-            this.contour = this.setContourData(direction, distance)
-          }
-
+          const contour = elem ? elem : this.setContourData(direction, distance)
+          Object.assign(this, contour);
           this.plusCountEl()
-          this.plusListEl()
         }
         
         plusCountEl() {
           const countEl = $$('.list_elems_block li[data-type="contour"] .elem_count');
           countEl.text(parseInt(countEl.text()) + 1)
-        }
-
-        plusListEl() {
-          const profile = this.contour.profile ? "<b>" + this.contour.profile.title + "<b>" : "<i>Отсутствует<i>" 
-
-          const endMark = this.contour.mark.end ? this.contour.mark.end : 'A'
-
-          $$('.contour_lists').append('<li data-type="contour" data-num="' + this.contour.num + '"><a href="#" class="item-link item-content"><div class="item-inner"><div class="item-title-row"><div class="item-title">' + this.contour.mark.start + ' - ' + endMark + ': ' + this.contour.distance + ' см</div></div><div class="item-subtitle">Профиль: ' + profile + '</div></div></a></li>')
         }
 
         minusCountEl() {
@@ -421,7 +601,7 @@
         }
 
         render() {
-          this.drawPart(this.contour)
+          this.drawPart()
         }
 
         remove() {
@@ -429,13 +609,115 @@
           Part.lists.pop()
         }
 
-        drawPart(contour) {
-          this.drawMark(contour)
-          this.drawElement(contour)
-          this.drawDistance(contour)
+        drawPart() {
+          this.fillPolygon()
+          this.drawMark()
+          this.drawElement()
+          this.drawDistance()
         }
 
-        drawDistance(contour) {
+        fillPolygon() {
+          const contours = Part.getLists('contour')
+
+          // Закрашивание области
+          if(this.num === 0 && contours.length && contours[contours.length - 1].finish) {
+            ctx.beginPath();
+            ctx.moveTo(contours[0].moveTo.x, contours[0].moveTo.y);
+
+            // Нарисовать линии в соответствии с данными списка
+            for (let i = 0; i < contours.length; i++) {
+              ctx.lineTo(contours[i].lineTo.x, contours[i].lineTo.y);
+            }
+
+            ctx.closePath();
+            ctx.fillStyle = roomCloth ? roomCloth.color : 'white';
+            ctx.fill();
+          }
+
+        }
+
+        // Рисует букву
+        drawMark() {
+          ctx.font = "normal 16px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = '#000000';
+
+          const contours = Part.getLists('contour')
+          const isfirstContour = !contours.length || contours[0].num === this.num
+          const nextContour = contours[this.num + 1]
+
+          // Если первая линия, то добавляет в начале букву
+          if(isfirstContour) {
+
+            const startPointX = this.moveTo.x 
+            const startPointY = this.moveTo.y - 10
+            
+            ctx.fillText(this.mark.start, startPointX, startPointY);
+          }
+
+          let endPointX, endPointY = 0;
+
+          if(this.direction == 'right') {
+            if(nextContour && nextContour.direction == 'top') {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y + 20
+            } else {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y - 10
+            }
+          }
+
+          if(this.direction == 'bottom') {
+            if(nextContour && nextContour.direction == 'bottom') {
+              endPointX = this.lineTo.x + 10
+              endPointY = this.lineTo.y 
+            } else {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y + 20
+            }
+          }
+
+          if(this.direction == 'left') {
+            if(nextContour && nextContour.direction == 'bottom') {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y - 10
+            } else {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y + 20
+            }
+          }
+
+          if(this.direction == 'top') {
+            
+            if(nextContour && nextContour.direction == 'top') {
+              endPointX = this.lineTo.x + 10
+              endPointY = this.lineTo.y 
+            } else {
+              endPointX = this.lineTo.x 
+              endPointY = this.lineTo.y - 10
+            }
+          }
+
+          if(!this.finish && this.mark.end) {
+            ctx.fillText(this.mark.end, endPointX, endPointY);
+          }
+        }
+
+        // Рисует саму линию
+        drawElement() {
+          console.log('drawElement', this.direction)
+          ctx.strokeStyle = this.color
+          ctx.beginPath()
+          ctx.lineWidth = 1
+          ctx.moveTo(this.moveTo.x, this.moveTo.y)
+          ctx.lineTo(this.lineTo.x, this.lineTo.y)
+          ctx.stroke()
+        }
+
+        // Рисует расстояние между элементами
+        drawDistance() {
+          if(this.distance < 40) return
+          console.log('drawDistance', this.direction)
           ctx.font = "normal 10px sans-serif";
           ctx.textAlign = "center";
           ctx.fillStyle = 'gray';
@@ -443,105 +725,32 @@
 
           let endPointX, endPointY = 0;
 
-          if(contour.direction == 'right') {
-            console.log('right position')
-            endPointX = contour.moveTo.x + ((contour.lineTo.x - contour.moveTo.x) / 2)
-            endPointY = contour.lineTo.y - 10
+          if(this.direction == 'right') {
+            endPointX = this.moveTo.x + ((this.lineTo.x - this.moveTo.x) / 2)
+            endPointY = this.lineTo.y - 10
           }
 
-          if(contour.direction == 'bottom') {
-            endPointX = contour.moveTo.y +  ((contour.lineTo.y - contour.moveTo.y) / 2)
-            endPointY = -(contour.lineTo.x) - 10
+          if(this.direction == 'bottom') {
+            endPointX = this.moveTo.y +  ((this.lineTo.y - this.moveTo.y) / 2)
+            endPointY = -(this.lineTo.x) - 10
             ctx.rotate( Math.PI / 2 );
           }
 
-          if(contour.direction == 'left') {
-            endPointX = contour.lineTo.x + ((contour.moveTo.x - contour.lineTo.x) / 2)
-            endPointY = contour.lineTo.y + 15
+          if(this.direction == 'left') {
+            endPointX = this.lineTo.x + ((this.moveTo.x - this.lineTo.x) / 2)
+            endPointY = this.lineTo.y + 15
           }
 
-          if(contour.direction == 'top') {
-            endPointX = contour.lineTo.y + ((contour.moveTo.y - contour.lineTo.y) / 2)
-            endPointY = -(contour.lineTo.x) - 10
+          if(this.direction == 'top') {
+            endPointX = this.lineTo.y + ((this.moveTo.y - this.lineTo.y) / 2)
+            endPointY = -(this.lineTo.x) - 10
             ctx.rotate( Math.PI / 2 );
           }
 
-          ctx.fillText(contour.distance + 'см', endPointX, endPointY);
-         ctx.restore();
-        }
+          console.log(this.direction  + ' position')
 
-        drawMark(contour) {
-          ctx.font = "normal 16px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillStyle = 'black';
-
-          const contours = Part.getLists('contour')
-          const isfirstContour = !contours.length || contours[0].contour.num === contour.num
-          const nextContour = contours[contour.num + 1]
-
-          // Если первая линия, то добавляет в начале букву
-          if(isfirstContour) {
-
-            const startPointX = contour.moveTo.x 
-            const startPointY = contour.moveTo.y - 10
-            
-            ctx.fillText(contour.mark.start, startPointX, startPointY);
-          }
-
-          let endPointX, endPointY = 0;
-
-          if(contour.direction == 'right') {
-            if(nextContour && nextContour.contour.direction == 'top') {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y + 20
-            } else {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y - 10
-            }
-          }
-
-          if(contour.direction == 'bottom') {
-            if(nextContour && nextContour.contour.direction == 'bottom') {
-              endPointX = contour.lineTo.x + 10
-              endPointY = contour.lineTo.y 
-            } else {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y + 20
-            }
-          }
-
-          if(contour.direction == 'left') {
-            if(nextContour && nextContour.contour.direction == 'bottom') {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y - 10
-            } else {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y + 20
-            }
-          }
-
-          if(contour.direction == 'top') {
-            
-            if(nextContour && nextContour.contour.direction == 'top') {
-              endPointX = contour.lineTo.x + 10
-              endPointY = contour.lineTo.y 
-            } else {
-              endPointX = contour.lineTo.x 
-              endPointY = contour.lineTo.y - 10
-            }
-          }
-
-          if(contour.mark.end) {
-            ctx.fillText(contour.mark.end, endPointX, endPointY);
-          }
-        }
-
-        drawElement(contour) {
-          ctx.beginPath()
-          ctx.lineWidth = 1
-          ctx.moveTo(contour.moveTo.x, contour.moveTo.y)
-          ctx.lineTo(contour.lineTo.x, contour.lineTo.y)
-          ctx.stroke()
+          ctx.fillText(this.distance + 'см', endPointX, endPointY);
+          ctx.restore();
         }
 
         setContourData(direction, distance) {
@@ -549,15 +758,22 @@
           const [moveTo, lineTo] = this.setMoveLine(direction, distance)
 
           const num = Part.getLists('contour').length
-          const profile = contoursDB.find(i => i.default)
-          console.log(profile)
+
+          let contour_id = null
+          let color = '#000000'
+
+          if(default_contour) {
+            contour_id = default_contour.id
+            color = default_contour.color
+          }
 
           return {
             num: num,
             mark: mark,
             direction: direction,
             distance: distance,
-            profile: profile,
+            contour_id: contour_id,
+            color: color,
             moveTo: moveTo,
             lineTo: lineTo,
             finish: false,
@@ -571,12 +787,12 @@
           const contours = Part.getLists('contour')
 
           if(contours.length) {
-            const lastPart = contours[contours.length - 1].contour
+            const lastPart = contours[contours.length - 1]
             start = lastPart.mark.end
-            end = marks[contours.length + 1]
+            end   = marks[contours.length + 1]
           } else {
             start = marks[0]
-            end = marks[1]
+            end   = marks[1]
           }
 
           return { start, end }
@@ -591,30 +807,41 @@
           if(!contours.length) {
             moveTo = { x: 0 , y: 0 }
           } else {
-            const lastPart = contours[contours.length - 1].contour
+            const lastPart = contours[contours.length - 1]
             moveTo = lastPart.lineTo
           }
 
-          if(direction === 'right') lineTo = { x: moveTo.x + distance, y: moveTo.y }
+          if(direction === 'right')  lineTo = { x: moveTo.x + distance, y: moveTo.y }
           if(direction === 'bottom') lineTo = { x: moveTo.x, y: moveTo.y + distance }
-          if(direction === 'left') lineTo = { x: moveTo.x - distance, y: moveTo.y }
-          if(direction === 'top') lineTo = { x: moveTo.x, y: moveTo.y - distance }
+          if(direction === 'left')   lineTo = { x: moveTo.x - distance, y: moveTo.y }
+          if(direction === 'top')    lineTo = { x: moveTo.x, y: moveTo.y - distance }
+
+          if(lineTo.x < 0) {
+            console.log('MINUUUUUUUUUUUUSSSSSSSSSS', lineTo)
+            contours.forEach(part => {
+              if(part.direction === 'left' || part.direction === 'right') {
+                part.moveTo.x += Math.abs(lineTo.x)
+                part.lineTo.x += Math.abs(lineTo.x)
+              }
+            })
+
+            moveTo.x += Math.abs(lineTo.x)
+            lineTo.x = 0
+          }
 
           return [moveTo, lineTo]
         }
       }
 
       function correctionVisible(){
+        console.log('<----Correction Visible------>')
         let maxWidthX = 0
         let minWidthX = 500
 
         let maxWidthY = 0
         let minWidthY = 500
 
-        const contours = Part.getLists('contour')
-
-        contours.forEach(part => {
-          part = part.contour
+        Part.getLists('contour').forEach(part => {
           if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
           if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
 
@@ -628,39 +855,60 @@
           if(part.moveTo.y < minWidthY) minWidthY = part.moveTo.y 
         })
 
-        const maxPolygonWidth = maxWidthX - minWidthX
-        const maxPolygonheight = maxWidthY - minWidthY
+        let maxPolygonWidth  = maxWidthX - minWidthX
+        let maxPolygonheight = maxWidthY - minWidthY
 
-        const normalWidth = canvasWidth - 40
+        const normalWidth  = canvasWidth  - 40
         const normalHeight = canvasHeight - 40
 
+        console.log('minWidthX', minWidthX)
+        console.log('maxWidthX', maxWidthX)
+        console.log('maxPolygonWidth', maxPolygonWidth)
+        console.log('maxPolygonheight', maxPolygonheight)
+        console.log('normalWidth', normalWidth)
+        console.log('normalHeight', normalHeight)
+
         if(maxPolygonWidth >= normalWidth) {
+          console.log('maxPolygonWidth >= normalWidth')
           while (true) {
             res = maxPolygonWidth * scale
             if(normalWidth >= res) break;
             scale -= 0.01
           }
-          maxPolygonWidth *= scale
+          maxPolygonWidth  *= scale
           maxPolygonheight *= scale
           preScale = scale
         }
 
         if(maxPolygonheight >= normalHeight) {
+          console.log('maxPolygonheight >= normalHeight')
           while (true) {
             res = maxPolygonheight * scale
             if(normalHeight >= res) break;
             scale -= 0.01
           }
-          maxPolygonWidth *= scale
+          maxPolygonWidth  *= scale
           maxPolygonheight *= scale
           preScale = scale
         }
 
-        const trX = (canvasWidth / 2) - (maxPolygonWidth / 2)
-        const trY = (canvasHeight / 2) - (maxPolygonheight / 2)
+        let trX = (canvasWidth  - maxPolygonWidth)  / 2
+        let trY = (canvasHeight - maxPolygonheight) / 2
 
-        offset = { x: trX, y: trY }
+        console.log('trX', trX)
+        console.log('trY', trY)
+
+        // trX = (maxPolygonWidth / 2) + 20
+
+        // trX = Math.abs(minWidthX) - 20
+
+        offset    = { x: trX, y: trY }
         curOffset = { x: trX, y: trY }
+
+        console.log('offset', offset)
+        console.log('curOffset', curOffset)
+        console.log('<----END Correction Visible END------>')
+
         Part.reDraw()
       }
 
@@ -668,8 +916,8 @@
       function checkShowJoinLineButt() {
         const contours = Part.getLists('contour')
 
-        const firstPart = contours[0].contour
-        const lastPart  = contours[contours.length - 1].contour
+        const firstPart = contours[0]
+        const lastPart  = contours[contours.length - 1]
 
         const leftPoint   = firstPart.moveTo.x - 20
         const rightPoint  = firstPart.moveTo.x + 20
@@ -690,15 +938,17 @@
       }
 
       function removeDisabledClassLink() {
-        $$('.undo, .save_link').removeClass('disabled')
+        $$('.undo').removeClass('disabled')
       }
 
       // Соединяет конечные линии, если они соприкасаются
       function checkLastLine() {
         const contours = Part.getLists('contour')
 
-        const firstPart = contours[0].contour
-        const lastPart  = contours[contours.length - 1].contour
+        const firstPart = contours[0]
+        const lastPart  = contours[contours.length - 1]
+
+        console.log('-------------_>>>>>>>>', contours)
 
         const leftPoint   = firstPart.moveTo.x - 1
         const rightPoint  = firstPart.moveTo.x + 1
@@ -713,20 +963,19 @@
 
       function joinLastLines() {
         const contours = Part.getLists('contour')
-        let firstPart = contours[0].contour
-        let lastPart = contours[contours.length - 1].contour
+        let firstPart = contours[0]
+        let lastPart = contours[contours.length - 1]
         lastPart.lineTo.y = firstPart.lineTo.y
-        lastPart.mark.end = null
+        lastPart.mark.end = firstPart.mark.start
         lastPart.finish = true
+        square_mtrs = сalcSquareMtrs(contours)
+        linear_mtrs = сalcLinearMtrs(contours)
         firstPart.moveTo.x = lastPart.lineTo.x
         joinLineButt.addClass('display_none')
         $$('.action_block').addClass('display_none')
         $$('.room_add_details_butt').removeClass('display_none')
         $$('.list_elems_block').removeClass('display_none')
         canvas.height = window.innerHeight - $$('.list_elems_block').height();
-
-        console.log(Part.lists)
-
         Part.reDraw()
       }
 
@@ -736,6 +985,34 @@
         checkShowJoinLineButt()
         setElemContourData()
         removeDisabledClassLink()
+      }
+
+      function changeCloth(val) {
+        app.preloader.show()
+
+        fetch(`${host}/rooms/${$f7route.params.id}/change_cloth`, {
+          method: 'POST', 
+          body: JSON.stringify({ 
+            value: val
+          }), 
+          headers: {'Content-Type': 'application/json'}
+        })
+        .then(res => res.json())
+        .then(response => { 
+          console.log('Success:', JSON.stringify(response))  
+          if(!response.success) throw new Error();
+          app.preloader.hide()
+        })
+        .catch(error => { 
+          console.error('Error:', error)
+          $f7.toast.create({
+            text: 'Произошла неизвестная ошибка при сохранении',
+            position: 'top',
+            closeTimeout: 2000,
+            cssClass: 'failed_toast'
+          }).open();
+          app.preloader.hide()
+        });
       }
 
       function zoomIn() {
@@ -784,7 +1061,7 @@
           console.log('dragEnd', curOffset)
           window.removeEventListener(touchMove, dragMove);
           window.removeEventListener(touchEnd, dragEnd);
-        }
+        } 
 
         function dragStart(e) {
           x = e.x;
@@ -807,25 +1084,28 @@
         $$(this).addClass('active')
       });
 
+      canvas.addEventListener('click', function(e) {
+        if(!addLusterEvent) return;
+        const setX = e.x - 100
+        const setY = e.y - 265
+        const luster = new Luster(setX, setY)
+        Part.add(luster)
+        save()
+      })
+
       canvas.addEventListener('mousewheel', function(e) {
         mousePos.x = e.offsetX;
         mousePos.y = e.offsetY;
         
         let b = true;
-        if(e.wheelDelta) {
-          b = e.wheelDelta > 0;
-        } else {
-          b = e.detail < 0;
-        }
+        if(e.wheelDelta) b = e.wheelDelta > 0;
+        else b = e.detail < 0;
         
-        if(b) {
-          zoomIn();
-        } else {
-          zoomOut();
-        }
+        if(b) zoomIn();
+        else zoomOut();
 
         if(e.preventDefault) e.preventDefault();
-        
+  
         return false;
       });
 
@@ -833,37 +1113,74 @@
         joinLastLines()        
       })
 
-      await fetch(`${host}/contours`)
-      .then(response => response.json())
-      .then(data => { 
-        contoursDB = data
+      clothSelect = app.smartSelect.create({
+        openIn: 'sheet',
+        el: '.cloth-select', 
+        value: roomCloth && roomCloth.id,
+      }).on('change', function () {
+        const val = this.$selectEl.find('option:checked').val();
+        changeCloth(val)
+        roomCloth = cloths.find(i => i.id == val)
+        Part.reDraw()
       })
-      .catch(error => console.error(error))
+
+      await fetch(`${host}/price_lists/defaults`)
+      .then(response => response.json())
+      .then(res => { 
+        default_contour = res.contour
+        default_cloth   = res.cloth
+        default_luster  = res.luster
+        console.log('default elements', res)
+      }).catch(error => console.error(error))
+
+      await fetch(`${host}/cloths`)
+      .then(response => response.json())
+      .then(data => cloths = data ).catch(error => console.error(error))
+
+      await fetch(`${host}/lusters`)
+      .then(response => response.json())
+      .then(data => lusters = data ).catch(error => console.error(error))
+
+      await fetch(`${host}/additional_services`)
+      .then(response => response.json())
+      .then(data => services = data ).catch(error => console.error(error))
 
       await fetch(`${host}/rooms/${$f7route.params.id}`)
       .then(response => response.json())
       .then(res => { 
         console.log('room get data:', res)
 
-        if(Object.keys(res.data).length) {
+        room = res
+        roomCloth = cloths.find(i => i.id === room.cloth_id)
+        if(!roomCloth && default_cloth) roomCloth = default_cloth
 
-          res.data.forEach(i => {
+        if(room.data && Object.keys(room.data).length) {
 
-            if(Object.values(i)[0].type === 'contour') {
-              const contour = new Contour(null, null, i.contour)
+          room.data.forEach(i => {  
+            if(i.type === 'contour') {
+              const contour = new Contour(null, null, i)
               Part.add(contour)
               checkes()
+            } else if(i.type === 'luster') {
+              const luster = new Luster(i.coord.x, i.coord.y)
+              Part.add(luster)
+            } else if(i.type === 'service') {
+              const service = new Service(i.service_id, i.comment)
+              Part.add(service)
             }
-
           })
         }
-      })
-      .catch(error => console.error(error))
-      
+      }).catch(error => console.error(error))
+
       $update();
 
       app.preloader.hide()
 
+    })
+
+    $on('pageBeforeRemove', function (e) {
+      
+      addLusterEvent = false
     })
 
     return $render;

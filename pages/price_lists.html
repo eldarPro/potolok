@@ -13,7 +13,7 @@
             <a href="/price_lists/contours" class="item-link item-content">
               <div class="item-inner">
                 <div class="item-title">Профили</div>
-                <div class="item-after">${contours.length} шт.</div>
+                <div class="item-after">${contours} шт.</div>
               </div>
             </a>
           </li>
@@ -21,14 +21,30 @@
             <a href="/price_lists/cloths" class="item-link item-content">
               <div class="item-inner">
                 <div class="item-title">Полотна</div>
-                <div class="item-after">0 шт.</div>
+                <div class="item-after">${cloths} шт.</div>
               </div>
             </a>
           </li>
+          <li>
+            <a href="/price_lists/lusters" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Профильное освещение</div>
+                <div class="item-after">${lusters} шт.</div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a href="/price_lists/services" class="item-link item-content">
+              <div class="item-inner">
+                <div class="item-title">Доп. услуги</div>
+                <div class="item-after">${services} шт.</div>
+              </div>
+            </a>
+          </li> 
         <!--   <li>
             <a href="/price_lists/contours" class="item-link item-content">
               <div class="item-inner">
-                <div class="item-title">Освещения</div>
+                <div class="item-title">Трековое освещения</div>
                 <div class="item-after">0 шт.</div>
               </div>
             </a>
@@ -37,22 +53,6 @@
             <a href="/price_lists/contours" class="item-link item-content">
               <div class="item-inner">
                 <div class="item-title">Ниши</div>
-                <div class="item-after">0 шт.</div>
-              </div>
-            </a>
-          </li>
-          <li>
-            <a href="/price_lists/contours" class="item-link item-content">
-              <div class="item-inner">
-                <div class="item-title">Профильные освещения</div>
-                <div class="item-after">0 шт.</div>
-              </div>
-            </a>
-          </li>
-          <li>
-            <a href="/price_lists/contours" class="item-link item-content">
-              <div class="item-inner">
-                <div class="item-title">Доп. услуги</div>
                 <div class="item-after">0 шт.</div>
               </div>
             </a>
@@ -65,19 +65,24 @@
 
 <script>
   export default async(props, { $f7, $el, $theme, $on, $update }) => {
-    let contours = []
+    let contours = 0
+    let cloths = 0
+    let lusters = 0
+    let services = 0
 
     $on('pageInit', async() => {
 
-      await fetch(`${host}/contours`)
+      await fetch(`${host}/price_lists/count_elements`)
       .then(response => response.json())
-      .then(data => { 
-        contours = data
+      .then(res => { 
+        console.log(res)
+        contours = res.contours
+        cloths   = res.cloths
+        lusters  = res.lusters
+        services = res.services
       })
       .catch(error => console.error(error))
-
       $update()
-
     })
 
     return $render;

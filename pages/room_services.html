@@ -1,0 +1,106 @@
+<template>
+  <div class="page" >
+    <div class="navbar">
+      <div class="navbar-bg"></div>
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link" @click=${exitPage}>
+            <i class="icon material-icons md-only">arrow_back</i>
+          </a>
+        </div>
+        <div class="title">Доп. услуги комнаты</div>
+      </div>
+    </div>
+    <div class="page-content">
+      ${!roomServices.length ? $h`
+        <div class="empty_title">Нет данных</div>
+      ` : $h`
+        <div class="list">
+          <ul>
+            ${roomServices.map((item, inx) => $h`
+              <li class="accordion-item">
+                <a class="item-link item-content">
+                  <div class="item-inner">
+                    <div class="item-title">
+                      ${inx + 1}) ${services.find(i => i.id == item.service_id).title}
+                    </div>
+                  </div>
+                </a>
+                <div class="accordion-item-content">
+                  <div class="block">
+                    <div>
+                      <i>Комментарий</i>:<br />
+                      ${item.comment}
+                    </div>
+                    <br />
+                    <button class="button button-tonal color-red" @click=${() => remove(item)}>Удалить</button>
+                  </div>
+                </div>
+              </li>
+            `)}
+          </ul>
+        </div>
+      `}
+    </div>
+  </div>
+</template>
+<script>
+  export default (props, { $on, $f7, $f7router, $f7route, $update }) => {
+    let roomServices = []
+    let services = []
+
+    const exitPage = () => {
+      $f7router.back({ force: true, animatePages: false })
+    }
+
+    const remove = (item) => {
+      $f7.dialog.confirm('Вы действительно хотите удалить?', '', function () {
+        // app.preloader.show();
+        // fetch(`${host}/rooms/${item.id}`, {
+        //   method: 'DELETE',
+        //   headers: { 'Content-Type': 'application/json' }
+        // })
+        // .then(response => {
+        //   const result = JSON.stringify(response)
+        //   console.log('Destroy:', result)
+        //   if(!response.ok || result.success === false) throw new Error();
+        //   app.preloader.hide();
+        //   $f7router.refreshPage()
+        // })
+        // .then(data => console.log(data))
+        // .catch(error => console.error(error));
+      })
+    }
+
+    $on('pageInit', async() => {      
+
+      await fetch(`${host}/rooms/${$f7route.params.id}/get_data`)
+      .then(response => response.json())
+      .then(data => { 
+        data.forEach(i => {  
+          if(i.type === 'service') roomServices.push(i)
+        })
+        console.log('roomServices', roomServices)
+      })
+      .catch(error => console.error(error))
+
+      await fetch(`${host}/additional_services`)
+      .then(response => response.json())
+      .then(data => { 
+        services = data
+        console.log('services', services)
+      })
+      .catch(error => console.error(error))
+
+      $update()
+
+    })
+
+    $on('pageBeforeRemove', () => {
+      $$(document).off('smartselect:closed', '.smart-select')
+    })
+
+
+    return $render;
+  }
+</script>

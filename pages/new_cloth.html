@@ -1,5 +1,5 @@
 <template>
-  <div class="page" data-name="new_projects">
+  <div class="page" data-name="new_cloth">
     <div class="navbar">
       <div class="navbar-bg"></div>
       <div class="navbar-inner">
@@ -99,7 +99,7 @@
 <script>
   export default (props, { $f7, $f7router, $f7route, $el, $theme, $on, $update }) => {
     let title = 'Новый'
-    let contour
+    let cloth
     let now = true
     let colorPickerPalette;
 
@@ -111,7 +111,7 @@
       formData.default = toBool(formData.default)
       formData.color   = colorPickerPalette.getValue().hex
       console.log('formData', formData)
-      fetch(`${host}/contours`, {
+      fetch(`${host}/cloths`, {
         method: 'POST', 
         body: JSON.stringify(formData), 
         headers:{
@@ -121,7 +121,7 @@
       .then(res => res.json())
       .then(response => { 
         console.log('Success:', JSON.stringify(response))
-        $f7router.navigate('/price_lists/contours')  
+        $f7router.navigate('/price_lists/cloths')  
       })
       .catch(error => console.error('Error:', error));
     }
@@ -133,18 +133,18 @@
       formData.default = toBool(formData.default)
       formData.color   = colorPickerPalette.getValue().hex
       console.log('formData', formData)
-      fetch(`${host}/contours/${contour.id}`, {
+      fetch(`${host}/cloths/${cloth.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ contour: formData })
+        body: JSON.stringify({ cloth: formData })
       })
       .then(response => response.json())
       .then(data => { 
         console.log('data', data)
-        $f7router.navigate('/price_lists/contours')   
+        $f7router.navigate('/price_lists/cloths')   
       })
       .catch(error => console.log(error));
     }
@@ -156,13 +156,14 @@
       if(lastRoutePath(path) === 'edit') {
         title = 'Редактирование'
         now = false
-        await fetch(`${host}/contours/${$f7route.params.id}`)
+        await fetch(`${host}/cloths/${$f7route.params.id}`)
         .then(response => response.json())
-        .then(data => contour = data)
-        .catch(error => console.error(error))
-        $el.value.find('#default_check')[0].checked = contour.default;
-        delete contour.default;
-        $f7.form.fillFromData('#form', contour);
+        .then(data => {
+          cloth = data
+        }).catch(error => console.error(error))
+        $el.value.find('#default_check')[0].checked = cloth.default;
+        delete cloth.default;
+        $f7.form.fillFromData('#form', cloth);
         $update()
       }
 
@@ -181,7 +182,7 @@
         openIn: 'auto',
         openInPhone: 'sheet',
         palette: [
-          ['#E57373', '#EF5350', '#F44336', '#E53935', '#D32F2F', '#C62828', '#B71C1C'],
+          ['#FFFFFF', '#EF5350', '#F44336', '#E53935', '#D32F2F', '#C62828', '#B71C1C'],
           ['#BA68C8', '#AB47BC', '#9C27B0', '#8E24AA', '#7B1FA2', '#6A1B9A', '#4A148C'],
           ['#7986CB', '#5C6BC0', '#3F51B5', '#3949AB', '#303F9F', '#283593', '#1A237E'],
           ['#4FC3F7', '#29B6F6', '#03A9F4', '#039BE5', '#0288D1', '#0277BD', '#01579B'],
@@ -192,7 +193,7 @@
           ['#a4a4a3', '#9f9991', '#7f7f7d', '#696969', '#555555', '#2e2e2e', '#000000'],
         ],
         value: {
-          hex: contour ? contour.color : '#000000',
+          hex: cloth ? cloth.color : '#FFFFFF',
         },
         formatValue: function (value) {
           return value.hex;

@@ -10,7 +10,7 @@
         </div>
         <div class="title">Полотна</div>
         <div class="right">
-          <a href="/price_lists/contours/new" class="link">
+          <a href="/price_lists/cloths/new" class="link">
             <i class="icon material-icons md-only">add</i>
           </a>
         </div>
@@ -43,6 +43,14 @@
                       <li>
                         <div class="item-content">
                           <div class="item-inner">
+                            <div class="item-title">Цена за угол</div>
+                            <div class="item-after">${item.price_corner} ₽</div>
+                          </div>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="item-content">
+                          <div class="item-inner">
                             <div class="item-title">Цена за установку</div>
                             <div class="item-after">${item.price_install} ₽</div>
                           </div>
@@ -51,17 +59,25 @@
                       <li>
                         <div class="item-content">
                           <div class="item-inner">
-                            <div class="item-title">Цена за угол</div>
-                            <div class="item-after">${item.price_corner} ₽</div>
+                            <div class="item-title">По умолчанию</div>
+                            <div class="item-after">${booleanTitle(item.default)}</div>
                           </div>
                         </div>
                       </li>
                       <li>
-                        <div class="block block-strong">
-                          <p class="row">
-                            <button @click=${() => edit(id) } class="col button button-small button-fill">Изменить</button>
-                            <button @click=${() => destroy(id) } class="col button button-small button-fill color-red">Удалить</button>
-                          </p>
+                        <div class="item-content">
+                          <div class="item-inner">
+                            <div class="item-title">Цвет</div>
+                            <div class="item-after"><i class="icon demo-list-icon" style="background-color: ${item.color}"></i> </div>
+                          </div>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="block block-strong block-outline-ios">
+                          <div class="grid grid-cols-2 grid-gap">
+                            <button class="button button-tonal color-blue" @click=${() => edit(item.id)}>Изменить</button>
+                            <button class="button button-tonal color-red" @click=${() => destroy(item.id)}>Удалить</button>
+                          </div>
                         </div>
                       </li>
                     </ul>
@@ -76,21 +92,45 @@
   </div>
 </template>
 <script>
-  export default async(props, { $on, $f7, $update }) => {
-    const cloths = getDataAll('cloths')
+  export default (props, { $on, $f7, $f7router, $update }) => {
+    let cloths = []
 
     const edit = (id) => {
-
-      $f7router.navigate('/cloths/show', {
-        props: { id: id }
-      })  
-
+      $f7router.navigate('/price_lists/cloths/' + id + '/edit')  
     }
 
     const destroy = (id) => {
+      fetch(`${host}/cloths/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('success delete')
+          $f7router.refreshPage() 
+        } else {
+          throw new Error('Error deleting item');
+        }
+      })
+      .then(data => {
+        console.log(data);
+      })
+      .catch(error => {
+        console.error(error);
+      });
     }
     
-    $on('pageInit', () => {
+    $on('pageInit', async() => {
+
+      await fetch(`${host}/cloths`)
+      .then(response => response.json())
+      .then(data => { 
+        cloths = data
+        $update()
+      })
+      .catch(error => console.error(error))
 
     })
 

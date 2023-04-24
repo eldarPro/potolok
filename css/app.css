@@ -101,12 +101,22 @@ html, body {
 }
 
 .point_elems_block {
-  padding: 10px 0 0;
-  background: #FFF;
+  padding: 0;
+  background: var(--f7-input-item-bg-color);
 }
 
 .point_elems_block .item-input {
-  width: 100%
+  width: 100%;
+  margin-left: 0 !important;
+}
+
+.direction_block {
+  padding-bottom: 0;
+  margin-bottom: -10px;
+}
+
+.direction_block::after {
+  background: none !important;
 }
 
 .point_elems_block .item-inner {
@@ -167,6 +177,9 @@ html, body {
   background: #37c437;
 }
 
+.failed_toast {
+  background: #e83737;
+}
 
 .popover li {
   border: 1px solid #ddd;
@@ -180,19 +193,13 @@ html, body {
   color: red !important;
 }
 
-.accordion-item-content ul {
+/*.accordion-item-content ul {
   background: #eee;
-}
+}*/
 
 .list_elems_block ul {
   background: #fff;
 }
-
-.list_buttons_block {
-  padding-bottom: 5px;
-  background: #eee;
-}
-
 
 .page-content {
   padding-bottom: 50px;
@@ -208,4 +215,14 @@ html, body {
 
 .border_color {
   border-color: red;
+}
+
+.main_toolbar {
+  z-index: 9999;
+}
+
+.demo-list-icon, .icon-f7, .icon-vi {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
 }

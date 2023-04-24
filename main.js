@@ -7,9 +7,6 @@ var app = new Framework7({
     sheetCloseLinkText: 'Готово',
     closeOnSelect: true
   },
-  panel: {
-    swipe: true,
-  },
   routes: [
     {
       path: '/',
@@ -27,6 +24,15 @@ var app = new Framework7({
       path: '/rooms/:id/process',
       componentUrl: './pages/room_process.html',
     },
+
+    {
+      path: '/rooms/:id/contours',
+      componentUrl: './pages/room_contours.html',
+    },
+    {
+      path: '/rooms/:id/services',
+      componentUrl: './pages/room_services.html',
+    },
     {
       path: '/price_lists/',
       componentUrl: './pages/price_lists.html',
@@ -42,6 +48,42 @@ var app = new Framework7({
     {
       path: '/price_lists/contours/new',
       componentUrl: './pages/new_countour.html',
+    },
+     {
+      path: '/price_lists/cloths',
+      componentUrl: './pages/cloths.html',
+    },
+    {
+      path: '/price_lists/cloths/:id/edit',
+      componentUrl: './pages/new_cloth.html',
+    },
+    {
+      path: '/price_lists/cloths/new',
+      componentUrl: './pages/new_cloth.html',
+    },
+    {
+      path: '/price_lists/lusters',
+      componentUrl: './pages/lusters.html',
+    },
+    {
+      path: '/price_lists/lusters/:id/edit',
+      componentUrl: './pages/new_luster.html',
+    },
+    {
+      path: '/price_lists/lusters/new',
+      componentUrl: './pages/new_luster.html',
+    },
+    {
+      path: '/price_lists/services',
+      componentUrl: './pages/services.html',
+    },
+    {
+      path: '/price_lists/services/:id/edit',
+      componentUrl: './pages/new_service.html',
+    },
+    {
+      path: '/price_lists/services/new',
+      componentUrl: './pages/new_service.html',
     },
     {
       path: '/profile',
@@ -88,9 +130,9 @@ const toBool = (param) => {
   return param[0] === 'on'
 }
 
-const toast = (title, success = false, position = 'top') => {
+const toast = (title, success = false, position = 'center') => {
 
-  const cssClass = success ? 'success_toast' : ''
+  const cssClass = success ? 'success_toast' : 'bg-color-red'
 
   app.toast.create({
     text: title,
@@ -104,134 +146,149 @@ const toast = (title, success = false, position = 'top') => {
 // Определяет завершенное ли помещение
 const isFinishRoom = (item) => {
   let res = false
-  if(item.data) {
-    item.data.forEach(i => {
-      const el = Object.values(i)[0]
-      if(el.type === 'contour' && el.finish) res = true
-    })
-  }
+  if(item.data) return res
+
+  item.data.forEach(i => {
+    if(i.type === 'contour' && i.finish) {
+      res = true
+      return
+    }
+  })
+
   return res
 }
 
-const сalcLinearMtrs = (item) => {
-  console.log(item)
+const сalcLinearMtrs = (data) => {
   let res = 0
-  if(item.data && isFinishRoom(item)) {
-    item.data.forEach(i => {
-      if(Object.values(i)[0].type === 'contour') {
-        res += i.contour.distance
-      }
-    })
-  }
+  data.forEach(i => res += i.distance)
   return res / 100
 }
 
-const сalcSquareMtrs = (item) => {
-  let res = 0
-  
+const сalcSquareMtrs = (data) => {
+  console.log('Start: сalcSquareMtrs')
+
   let maxWidthX = 0
   let minWidthX = 500
 
   let maxWidthY = 0
   let minWidthY = 500
 
-  if(item.data && isFinishRoom(item)) {
-    item.data.forEach(i => {
-      if(Object.values(i)[0].type === 'contour') {
-        part = i.contour
-        if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
-        if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
+  data.forEach(part => {
+    if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
+    if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
 
-        if(part.lineTo.x < minWidthX) minWidthX = part.lineTo.x
-        if(part.moveTo.x < minWidthX) minWidthX = part.moveTo.x 
+    if(part.lineTo.x < minWidthX) minWidthX = part.lineTo.x
+    if(part.moveTo.x < minWidthX) minWidthX = part.moveTo.x 
 
-        if(part.lineTo.y > maxWidthY) maxWidthY = part.lineTo.y
-        if(part.moveTo.y > maxWidthY) maxWidthY = part.moveTo.y
+    if(part.lineTo.y > maxWidthY) maxWidthY = part.lineTo.y
+    if(part.moveTo.y > maxWidthY) maxWidthY = part.moveTo.y
 
-        if(part.lineTo.y < minWidthY) minWidthY = part.lineTo.y
-        if(part.moveTo.y < minWidthY) minWidthY = part.moveTo.y 
-      }
-    })
+    if(part.lineTo.y < minWidthY) minWidthY = part.lineTo.y
+    if(part.moveTo.y < minWidthY) minWidthY = part.moveTo.y 
+  })
 
-    res = minWidthX + ' - ' + maxWidthX + ' : ' +  minWidthY + ' - ' + maxWidthY
+  // Максимальная и минимальные длины и высоты чертежа
+  const minX = Math.min(minWidthX, maxWidthX)
+  const minY = Math.min(minWidthY, maxWidthY)
 
-    const minX = Math.min(minWidthX, maxWidthX)
-    const minY = Math.min(minWidthY, maxWidthY)
+  const maxX = Math.max(minWidthX, maxWidthX)
+  const maxY = Math.max(minWidthY, maxWidthY)
 
-    const maxX = Math.max(minWidthX, maxWidthX)
-    const maxY = Math.max(minWidthY, maxWidthY)
+  console.log('minX - maxX:', minX, maxX)
+  console.log('minY - maxY:', minY, maxY)
 
-    ////////////////////////////////////////////////////
-    // maxWidthX // 140
+  // Расчет общего кв.м. чертежа
+  const realSum = ((minX + maxX) / 100) * ((minX + maxX) / 100)
 
-    let listSquares = []
+  let listSquares = []
 
-    let a = 0
-    let b = 0
+  let a = 0
 
-    for (let i = minY; i < maxY; i++) {
+  console.log('data', data)
 
-      a = i
+  // Цикл сверху-вниз
+  for (let i = minY; i <= maxY; i++) {
 
-      for (let n = minX; n < maxX; n++) {
+    let findContour = false
+
+    // Цикл слева-направо
+    for (let n = minX; n <= maxX; n++) {        
+
+      data.forEach((part, inx) => {
+
+        if(((part.direction === 'bottom' || part.direction === 'top') && (part.moveTo.y >= i && part.lineTo.y <= i || part.moveTo.y <= i && part.lineTo.y >= i) && (part.moveTo.x === n || part.lineTo.x === n)) || 
+          ((part.direction === 'right' || part.direction === 'left') && part.moveTo.y === i && part.lineTo.y === i && (part.moveTo.x === n || part.lineTo.x === n))) {
           
-        b = n
-
-        let findContourNum = null
-
-        item.data.forEach(i => {
-          if(Object.values(i)[0].type === 'contour') {
-            part = i.contour
-            if(part.lineTo.x === n && part.moveTo.x === n) {
-              listSquares.push(a, b)
-              findContourNum = part.num
-            }
+          if(findContour) {
+            console.log('add a:', a)
+            findContour = false
+            listSquares.push(a)
+          } else {
+            findContour = true
+            a = 0
           }
-        })
-
-      }
-    }
-
-    ////////////////////////////////////////////////////
-
-    item.data.forEach(i => {
-      if(Object.values(i)[0].type === 'contour') {
-        part = i.contour
-
-        for (let i = 0; i < maxWidthY; i++) {
-          console.log(i);
         }
 
-        // const x = Math.max(part.moveTo.x, part.LineTo.x)
-        // const y = Math.max(part.moveTo.y, part.LineTo.y)
+      }) 
 
-        // const a = maxWidthX - x
-        // const b = maxWidthY - y
-
-        if(part.lineTo.x > maxWidthX) maxWidthX = part.lineTo.x
-        if(part.moveTo.x > maxWidthX) maxWidthX = part.moveTo.x  
-
-      }
-    })
+      a++
+    }
 
   }
 
 
+  let res = 0
+
+  listSquares.forEach(i => res += (i / 10000))
+
+  res = res.toFixed()
+
+  console.log('realSum', realSum)
+  console.log('res squares', res)
+  
+  return res
+}
+
+const priceRoomCommon = (item, priceLists) => {
+  let res = 0
+  if(item.data && isFinishRoom(item)) return res
+
+  item.data.forEach(i => {
+    // if(i.type === 'contour') {
+    //   // if(!priceLists.contours.length) return
+    //  // let contour = priceLists.contours
+
+    //   res = true
+    //   return
+    // }
+  })
 
   return res
 }
 
-const priceRoom = (item) => {
+const priceRoomInstall = (item) => {
   let res = 0
   if(item.data && isFinishRoom(item)) {
-    item.data.forEach(i => {
-      if(Object.values(i)[0].type === 'contour') {
-        res += i.contour.distance
-      }
-    })
+   // item.data.contours.forEach(i => res += i.distance)
   }
   return res / 100
 }
 
-//var host = 'http://127.0.0.1:3000'
-var host = 'https://potolokapi-production.up.railway.app'
+var host = 'http://127.0.0.1:3000'
+//var host = 'https://potolokapi-production.up.railway.app'
+
+
+$$(document).on('page:init', function (e) {
+  // Получаем текущую страницу
+  const currentPage = app.views.main.router.currentRoute.url;
+  const params = app.views.main.router.currentRoute.params;
+  console.log('currentPage', currentPage)
+  // Проверяем, является ли текущая страница страницей "about.html"
+  if (currentPage === '/rooms/' + params.id + '/process' ||
+      currentPage === '/rooms/' + params.id + '/contours' ||
+      currentPage === '/rooms/' + params.id + '/services') {
+    $$('.main_toolbar').addClass('display-none')
+  } else {
+    $$('.main_toolbar').removeClass('display-none')
+  }
+});

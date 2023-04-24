@@ -52,7 +52,7 @@
                         <div class="item-inner">
                           <div class="item-title">Статус</div>
                           <div class="item-after">
-                            <div class="chip chip-outline color-red">
+                            <div class="chip color-red">
                               <div class="chip-label">Незавершенный</div>
                             </div>
                           </div>
@@ -64,7 +64,7 @@
                     <div class="item item-content">
                       <div class="item-inner">
                         <div class="item-title">Размеры</div>
-                        <div class="item-after">${сalcSquareMtrs(item)} кв.м / ${сalcLinearMtrs(item)} пог.м</div>
+                        <div class="item-after">${item.square_mtrs} кв.м / ${item.linear_mtrs} пог.м</div>
                       </div>
                     </div>
                   </li>
@@ -72,15 +72,29 @@
                     <div class="item item-content">
                       <div class="item-inner">
                         <div class="item-title">Общая цена</div>
-                        <div class="item-after">${priceRoom(item)} руб.</div>
+                        <div class="item-after">
+                          ${priceRoomCommon(item, {
+                            contours: contours,
+                            cloths: cloths,
+                            lusters: lusters,
+                            services: services
+                          })} руб.
+                        </div>
                       </div>
-                    </div>
+                    </div> 
                   </li>
                   <li>
                     <div class="item item-content">
                       <div class="item-inner">
                         <div class="item-title">Цена за установку</div>
-                        <div class="item-after">${priceRoom(item)} руб.</div>
+                        <div class="item-after">
+                          ${priceRoomCommon(item, {
+                            contours: contours,
+                            cloths: cloths,
+                            lusters: lusters,
+                            services: services
+                          })} руб.
+                        </div>
                       </div>
                     </div>
                   </li>
@@ -113,6 +127,11 @@
     let rooms = []
     let romms_count = 0
     let projectTitle
+
+    let contours = []
+    let cloths   = []
+    let lusters  = []
+    let services = []
 
     const openRoom = (item) => {
       $f7router.navigate(`/rooms/${item.id}`, { 
@@ -160,15 +179,13 @@
           headers: { 'Content-Type': 'application/json' }
         })
         .then(response => {
-          if (response.ok) {
-            console.log('success delete')
-            app.preloader.hide();
-            $f7router.refreshPage()
-          } else {
-            throw new Error('Error deleting item');
-          }
+          const result = JSON.stringify(response)
+          console.log('Destroy:', result)
+          if(!response.ok || result.success === false) throw new Error();
+          app.preloader.hide();
+          $f7router.refreshPage()
         })
-        .then(data => console.log(data) )
+        .then(data => console.log(data))
         .catch(error => console.error(error));
       })
     }
@@ -196,12 +213,6 @@
         app.preloader.hide()
         $f7.dialog.close() 
         item.title = title
-        $f7.toast.create({
-          text: 'Название успешно сохранено',
-          position: 'top',
-          closeTimeout: 2000,
-          cssClass: 'success_toast'
-        }).open();
         $update()
       })
       .catch(error => console.log(error));
@@ -241,6 +252,22 @@
         romms_count = rooms.length
       })
       .catch(error => console.error(error))
+
+      await fetch(`${host}/contours`)
+      .then(response => response.json())
+      .then(data => contours = data ).catch(error => console.error(error))
+
+      await fetch(`${host}/cloths`)
+      .then(response => response.json())
+      .then(data => cloths = data ).catch(error => console.error(error))
+
+      await fetch(`${host}/lusters`)
+      .then(response => response.json())
+      .then(data => lusters = data ).catch(error => console.error(error))
+
+      await fetch(`${host}/additional_services`)
+      .then(response => response.json())
+      .then(data => services = data ).catch(error => console.error(error))
 
       $update()
     })

@@ -1,5 +1,5 @@
 <template>
-  <div class="page" data-name="new_projects">
+  <div class="page" data-name="new_luster">
     <div class="navbar">
       <div class="navbar-bg"></div>
       <div class="navbar-inner">
@@ -42,27 +42,6 @@
                 </div>
               </div>
             </li>
-            <li class="item-content item-input item-input-outline">
-              <div class="item-inner">
-                <div class="item-title item-floating-label">Цена за угол</div>
-                <div class="item-input-wrap">
-                  <input type="text" name='price_corner' required />
-                  <span class="input-clear-button"></span>
-                </div>
-              </div>
-            </li>
-            <li>
-            <div class="item-content">
-              <div class="item-inner">
-                <div class="item-title">По умолчанию</div>
-                <div class="item-after">
-                  <label class="toggle toggle-init">
-                    <input id='default_check' type="checkbox" name="default" /><i class="toggle-icon"></i>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </li>
           </ul>
         </form>
 
@@ -99,7 +78,7 @@
 <script>
   export default (props, { $f7, $f7router, $f7route, $el, $theme, $on, $update }) => {
     let title = 'Новый'
-    let contour
+    let luster
     let now = true
     let colorPickerPalette;
 
@@ -108,10 +87,9 @@
       if(!validate) return;
       
       const formData = app.form.convertToData('#form');
-      formData.default = toBool(formData.default)
       formData.color   = colorPickerPalette.getValue().hex
       console.log('formData', formData)
-      fetch(`${host}/contours`, {
+      fetch(`${host}/lusters`, {
         method: 'POST', 
         body: JSON.stringify(formData), 
         headers:{
@@ -121,7 +99,7 @@
       .then(res => res.json())
       .then(response => { 
         console.log('Success:', JSON.stringify(response))
-        $f7router.navigate('/price_lists/contours')  
+        $f7router.navigate('/price_lists/lusters')  
       })
       .catch(error => console.error('Error:', error));
     }
@@ -130,21 +108,20 @@
       const validate = app.input.validateInputs('#form')
       if(!validate) return;
       const formData = app.form.convertToData('#form');
-      formData.default = toBool(formData.default)
       formData.color   = colorPickerPalette.getValue().hex
       console.log('formData', formData)
-      fetch(`${host}/contours/${contour.id}`, {
+      fetch(`${host}/lusters/${luster.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ contour: formData })
+        body: JSON.stringify({ luster: formData })
       })
       .then(response => response.json())
       .then(data => { 
         console.log('data', data)
-        $f7router.navigate('/price_lists/contours')   
+        $f7router.navigate('/price_lists/lusters')   
       })
       .catch(error => console.log(error));
     }
@@ -156,13 +133,11 @@
       if(lastRoutePath(path) === 'edit') {
         title = 'Редактирование'
         now = false
-        await fetch(`${host}/contours/${$f7route.params.id}`)
+        await fetch(`${host}/lusters/${$f7route.params.id}`)
         .then(response => response.json())
-        .then(data => contour = data)
+        .then(data => luster = data)
         .catch(error => console.error(error))
-        $el.value.find('#default_check')[0].checked = contour.default;
-        delete contour.default;
-        $f7.form.fillFromData('#form', contour);
+        $f7.form.fillFromData('#form', luster);
         $update()
       }
 
@@ -192,7 +167,7 @@
           ['#a4a4a3', '#9f9991', '#7f7f7d', '#696969', '#555555', '#2e2e2e', '#000000'],
         ],
         value: {
-          hex: contour ? contour.color : '#000000',
+          hex: luster ? luster.color : '#000000',
         },
         formatValue: function (value) {
           return value.hex;

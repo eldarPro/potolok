@@ -8,21 +8,21 @@
             <i class="icon material-icons md-only">arrow_back</i>
           </a>
         </div>
-        <div class="title">Профили</div>
+        <div class="title">Дополнительные услуги</div>
         <div class="right">
-          <a href="/price_lists/contours/new" class="link">
+          <a href="/price_lists/services/new" class="link">
             <i class="icon material-icons md-only">add</i>
           </a>
         </div>
       </div>
     </div>
     <div class="page-content">
-      ${!contours.length ? $h`
+      ${!services.length ? $h`
         <div class="empty_title">Нет данных</div>
       ` : $h`
         <div class="list">
           <ul>
-            ${contours.map((item) => $h`
+            ${services.map((item) => $h`
               <li class="accordion-item">
                 <a href="#" class="item-link item-content">
                   <div class="item-inner">
@@ -59,16 +59,8 @@
                       <li>
                         <div class="item-content">
                           <div class="item-inner">
-                            <div class="item-title">По умолчанию</div>
-                            <div class="item-after">${booleanTitle(item.default)}</div>
-                          </div>
-                        </div>
-                      </li>
-                      <li>
-                        <div class="item-content">
-                          <div class="item-inner">
-                            <div class="item-title">Цвет</div>
-                            <div class="item-after"><i class="icon demo-list-icon" style="background-color: ${item.color}"></i> </div>
+                            <div class="item-title">Описание</div>
+                            <div class="item-after">${item.description}</div>
                           </div>
                         </div>
                       </li>
@@ -93,14 +85,14 @@
 </template>
 <script>
   export default (props, { $on, $f7, $f7router, $update }) => {
-    let contours = []
+    let services = []
 
     const edit = (id) => {
-      $f7router.navigate('/price_lists/contours/' + id + '/edit')  
+      $f7router.navigate('/price_lists/services/' + id + '/edit')  
     }
 
     const destroy = (id) => {
-      fetch(`${host}/contours/${id}`, {
+      fetch(`${host}/additional_services/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -109,7 +101,6 @@
       .then(response => {
         if (response.ok) {
           console.log('success delete')
-          // $f7router.navigate('/price_lists/contours')
           $f7router.refreshPage() 
         } else {
           throw new Error('Error deleting item');
@@ -125,10 +116,10 @@
     
     $on('pageInit', async() => {
 
-      await fetch(`${host}/contours`)
+      await fetch(`${host}/additional_services`)
       .then(response => response.json())
       .then(data => { 
-        contours = data
+        services = data
         $update()
       })
       .catch(error => console.error(error))
