@@ -146,7 +146,7 @@ const toast = (title, success = false, position = 'center') => {
 // Определяет завершенное ли помещение
 const isFinishRoom = (item) => {
   let res = false
-  if(item.data) return res
+  if(!item.data) return res
 
   item.data.forEach(i => {
     if(i.type === 'contour' && i.finish) {
@@ -249,33 +249,103 @@ const сalcSquareMtrs = (data) => {
   return res
 }
 
-const priceRoomCommon = (item, priceLists) => {
+const priceRoom = (item, priceLists, install = false) => {
   let res = 0
-  if(item.data && isFinishRoom(item)) return res
+  if(!item.data || !isFinishRoom(item)) return res
+
+  let contours = []
+  let lusters  = [] 
+  let services = []
 
   item.data.forEach(i => {
-    // if(i.type === 'contour') {
-    //   // if(!priceLists.contours.length) return
-    //  // let contour = priceLists.contours
-
-    //   res = true
-    //   return
-    // }
+    if(i.type === 'contour') contours.push(i)
+    if(i.type === 'luster')  lusters.push(i)
+    if(i.type === 'service') services.push(i)
   })
 
-  return res
+  let cloth
+
+  // Полотно
+  if(priceLists.cloths.length) {
+    cloth = priceLists.cloths.find(c => c.id == item.cloth_id)
+  }
+
+  if(cloth) {
+    price = install ? cloth.price_install : cloth.price
+    res += item.square_mtrs * price
+
+    price = install ? cloth.price_install_corner : cloth.price_corner
+    if(contours.length) res += contours.length * price
+  }
+
+  // Профили
+  if(priceLists.contours.length) {
+    contours.forEach((i, inx) => {
+      const findContour = priceLists.contours.find(c => c.id == i.contour_id)
+      if(!findContour) return
+
+      price = install ? findContour.price_install : findContour.price
+
+      res += (i.distance / 100) * price
+
+      let prevContour
+
+      if(i.num == 0) prevContour = contours[contours.length - 1]
+      else prevContour = contours[inx - 1]
+    
+      if(prevContour) prevContour = priceLists.contours.find(c => c.id == prevContour.contour_id)
+
+      let nextContour = contours[inx + 1]
+      if(nextContour) nextContour = priceLists.contours.find(c => c.id == nextContour.contour_id)
+  
+      if(install) {
+        prevContourPriceCorner = prevContour.price_install_corner
+        findContourPriceCorner = findContour.price_install_corner
+      } else {
+        prevContourPriceCorner = prevContour.price_corner
+        findContourPriceCorner = findContour.price_corner
+      }
+
+      if(prevContour && prevContourPriceCorner > findContourPriceCorner) {
+        res += prevContourPriceCorner
+      } else {
+        res += findContourPriceCorner
+      }
+
+      return
+    })
+  }
+
+  // Люстры
+  if(priceLists.luster && lusters.length) {
+    price = install ? priceLists.luster.price_install : priceLists.luster.price
+    res += lusters.length * price
+  }
+
+  // Дополнительные услуги
+  // Профили
+  if(priceLists.services.length) {
+    services.forEach((i, inx) => {
+      const findService = priceLists.services.find(c => c.id == i.service_id)
+      if(!findService) return
+      price = install ? findService.price_install : findService.price
+      res += price
+    })
+  }
+
+  return res.toFixed()
 }
 
 const priceRoomInstall = (item) => {
   let res = 0
-  if(item.data && isFinishRoom(item)) {
+  if(item.data && !isFinishRoom(item)) {
    // item.data.contours.forEach(i => res += i.distance)
   }
   return res / 100
 }
 
 //var host = 'http://127.0.0.1:3000'
-var host = 'https://potolokapi-production.up.railway.app'
+var host = 'https://potolokapi-production-2237.up.railway.app'
 
 
 $$(document).on('page:init', function (e) {

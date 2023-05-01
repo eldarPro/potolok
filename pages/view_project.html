@@ -73,10 +73,10 @@
                       <div class="item-inner">
                         <div class="item-title">Общая цена</div>
                         <div class="item-after">
-                          ${priceRoomCommon(item, {
+                          ${priceRoom(item, {
                             contours: contours,
                             cloths: cloths,
-                            lusters: lusters,
+                            luster: luster,
                             services: services
                           })} руб.
                         </div>
@@ -88,12 +88,12 @@
                       <div class="item-inner">
                         <div class="item-title">Цена за установку</div>
                         <div class="item-after">
-                          ${priceRoomCommon(item, {
+                          ${priceRoom(item, {
                             contours: contours,
                             cloths: cloths,
-                            lusters: lusters,
+                            luster: luster,
                             services: services
-                          })} руб.
+                          }, true)} руб.
                         </div>
                       </div>
                     </div>
@@ -130,8 +130,8 @@
 
     let contours = []
     let cloths   = []
-    let lusters  = []
     let services = []
+    let luster 
 
     const openRoom = (item) => {
       $f7router.navigate(`/rooms/${item.id}`, { 
@@ -263,7 +263,7 @@
 
       await fetch(`${host}/lusters`)
       .then(response => response.json())
-      .then(data => lusters = data ).catch(error => console.error(error))
+      .then(data => luster = data ).catch(error => console.error(error))
 
       await fetch(`${host}/additional_services`)
       .then(response => response.json())

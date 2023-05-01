@@ -34,7 +34,7 @@
                           <select name='profile'>
                             <option value='0'>Отсутствует</option>
                             ${contours.map((i) => {
-                              if(item.profile_id === i.id) {
+                              if(item.contour_id === i.id) {
                                 return $h`<option value="${i.id}" selected>${i.title}</option>`
                               } else {
                                 return $h`<option value="${i.id}">${i.title}</option>`
