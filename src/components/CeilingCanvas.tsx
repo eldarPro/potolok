@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Text, Group, RegularPolygon } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM } from '../lib/geometry';
+import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel } from '../lib/geometry';
 import { Room } from '../types';
 
 const CLOSE_THRESHOLD = 24;
@@ -317,36 +317,39 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
 
           {/* Vertices */}
           {points.map((p, i) => (
-            <Circle
-              key={i}
-              x={p.x}
-              y={p.y}
-              radius={i === 0 && nearStart ? 14 : 7}
-              fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
-              stroke={i === 0 ? '#3880ff' : '#fff'}
-              strokeWidth={2}
-              draggable={closed}
-              onDragMove={e => {
-                const newPts = [...points];
-                newPts[i] = { x: e.target.x(), y: e.target.y() };
-                setPoints(newPts);
-                const m = computeMetrics(newPts);
-                onChange({ points: newPts, ...m });
-              }}
-            />
+            <Group key={i}>
+              <Circle
+                x={p.x}
+                y={p.y}
+                radius={i === 0 && nearStart ? 14 : 7}
+                fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
+                stroke={i === 0 ? '#3880ff' : '#fff'}
+                strokeWidth={2}
+                draggable={closed}
+                onDragMove={e => {
+                  const newPts = [...points];
+                  newPts[i] = { x: e.target.x(), y: e.target.y() };
+                  setPoints(newPts);
+                  const m = computeMetrics(newPts);
+                  onChange({ points: newPts, ...m });
+                }}
+              />
+              <Text
+                x={p.x + 10}
+                y={p.y - 18}
+                text={pointLabel(i)}
+                fontSize={13}
+                fontStyle="bold"
+                fill="#fff"
+                shadowColor="rgba(0,0,0,0.8)"
+                shadowBlur={3}
+                shadowOffsetX={1}
+                shadowOffsetY={1}
+                listening={false}
+              />
+            </Group>
           ))}
 
-          {/* Area label in center */}
-          {closed && metrics && (
-            <Text
-              x={points.reduce((s, p) => s + p.x, 0) / points.length - 40}
-              y={points.reduce((s, p) => s + p.y, 0) / points.length - 10}
-              text={`${metrics.areaSqm.toFixed(2)} м²`}
-              fontSize={16}
-              fontStyle="bold"
-              fill="#fff"
-            />
-          )}
         </Layer>
       </Stage>
 

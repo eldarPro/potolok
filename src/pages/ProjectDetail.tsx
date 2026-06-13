@@ -49,7 +49,10 @@ const ProjectDetail: React.FC = () => {
   const totalPrice = project.rooms.reduce((s, room) => {
     const c = room.points.length;
     const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-    const p = room.profile ? room.profile.price * room.perimeterM + room.profile.priceCorner * c : 0;
+    const p = (room.profileSegments ?? []).reduce(
+      (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
+      0,
+    );
     return s + f + p;
   }, 0);
 
@@ -94,7 +97,10 @@ const ProjectDetail: React.FC = () => {
                     if (room.areaSqm === 0) return 'Не начерчено';
                     const c = room.points.length;
                     const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-                    const p = room.profile ? room.profile.price * room.perimeterM + room.profile.priceCorner * c : 0;
+                    const p = (room.profileSegments ?? []).reduce(
+                      (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
+                      0,
+                    );
                     const total = f + p;
                     return total > 0 ? `${Math.round(total).toLocaleString('ru')} ₽` : `${room.areaSqm.toFixed(1)} м²`;
                   })()}

@@ -7,6 +7,7 @@ import { chevronBackOutline, downloadOutline } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject } from '../lib/storage';
 import { Project, Room } from '../types';
+import { edgeLabel } from '../lib/geometry';
 import jsPDF from 'jspdf';
 
 const corners = (room: Room) => room.points.length;
@@ -14,14 +15,20 @@ const corners = (room: Room) => room.points.length;
 const calcClient = (room: Room) => {
   const c = corners(room);
   const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-  const p = room.profile ? room.profile.price * room.perimeterM + room.profile.priceCorner * c : 0;
+  const p = (room.profileSegments ?? []).reduce(
+    (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
+    0,
+  );
   return { fabric: f, profile: p, total: f + p };
 };
 
 const calcWorker = (room: Room) => {
   const c = corners(room);
   const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * c : 0;
-  const p = room.profile ? room.profile.priceInstall * room.perimeterM : 0;
+  const p = (room.profileSegments ?? []).reduce(
+    (sum, seg) => sum + seg.profile.priceInstall * seg.lengthM,
+    0,
+  );
   return f + p;
 };
 
@@ -71,9 +78,16 @@ const Summary: React.FC = () => {
       if (room.fabric) {
         doc.text(`   Полотно "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} угл. = ${Math.round(cl.fabric).toLocaleString('ru')} ₽`, margin, y); y += 5;
       }
-      if (room.profile) {
-        doc.text(`   Профиль "${room.profile.title}": ${room.profile.price} × ${room.perimeterM.toFixed(2)} м + ${room.profile.priceCorner} × ${c} угл. = ${Math.round(cl.profile).toLocaleString('ru')} ₽`, margin, y); y += 5;
-      }
+      const segs = room.profileSegments ?? [];
+      const pGroups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
+      segs.forEach(seg => {
+        if (!pGroups[seg.profileId]) pGroups[seg.profileId] = { title: seg.profile.title, totalLengthM: 0, count: 0, price: seg.profile.price, priceCorner: seg.profile.priceCorner };
+        pGroups[seg.profileId].totalLengthM += seg.lengthM;
+        pGroups[seg.profileId].count += 1;
+      });
+      Object.values(pGroups).forEach(g => {
+        doc.text(`   Профиль "${g.title}": ${g.price} × ${g.totalLengthM.toFixed(2)} м + ${g.priceCorner} × ${g.count} угл. = ${Math.round(g.price * g.totalLengthM + g.priceCorner * g.count).toLocaleString('ru')} ₽`, margin, y); y += 5;
+      });
       doc.setFont('helvetica', 'bold');
       doc.text(`   Итого по помещению: ${Math.round(cl.total).toLocaleString('ru')} ₽`, margin, y); y += 8;
       doc.setFont('helvetica', 'normal');
@@ -133,7 +147,7 @@ const Summary: React.FC = () => {
                 <Row label="Периметр" value={`${room.perimeterM.toFixed(2)} м`} />
                 <Row label="Углов" value={`${c}`} />
 
-                {(room.fabric || room.profile) && <div style={{ height: 8 }} />}
+                {(room.fabric || (room.profileSegments ?? []).length > 0) && <div style={{ height: 8 }} />}
 
                 {room.fabric && (
                   <>
@@ -142,15 +156,24 @@ const Summary: React.FC = () => {
                     {c > 0 && <Row label={`  Углы: ${room.fabric.priceCorner} ₽ × ${c}`} value={`${Math.round(room.fabric.priceCorner * c).toLocaleString('ru')} ₽`} />}
                   </>
                 )}
-                {room.profile && (
-                  <>
-                    <Row label={`Профиль: ${room.profile.title}`} value="" />
-                    <Row label={`  ${room.profile.price} ₽ × ${room.perimeterM.toFixed(2)} м`} value={`${Math.round(room.profile.price * room.perimeterM).toLocaleString('ru')} ₽`} />
-                    {c > 0 && <Row label={`  Углы: ${room.profile.priceCorner} ₽ × ${c}`} value={`${Math.round(room.profile.priceCorner * c).toLocaleString('ru')} ₽`} />}
-                  </>
-                )}
+                {(() => {
+                  const segs = room.profileSegments ?? [];
+                  const groups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
+                  segs.forEach(seg => {
+                    if (!groups[seg.profileId]) groups[seg.profileId] = { title: seg.profile.title, totalLengthM: 0, count: 0, price: seg.profile.price, priceCorner: seg.profile.priceCorner };
+                    groups[seg.profileId].totalLengthM += seg.lengthM;
+                    groups[seg.profileId].count += 1;
+                  });
+                  return Object.values(groups).map(g => (
+                    <React.Fragment key={g.title}>
+                      <Row label={`Профиль: ${g.title}`} value="" />
+                      <Row label={`  ${g.price} ₽ × ${g.totalLengthM.toFixed(2)} м`} value={`${Math.round(g.price * g.totalLengthM).toLocaleString('ru')} ₽`} />
+                      {g.count > 0 && <Row label={`  Углы: ${g.priceCorner} ₽ × ${g.count}`} value={`${Math.round(g.priceCorner * g.count).toLocaleString('ru')} ₽`} />}
+                    </React.Fragment>
+                  ));
+                })()}
 
-                {!room.fabric && !room.profile && (
+                {!room.fabric && (room.profileSegments ?? []).length === 0 && (
                   <IonText color="warning"><small>Материал не выбран</small></IonText>
                 )}
 

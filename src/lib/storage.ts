@@ -155,17 +155,15 @@ export function saveMasterProfile(profile: MasterProfile): void {
 // ---
 
 export function createRoom(name: string): Room {
-  const defaultFabric  = loadFabrics().find(i => i.isDefault) ?? null;
-  const defaultProfile = loadProfiles().find(i => i.isDefault) ?? null;
+  const defaultFabric = loadFabrics().find(i => i.isDefault) ?? null;
   return {
     id: crypto.randomUUID(),
     name,
     points: [],
     scale: 50,
-    fabricId:  defaultFabric  ? defaultFabric.id  : null,
-    fabric:    defaultFabric  ? { ...defaultFabric }  : null,
-    profileId: defaultProfile ? defaultProfile.id : null,
-    profile:   defaultProfile ? { ...defaultProfile } : null,
+    fabricId: defaultFabric ? defaultFabric.id : null,
+    fabric:   defaultFabric ? { ...defaultFabric } : null,
+    profileSegments: [],
     lighting: [],
     areaSqm: 0,
     perimeterM: 0,

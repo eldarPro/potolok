@@ -1,3 +1,10 @@
+export interface RoomProfileSegment {
+  edgeIndex: number;
+  profileId: string;
+  profile: CatalogItem;
+  lengthM: number;
+}
+
 export interface CatalogItem {
   id: string;
   title: string;
@@ -74,8 +81,7 @@ export interface Room {
   scale: number;
   fabricId: string | null;
   fabric: CatalogItem | null;
-  profileId: string | null;
-  profile: CatalogItem | null;
+  profileSegments: RoomProfileSegment[];
   lighting: RoomLightingElement[];
   areaSqm: number;
   perimeterM: number;

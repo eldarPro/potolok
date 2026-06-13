@@ -1,5 +1,15 @@
 export interface Point { x: number; y: number }
 
+const RU_LETTERS = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ'.split('');
+
+export function pointLabel(index: number): string {
+  return RU_LETTERS[index % RU_LETTERS.length];
+}
+
+export function edgeLabel(fromIndex: number, n: number): string {
+  return `${pointLabel(fromIndex)}–${pointLabel((fromIndex + 1) % n)}`;
+}
+
 /** Polygon area in canvas px², using shoelace formula */
 export function polygonArea(pts: Point[]): number {
   let area = 0;
@@ -52,6 +62,15 @@ export function snapAngle(start: Point, end: Point, thresholdDeg = 10): Point {
 /** Convert canvas px distance to real cm, then to meters */
 export function pxToMeters(px: number, scale: number): number {
   return (px * scale) / 100;
+}
+
+/** Length of edge i (from point[i] to point[i+1]) in meters */
+export function edgeLengthM(pts: Point[], edgeIndex: number, scale: number): number {
+  const n = pts.length;
+  if (n < 2) return 0;
+  const a = pts[edgeIndex % n];
+  const b = pts[(edgeIndex + 1) % n];
+  return pxToMeters(dist(a, b), scale);
 }
 
 /** Format meters nicely */
