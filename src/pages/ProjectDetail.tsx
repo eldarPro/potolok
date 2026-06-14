@@ -49,17 +49,15 @@ const ProjectDetail: React.FC = () => {
   const totalPrice = project.rooms.reduce((s, room) => {
     const c = room.points.length;
     const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-    const p = (room.profileSegments ?? []).reduce(
-      (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
-      0,
-    );
-    return s + f + p;
+    const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
+    const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
+    return s + f + p + l;
   }, 0);
 
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/" />
           </IonButtons>
@@ -97,11 +95,9 @@ const ProjectDetail: React.FC = () => {
                     if (room.areaSqm === 0) return 'Не начерчено';
                     const c = room.points.length;
                     const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-                    const p = (room.profileSegments ?? []).reduce(
-                      (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
-                      0,
-                    );
-                    const total = f + p;
+                    const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
+                    const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
+                    const total = f + p + l;
                     return total > 0 ? `${Math.round(total).toLocaleString('ru')} ₽` : `${room.areaSqm.toFixed(1)} м²`;
                   })()}
                 </IonNote>

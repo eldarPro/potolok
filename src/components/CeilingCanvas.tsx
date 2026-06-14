@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Stage, Layer, Line, Circle, Text, Group, RegularPolygon } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel } from '../lib/geometry';
-import { Room } from '../types';
+import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon } from '../lib/geometry';
+import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
 const GRID_SIZE = 40;
@@ -13,11 +13,23 @@ interface Props {
   onChange: (updated: Partial<Room>) => void;
   width: number;
   height: number;
+  placingLighting?: LightingCatalogItem | null;
+  inProgressLightingPath?: { x: number; y: number }[];
+  onLightingTap?: (pt: { x: number; y: number }) => void;
+  onOutOfBounds?: () => void;
 }
 
 type Tool = 'draw' | 'move';
 
-const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
+const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
+
+const CeilingCanvas: React.FC<Props> = ({
+  room, onChange, width, height,
+  placingLighting = null,
+  inProgressLightingPath = [],
+  onLightingTap,
+  onOutOfBounds,
+}) => {
   const [points, setPoints] = useState<Point[]>(room.points);
   const [closed, setClosed] = useState(room.points.length >= MIN_POINTS);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -29,13 +41,16 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
   const lastTouch = useRef<Point | null>(null);
   const pinchDist = useRef<number | null>(null);
 
-  const isClosed = closed || (points.length >= MIN_POINTS);
+  const isClosed = closed || points.length >= MIN_POINTS;
 
   useEffect(() => {
     setPoints(room.points);
     setClosed(room.points.length >= MIN_POINTS && room.areaSqm > 0);
     setTool(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   }, [room.id]);
+
+  // Clear cursor when switching lighting item
+  useEffect(() => { setCursor(null); }, [placingLighting?.id]);
 
   const toCanvas = useCallback((clientX: number, clientY: number, stageEl: HTMLDivElement): Point => {
     const rect = stageEl.getBoundingClientRect();
@@ -67,6 +82,13 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
   };
 
   const handleTap = (pt: Point) => {
+    // Lighting placement mode — only accept taps inside the room polygon
+    if (placingLighting && isClosed) {
+      if (pointInPolygon(pt, points)) onLightingTap?.(pt);
+      else onOutOfBounds?.();
+      return;
+    }
+
     if (tool !== 'draw' || closed) return;
     const snapped = snapToGrid(pt);
 
@@ -101,6 +123,11 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
   };
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (placingLighting) {
+      const pos = getPointerPos(e);
+      if (pos) handleTap(pos);
+      return;
+    }
     if (e.target !== stageRef.current && tool === 'draw') return;
     if (tool === 'draw') {
       const pos = getPointerPos(e);
@@ -109,14 +136,19 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (tool !== 'draw' || points.length === 0 || closed) return;
     const pos = getPointerPos(e);
     if (!pos) return;
+
+    if (placingLighting?.placement === 'path' && inProgressLightingPath.length > 0) {
+      setCursor(pos);
+      return;
+    }
+
+    if (tool !== 'draw' || points.length === 0 || closed) return;
     const last = points[points.length - 1];
     setCursor(snapAngle(last, snapToGrid(pos)));
   };
 
-  // Touch handlers for draw tool
   const handleTouchStart = (e: Konva.KonvaEventObject<TouchEvent>) => {
     const touches = e.evt.touches;
     if (touches.length === 2) {
@@ -126,9 +158,9 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
       );
       return;
     }
-    if (tool === 'draw') {
+
+    if (tool === 'draw' || placingLighting) {
       e.evt.preventDefault();
-      const t = touches[0];
       const stage = stageRef.current;
       if (!stage) return;
       const pos = stage.getPointerPosition();
@@ -153,12 +185,17 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
       pinchDist.current = newDist;
       return;
     }
-    if (tool === 'draw' && points.length > 0 && !closed) {
-      const t = touches[0];
-      const stage = stageRef.current;
-      if (!stage) return;
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
+
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pos = stage.getPointerPosition();
+
+    if (placingLighting?.placement === 'path' && inProgressLightingPath.length > 0 && touches.length === 1 && pos) {
+      setCursor({ x: (pos.x - stagePos.x) / scale, y: (pos.y - stagePos.y) / scale });
+      return;
+    }
+
+    if (tool === 'draw' && points.length > 0 && !closed && pos) {
       const pt = { x: (pos.x - stagePos.x) / scale, y: (pos.y - stagePos.y) / scale };
       const last = points[points.length - 1];
       setCursor(snapAngle(last, snapToGrid(pt)));
@@ -192,15 +229,13 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
     setPoints(prev => prev.slice(0, -1));
   };
 
-  // Build flat array for Konva Line
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
 
-  const previewLine = cursor && points.length > 0 ? [
+  const previewLine = !placingLighting && cursor && points.length > 0 ? [
     points[points.length - 1],
     cursor,
   ] : null;
 
-  // Dimension label for each segment
   const segmentLabels = points.map((p, i) => {
     if (i === 0 && !closed) return null;
     const prev = closed && i === 0 ? points[points.length - 1] : points[i - 1];
@@ -212,33 +247,46 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
     return { mx, my, label: fmtM(m), key: i };
   }).filter(Boolean);
 
-  const nearStart = !closed && points.length >= MIN_POINTS && cursor
+  const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
     ? dist(cursor, points[0]) < CLOSE_THRESHOLD * 2
     : false;
 
   const metrics = closed ? computeMetrics(points) : null;
 
+  // Lighting path preview line
+  const lastPathPt = inProgressLightingPath[inProgressLightingPath.length - 1];
+  const lightPathPreview = placingLighting?.placement === 'path' && lastPathPt && cursor
+    ? [lastPathPt, cursor]
+    : null;
+
   return (
     <div style={{ position: 'relative', background: '#1a1a2e', borderRadius: 12, overflow: 'hidden' }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: 'rgba(0,0,0,0.4)', alignItems: 'center' }}>
-        <button
-          onClick={() => setTool(t => t === 'draw' ? 'move' : 'draw')}
-          style={{
-            padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            background: tool === 'draw' ? '#3880ff' : 'rgba(255,255,255,0.15)',
-            color: '#fff',
-          }}
-        >
-          {tool === 'draw' ? '✏️ Рисую' : '✋ Перемещение'}
-        </button>
+        {!placingLighting && (
+          <button
+            onClick={() => setTool(t => t === 'draw' ? 'move' : 'draw')}
+            style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              background: tool === 'draw' ? '#3880ff' : 'rgba(255,255,255,0.15)',
+              color: '#fff',
+            }}
+          >
+            {tool === 'draw' ? '✏️ Рисую' : '✋ Перемещение'}
+          </button>
+        )}
+        {placingLighting && (
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
+            Размещение: {placingLighting.symbol} {placingLighting.title}
+          </span>
+        )}
         <div style={{ flex: 1 }} />
-        {points.length > 0 && (
+        {!placingLighting && points.length > 0 && (
           <button onClick={handleUndoPoint} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
             ↩ Отмена
           </button>
         )}
-        {points.length > 0 && (
+        {!placingLighting && points.length > 0 && (
           <button onClick={handleReset} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, background: 'rgba(220,50,50,0.6)', color: '#fff' }}>
             🗑
           </button>
@@ -258,7 +306,7 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ cursor: tool === 'draw' ? 'crosshair' : 'grab' }}
+        style={{ cursor: placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
       >
         <Layer>
           {/* Grid */}
@@ -282,16 +330,10 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
 
           {/* In-progress polygon */}
           {!closed && points.length > 1 && (
-            <Line
-              points={flatPoints(points)}
-              stroke="#3880ff"
-              strokeWidth={2}
-              lineCap="round"
-              lineJoin="round"
-            />
+            <Line points={flatPoints(points)} stroke="#3880ff" strokeWidth={2} lineCap="round" lineJoin="round" />
           )}
 
-          {/* Preview line while moving finger */}
+          {/* Polygon preview line */}
           {previewLine && !closed && (
             <Line
               points={flatPoints(previewLine)}
@@ -301,17 +343,10 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
             />
           )}
 
-          {/* Dimension labels on segments */}
+          {/* Segment dimension labels */}
           {segmentLabels.map(seg => seg && (
             <Group key={seg.key} x={seg.mx} y={seg.my}>
-              <Text
-                text={seg.label}
-                fontSize={11}
-                fill="#fff"
-                offsetX={20}
-                offsetY={8}
-                padding={3}
-              />
+              <Text text={seg.label} fontSize={11} fill="#fff" offsetX={20} offsetY={8} padding={3} />
             </Group>
           ))}
 
@@ -319,13 +354,12 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
           {points.map((p, i) => (
             <Group key={i}>
               <Circle
-                x={p.x}
-                y={p.y}
+                x={p.x} y={p.y}
                 radius={i === 0 && nearStart ? 14 : 7}
                 fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                 stroke={i === 0 ? '#3880ff' : '#fff'}
                 strokeWidth={2}
-                draggable={closed}
+                draggable={closed && !placingLighting}
                 onDragMove={e => {
                   const newPts = [...points];
                   newPts[i] = { x: e.target.x(), y: e.target.y() };
@@ -335,33 +369,93 @@ const CeilingCanvas: React.FC<Props> = ({ room, onChange, width, height }) => {
                 }}
               />
               <Text
-                x={p.x + 10}
-                y={p.y - 18}
+                x={p.x + 10} y={p.y - 18}
                 text={pointLabel(i)}
-                fontSize={13}
-                fontStyle="bold"
-                fill="#fff"
-                shadowColor="rgba(0,0,0,0.8)"
-                shadowBlur={3}
-                shadowOffsetX={1}
-                shadowOffsetY={1}
+                fontSize={13} fontStyle="bold" fill="#fff"
+                shadowColor="rgba(0,0,0,0.8)" shadowBlur={3} shadowOffsetX={1} shadowOffsetY={1}
                 listening={false}
               />
             </Group>
           ))}
 
+          {/* ── Placed point lighting elements ── */}
+          {(room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
+            const el = e as RoomLightingPoint;
+            return (
+              <Text
+                key={el.id}
+                x={el.x - 10} y={el.y - 10}
+                text={el.catalogItem.symbol}
+                fontSize={20}
+                fill={lightColor(el.catalogItem.color)}
+                shadowColor="rgba(0,0,0,0.6)" shadowBlur={4}
+                listening={false}
+              />
+            );
+          })}
+
+          {/* ── Placed path lighting elements ── */}
+          {(room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
+            const el = e as RoomLightingPath;
+            return (
+              <Line
+                key={el.id}
+                points={el.points.flatMap(p => [p.x, p.y])}
+                stroke={lightColor(el.catalogItem.color)}
+                strokeWidth={5}
+                lineCap="round"
+                lineJoin="round"
+                listening={false}
+              />
+            );
+          })}
+
+          {/* ── In-progress lighting path ── */}
+          {placingLighting?.placement === 'path' && inProgressLightingPath.length > 0 && (
+            <>
+              <Line
+                points={inProgressLightingPath.flatMap(p => [p.x, p.y])}
+                stroke={lightColor(placingLighting.color)}
+                strokeWidth={5}
+                dash={[10, 5]}
+                lineCap="round"
+                listening={false}
+              />
+              {inProgressLightingPath.map((p, i) => (
+                <Circle key={i} x={p.x} y={p.y} radius={5} fill={lightColor(placingLighting.color)} listening={false} />
+              ))}
+            </>
+          )}
+
+          {/* ── Lighting path preview line (cursor) ── */}
+          {lightPathPreview && (
+            <Line
+              points={lightPathPreview.flatMap(p => [p.x, p.y])}
+              stroke={lightColor(placingLighting!.color)}
+              strokeWidth={3}
+              dash={[6, 4]}
+              opacity={0.5}
+              listening={false}
+            />
+          )}
         </Layer>
       </Stage>
 
-      {/* Hint */}
+      {/* Hint bar */}
       <div style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.4)', fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
-        {closed
-          ? `Площадь: ${metrics?.areaSqm.toFixed(2)} м²  ·  Периметр: ${metrics?.perimeterM.toFixed(2)} м`
-          : points.length === 0
-            ? 'Тапайте по экрану чтобы добавить точки контура'
-            : points.length < MIN_POINTS
-              ? `Добавьте ещё ${MIN_POINTS - points.length} точки`
-              : 'Тапните на первую точку чтобы замкнуть контур'
+        {placingLighting
+          ? placingLighting.placement === 'point'
+            ? 'Тапните на потолке чтобы разместить элемент'
+            : inProgressLightingPath.length === 0
+              ? 'Тапните чтобы начать линию'
+              : `${inProgressLightingPath.length} точек — нажмите «Готово» чтобы завершить`
+          : closed
+            ? `Площадь: ${metrics?.areaSqm.toFixed(2)} м²  ·  Периметр: ${metrics?.perimeterM.toFixed(2)} м`
+            : points.length === 0
+              ? 'Тапайте по экрану чтобы добавить точки контура'
+              : points.length < MIN_POINTS
+                ? `Добавьте ещё ${MIN_POINTS - points.length} точки`
+                : 'Тапните на первую точку чтобы замкнуть контур'
         }
       </div>
     </div>

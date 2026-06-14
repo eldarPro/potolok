@@ -77,3 +77,19 @@ export function edgeLengthM(pts: Point[], edgeIndex: number, scale: number): num
 export function fmtM(m: number): string {
   return m.toFixed(2) + ' м';
 }
+
+/** Ray-casting point-in-polygon test */
+export function pointInPolygon(pt: Point, polygon: Point[]): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+    if (((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}

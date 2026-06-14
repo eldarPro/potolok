@@ -44,7 +44,7 @@ const AccessoryForm: React.FC = () => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/price-list/accessories" />
           </IonButtons>

@@ -15,21 +15,17 @@ const corners = (room: Room) => room.points.length;
 const calcClient = (room: Room) => {
   const c = corners(room);
   const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
-  const p = (room.profileSegments ?? []).reduce(
-    (sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner,
-    0,
-  );
-  return { fabric: f, profile: p, total: f + p };
+  const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
+  const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
+  return { fabric: f, profile: p, lighting: l, total: f + p + l };
 };
 
 const calcWorker = (room: Room) => {
   const c = corners(room);
   const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * c : 0;
-  const p = (room.profileSegments ?? []).reduce(
-    (sum, seg) => sum + seg.profile.priceInstall * seg.lengthM,
-    0,
-  );
-  return f + p;
+  const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.priceInstall * seg.lengthM, 0);
+  const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as any).lengthM), 0);
+  return f + p + l;
 };
 
 const Summary: React.FC = () => {
@@ -108,7 +104,7 @@ const Summary: React.FC = () => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}`} />
           </IonButtons>
@@ -176,6 +172,21 @@ const Summary: React.FC = () => {
                 {!room.fabric && (room.profileSegments ?? []).length === 0 && (
                   <IonText color="warning"><small>Материал не выбран</small></IonText>
                 )}
+
+                {(room.lighting ?? []).length > 0 && (() => {
+                  const groups: Record<string, { title: string; count: number; totalLen: number; price: number; isPath: boolean }> = {};
+                  (room.lighting ?? []).forEach(e => {
+                    if (!groups[e.catalogItemId]) groups[e.catalogItemId] = { title: e.catalogItem.title, count: 0, totalLen: 0, price: e.catalogItem.price, isPath: e.kind === 'path' };
+                    groups[e.catalogItemId].count += 1;
+                    if (e.kind === 'path') groups[e.catalogItemId].totalLen += (e as any).lengthM;
+                  });
+                  return Object.values(groups).map(g => (
+                    <Row key={g.title}
+                      label={g.isPath ? `${g.title} (${g.totalLen.toFixed(2)} м)` : `${g.title} × ${g.count} шт`}
+                      value={`${Math.round(g.isPath ? g.price * g.totalLen : g.price * g.count).toLocaleString('ru')} ₽`}
+                    />
+                  ));
+                })()}
 
                 {wk > 0 && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--ion-border-color)' }}>

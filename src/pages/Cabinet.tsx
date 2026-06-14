@@ -54,7 +54,7 @@ const Cabinet: React.FC = () => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonTitle>Кабинет</IonTitle>
         </IonToolbar>
       </IonHeader>

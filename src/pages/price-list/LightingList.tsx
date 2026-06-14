@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
-  IonAccordionGroup, IonAccordion, IonItem, IonLabel, IonText, IonButton,
-  IonAlert, IonListHeader, useIonViewWillEnter, useIonRouter,
+  IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, settingsOutline, trashOutline } from 'ionicons/icons';
 import { LightingCatalogItem } from '../../types';
 import { loadLightings, deleteLighting } from '../../lib/storage';
 import { LIGHTING_META, UNIT_LABEL } from '../../lib/lighting';
+import './ItemCard.css';
 
 const LightingList: React.FC = () => {
   const router = useIonRouter();
@@ -32,44 +32,45 @@ const LightingList: React.FC = () => {
     const meta = LIGHTING_META[item.type];
     const unitLabel = UNIT_LABEL[item.unit];
     return (
-      <IonAccordion key={item.id} value={item.id}>
-        <IonItem slot="header" color="light">
+      <div className="price-item-card" key={item.id}>
+        <div className="price-item-card__header">
           {item.placement === 'point' ? (
-            <span slot="start" style={{ fontSize: 20, width: 28, textAlign: 'center', color: item.color !== '#ffffff' ? item.color : '#555' }}>
+            <span className="price-item-card__symbol" style={{ color: item.color !== '#ffffff' ? item.color : '#555' }}>
               {item.symbol}
             </span>
           ) : (
-            <div slot="start" style={{ width: 28, height: 4, borderRadius: 2, background: item.color, border: '1px solid rgba(0,0,0,0.15)' }} />
+            <div className="price-item-card__line" style={{ background: item.color, border: '1px solid rgba(0,0,0,0.12)' }} />
           )}
-          <IonLabel>{item.title}</IonLabel>
-          <IonText slot="end" color="medium" style={{ fontSize: 12 }}>{meta.label}</IonText>
-        </IonItem>
-        <div slot="content">
-          <IonItem lines="full">
-            <IonLabel color="medium">Цена клиенту</IonLabel>
-            <IonText slot="end">{item.price} ₽ / {unitLabel}</IonText>
-          </IonItem>
-          <IonItem lines="none">
-            <IonLabel color="medium">Зарплата за установку</IonLabel>
-            <IonText slot="end">{item.priceInstall} ₽ / {unitLabel}</IonText>
-          </IonItem>
-          <div style={{ display: 'flex', gap: 8, padding: '8px 16px 12px' }}>
-            <IonButton fill="outline" expand="block" style={{ flex: 1 }} onClick={() => router.push(`/price-list/lightings/${item.id}/edit`)}>
-              Изменить
-            </IonButton>
-            <IonButton fill="outline" color="danger" expand="block" style={{ flex: 1 }} onClick={() => setDeleteId(item.id)}>
-              Удалить
-            </IonButton>
+          <span className="price-item-card__title">{item.title}</span>
+          <span className="price-item-card__chip">{meta.label}</span>
+          <div className="price-item-card__actions">
+            <button className="price-item-card__action-btn" onClick={() => router.push(`/price-list/lightings/${item.id}/edit`)}>
+              <IonIcon icon={settingsOutline} />
+            </button>
+            <button className="price-item-card__action-btn price-item-card__action-btn--danger" onClick={() => setDeleteId(item.id)}>
+              <IonIcon icon={trashOutline} />
+            </button>
           </div>
         </div>
-      </IonAccordion>
+        <div className="price-item-card__divider" />
+        <div className="price-item-card__prices">
+          <div className="price-item-card__price-cell">
+            <span className="price-item-card__price-val">{item.price} ₽</span>
+            <span className="price-item-card__price-label">клиент / {unitLabel}</span>
+          </div>
+          <div className="price-item-card__price-cell">
+            <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
+            <span className="price-item-card__price-label">монтаж / {unitLabel}</span>
+          </div>
+        </div>
+      </div>
     );
   };
 
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
           </IonButtons>
@@ -77,34 +78,27 @@ const LightingList: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
+      <IonContent className="price-items-content">
         {items.length === 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-            <IonText color="medium">Нет данных</IonText>
+          <div className="price-items-empty">
+            <span>Нет позиций</span>
+            <span style={{ fontSize: 13 }}>Нажмите + чтобы добавить</span>
           </div>
         ) : (
-          <IonAccordionGroup>
+          <div className="price-items-list">
             {point.length > 0 && (
               <>
-                <IonListHeader>
-                  <IonLabel color="medium" style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Точечные
-                  </IonLabel>
-                </IonListHeader>
+                <p className="price-items-section-label">Точечные</p>
                 {point.map(renderItem)}
               </>
             )}
             {path.length > 0 && (
               <>
-                <IonListHeader>
-                  <IonLabel color="medium" style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Линейные
-                  </IonLabel>
-                </IonListHeader>
+                <p className="price-items-section-label">Линейные</p>
                 {path.map(renderItem)}
               </>
             )}
-          </IonAccordionGroup>
+          </div>
         )}
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
@@ -115,7 +109,7 @@ const LightingList: React.FC = () => {
 
         <IonAlert
           isOpen={!!deleteId}
-          header="Удалить?"
+          header="Удалить позицию?"
           message="Это действие нельзя отменить."
           buttons={[
             { text: 'Отмена', role: 'cancel', handler: () => setDeleteId(null) },

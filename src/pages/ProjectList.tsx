@@ -31,7 +31,7 @@ const ProjectList: React.FC = () => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonTitle>Натяжные потолки</IonTitle>
         </IonToolbar>
       </IonHeader>

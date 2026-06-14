@@ -52,7 +52,7 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/price-list/${category}`} />
           </IonButtons>

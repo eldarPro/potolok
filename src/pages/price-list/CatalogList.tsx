@@ -2,15 +2,12 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
-  IonAccordionGroup, IonAccordion, IonItem, IonLabel, IonText, IonButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, settingsOutline, trashOutline } from 'ionicons/icons';
 import { CatalogItem } from '../../types';
-import {
-  loadFabrics, deleteFabric,
-  loadProfiles, deleteProfile,
-} from '../../lib/storage';
+import { loadFabrics, deleteFabric, loadProfiles, deleteProfile } from '../../lib/storage';
+import './ItemCard.css';
 
 interface Props {
   category: 'fabrics' | 'profiles';
@@ -38,7 +35,7 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
   return (
     <IonPage>
       <IonHeader>
-        <IonToolbar color="primary">
+        <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
           </IonButtons>
@@ -46,63 +43,51 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
+      <IonContent className="price-items-content">
         {items.length === 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-            <IonText color="medium">Нет данных</IonText>
+          <div className="price-items-empty">
+            <span>Нет позиций</span>
+            <span style={{ fontSize: 13 }}>Нажмите + чтобы добавить</span>
           </div>
         ) : (
-          <IonAccordionGroup>
+          <div className="price-items-list">
             {items.map(item => (
-              <IonAccordion key={item.id} value={item.id}>
-                <IonItem slot="header" color="light">
-                  <div
-                    slot="start"
-                    style={{ width: 16, height: 16, borderRadius: 3, background: item.color, border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0 }}
-                  />
-                  <IonLabel>{item.title}</IonLabel>
-                  {item.isDefault && <IonText slot="end" color="primary" style={{ fontSize: 12 }}>по умолч.</IonText>}
-                </IonItem>
-                <div slot="content">
-                  <IonItem lines="full">
-                    <IonLabel color="medium">Цена клиенту</IonLabel>
-                    <IonText slot="end">{item.price} ₽</IonText>
-                  </IonItem>
-                  <IonItem lines="full">
-                    <IonLabel color="medium">Цена клиенту за угол</IonLabel>
-                    <IonText slot="end">{item.priceCorner} ₽</IonText>
-                  </IonItem>
-                  <IonItem lines="full">
-                    <IonLabel color="medium">Зарплата за установку</IonLabel>
-                    <IonText slot="end">{item.priceInstall} ₽</IonText>
-                  </IonItem>
-                  <IonItem lines="none">
-                    <IonLabel color="medium">Зарплата за угол</IonLabel>
-                    <IonText slot="end">{item.priceInstallCorner} ₽</IonText>
-                  </IonItem>
-                  <div style={{ display: 'flex', gap: 8, padding: '8px 16px 12px' }}>
-                    <IonButton
-                      fill="outline"
-                      expand="block"
-                      style={{ flex: 1 }}
-                      onClick={() => router.push(`${basePath}/${item.id}/edit`)}
-                    >
-                      Изменить
-                    </IonButton>
-                    <IonButton
-                      fill="outline"
-                      color="danger"
-                      expand="block"
-                      style={{ flex: 1 }}
-                      onClick={() => setDeleteId(item.id)}
-                    >
-                      Удалить
-                    </IonButton>
+              <div className="price-item-card" key={item.id}>
+                <div className="price-item-card__header">
+                  <div className="price-item-card__dot" style={{ background: item.color }} />
+                  <span className="price-item-card__title">{item.title}</span>
+                  {item.isDefault && <span className="price-item-card__badge">по умолч.</span>}
+                  <div className="price-item-card__actions">
+                    <button className="price-item-card__action-btn" onClick={() => router.push(`${basePath}/${item.id}/edit`)}>
+                      <IonIcon icon={settingsOutline} />
+                    </button>
+                    <button className="price-item-card__action-btn price-item-card__action-btn--danger" onClick={() => setDeleteId(item.id)}>
+                      <IonIcon icon={trashOutline} />
+                    </button>
                   </div>
                 </div>
-              </IonAccordion>
+                <div className="price-item-card__divider" />
+                <div className="price-item-card__prices">
+                  <div className="price-item-card__price-cell">
+                    <span className="price-item-card__price-val">{item.price} ₽</span>
+                    <span className="price-item-card__price-label">клиент / м²</span>
+                  </div>
+                  <div className="price-item-card__price-cell">
+                    <span className="price-item-card__price-val">{item.priceCorner} ₽</span>
+                    <span className="price-item-card__price-label">клиент / угол</span>
+                  </div>
+                  <div className="price-item-card__price-cell">
+                    <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
+                    <span className="price-item-card__price-label">монтаж / м²</span>
+                  </div>
+                  <div className="price-item-card__price-cell">
+                    <span className="price-item-card__price-val">{item.priceInstallCorner} ₽</span>
+                    <span className="price-item-card__price-label">монтаж / угол</span>
+                  </div>
+                </div>
+              </div>
             ))}
-          </IonAccordionGroup>
+          </div>
         )}
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
@@ -113,7 +98,7 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
 
         <IonAlert
           isOpen={!!deleteId}
-          header="Удалить?"
+          header="Удалить позицию?"
           message="Это действие нельзя отменить."
           buttons={[
             { text: 'Отмена', role: 'cancel', handler: () => setDeleteId(null) },
