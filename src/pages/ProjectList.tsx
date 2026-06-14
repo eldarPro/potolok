@@ -32,7 +32,7 @@ const ProjectList: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>Натяжные потолки</IonTitle>
+          <IonTitle>Проекты</IonTitle>
         </IonToolbar>
       </IonHeader>
 

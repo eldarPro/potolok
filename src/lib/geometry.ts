@@ -59,9 +59,12 @@ export function snapAngle(start: Point, end: Point, thresholdDeg = 10): Point {
   };
 }
 
-/** Convert canvas px distance to real cm, then to meters */
+/** Grid cell size in pixels — must match CeilingCanvas */
+export const GRID_SIZE = 40;
+
+/** Convert canvas px distance to real meters (scale = cm per grid cell) */
 export function pxToMeters(px: number, scale: number): number {
-  return (px * scale) / 100;
+  return (px * scale) / (GRID_SIZE * 100);
 }
 
 /** Length of edge i (from point[i] to point[i+1]) in meters */

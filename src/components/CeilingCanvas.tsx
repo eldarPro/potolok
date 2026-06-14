@@ -1,11 +1,10 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon } from '../lib/geometry';
+import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon, GRID_SIZE } from '../lib/geometry';
 import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
-const GRID_SIZE = 40;
 const MIN_POINTS = 3;
 
 interface Props {
@@ -335,12 +334,27 @@ const CeilingCanvas: React.FC<Props> = ({
 
           {/* Polygon preview line */}
           {previewLine && !closed && (
-            <Line
-              points={flatPoints(previewLine)}
-              stroke={nearStart ? '#2dd36f' : '#3880ff'}
-              strokeWidth={2}
-              dash={[6, 4]}
-            />
+            <>
+              <Line
+                points={flatPoints(previewLine)}
+                stroke={nearStart ? '#2dd36f' : '#3880ff'}
+                strokeWidth={2}
+                dash={[6, 4]}
+              />
+              <Text
+                x={(previewLine[0].x + previewLine[1].x) / 2}
+                y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
+                text={fmtM(pxToMeters(dist(previewLine[0], previewLine[1]), room.scale))}
+                fontSize={12}
+                fontStyle="bold"
+                fill={nearStart ? '#2dd36f' : '#fff'}
+                shadowColor="rgba(0,0,0,0.9)"
+                shadowBlur={4}
+                shadowOffsetX={1}
+                shadowOffsetY={1}
+                listening={false}
+              />
+            </>
           )}
 
           {/* Segment dimension labels */}
