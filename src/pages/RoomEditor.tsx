@@ -230,28 +230,6 @@ const RoomEditor: React.FC = () => {
             )}
 
 
-            {/* Empty state overlay */}
-            {room.points.length === 0 && canvasSize.width > 0 && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}>
-                <div style={{
-                  background: 'rgba(0,0,0,0.45)',
-                  backdropFilter: 'blur(6px)',
-                  borderRadius: 18, padding: '20px 28px', textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: 32, marginBottom: 10 }}>📐</div>
-                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
-                    Нажмите на холст
-                  </div>
-                  <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
-                    чтобы добавить точки контура
-                  </div>
-                </div>
-              </div>
-            )}
             </div>
           </div>{/* end canvas */}
 
