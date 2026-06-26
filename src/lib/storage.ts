@@ -165,6 +165,8 @@ export function createRoom(name: string): Room {
     fabric:   defaultFabric ? { ...defaultFabric } : null,
     profileSegments: [],
     lighting: [],
+    selectedAccessories: [],
+    selectedServices: [],
     areaSqm: 0,
     perimeterM: 0,
   };

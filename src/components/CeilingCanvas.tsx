@@ -15,6 +15,11 @@ interface Props {
   placingLighting?: LightingCatalogItem | null;
   inProgressLightingPath?: { x: number; y: number }[];
   onLightingTap?: (pt: { x: number; y: number }) => void;
+  onUndoLightingPoint?: () => void;
+  onRedoLightingPoint?: () => void;
+  canUndoLighting?: boolean;
+  canRedoLighting?: boolean;
+  onCancelPlacingLighting?: () => void;
   onOutOfBounds?: () => void;
 }
 
@@ -27,6 +32,11 @@ const CeilingCanvas: React.FC<Props> = ({
   placingLighting = null,
   inProgressLightingPath = [],
   onLightingTap,
+  onUndoLightingPoint,
+  onRedoLightingPoint,
+  canUndoLighting = false,
+  canRedoLighting = false,
+  onCancelPlacingLighting,
   onOutOfBounds,
 }) => {
   const [points, setPoints] = useState<Point[]>(room.points);
@@ -35,9 +45,12 @@ const CeilingCanvas: React.FC<Props> = ({
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
+  const [redoStack, setRedoStack] = useState<{ points: Point[]; closed: boolean }[]>([]);
   const isDragging = useRef(false);
   const lastTouch = useRef<Point | null>(null);
+  const lastMouse = useRef<Point | null>(null);
   const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const isTouching = useRef(false);
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
@@ -73,6 +86,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const finishPolygon = (pts: Point[]) => {
     const metrics = computeMetrics(pts);
+    setRedoStack([]);
     setPoints(pts);
     setClosed(true);
     setTool('move');
@@ -101,8 +115,10 @@ const CeilingCanvas: React.FC<Props> = ({
     if (points.length > 0) {
       const last = points[points.length - 1];
       const snappedAngle = snapAngle(last, snapped);
+      setRedoStack([]);
       setPoints(prev => [...prev, snappedAngle]);
     } else {
+      setRedoStack([]);
       setPoints([snapped]);
     }
   };
@@ -126,9 +142,14 @@ const CeilingCanvas: React.FC<Props> = ({
   });
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (isTouching.current) return;
     if (placingLighting) {
       const pos = getPointerPos(e);
       if (pos) handleTap(pos);
+      return;
+    }
+    if (tool === 'move') {
+      lastMouse.current = { x: e.evt.clientX, y: e.evt.clientY };
       return;
     }
     if (e.target !== stageRef.current && tool === 'draw') return;
@@ -139,6 +160,14 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (tool === 'move' && lastMouse.current) {
+      const dx = e.evt.clientX - lastMouse.current.x;
+      const dy = e.evt.clientY - lastMouse.current.y;
+      setViewport(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+      lastMouse.current = { x: e.evt.clientX, y: e.evt.clientY };
+      return;
+    }
+
     const pos = getPointerPos(e);
     if (!pos) return;
 
@@ -150,6 +179,10 @@ const CeilingCanvas: React.FC<Props> = ({
     if (tool !== 'draw' || points.length === 0 || closed) return;
     const last = points[points.length - 1];
     setCursor(snapAngle(last, snapToGrid(pos)));
+  };
+
+  const handleStageMouseUp = () => {
+    lastMouse.current = null;
   };
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -169,6 +202,8 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const handleTouchStart = (e: Konva.KonvaEventObject<TouchEvent>) => {
     const touches = e.evt.touches;
+    isTouching.current = true;
+    lastMouse.current = null;
     if (touches.length === 2) {
       const stage = stageRef.current;
       const rect = stage?.container().getBoundingClientRect();
@@ -192,6 +227,7 @@ const CeilingCanvas: React.FC<Props> = ({
       if (!pos) return;
       const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
       handleTap(pt);
+      setCursor(null);
     } else {
       lastTouch.current = { x: touches[0].clientX, y: touches[0].clientY };
     }
@@ -235,10 +271,12 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (tool === 'draw' && points.length > 0 && !closed && pos) {
-      const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+    if (tool === 'draw' && points.length > 0 && !closed && touches.length === 1) {
+      const rect = stage.container().getBoundingClientRect();
+      const tx = (touches[0].clientX - rect.left - viewport.x) / viewport.scale;
+      const ty = (touches[0].clientY - rect.top  - viewport.y) / viewport.scale;
       const last = points[points.length - 1];
-      setCursor(snapAngle(last, snapToGrid(pt)));
+      setCursor(snapAngle(last, snapToGrid({ x: tx, y: ty })));
     } else if (tool === 'move' && lastTouch.current && touches.length === 1) {
       const ddx = touches[0].clientX - lastTouch.current.x;
       const ddy = touches[0].clientY - lastTouch.current.y;
@@ -250,9 +288,12 @@ const CeilingCanvas: React.FC<Props> = ({
   const handleTouchEnd = () => {
     pinchRef.current = null;
     lastTouch.current = null;
+    // small delay so the ghost mousedown that fires after touchend is still blocked
+    setTimeout(() => { isTouching.current = false; }, 300);
   };
 
   const handleReset = () => {
+    setRedoStack([]);
     setPoints([]);
     setClosed(false);
     setCursor(null);
@@ -261,12 +302,22 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleUndoPoint = () => {
+    setRedoStack(prev => [...prev, { points, closed }]);
     if (closed) {
       setClosed(false);
       setTool('draw');
       return;
     }
     setPoints(prev => prev.slice(0, -1));
+  };
+
+  const handleRedoPoint = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setPoints(next.points);
+    setClosed(next.closed);
+    setTool(next.closed ? 'move' : 'draw');
   };
 
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
@@ -299,40 +350,23 @@ const CeilingCanvas: React.FC<Props> = ({
     ? [lastPathPt, cursor]
     : null;
 
-  return (
-    <div style={{ position: 'relative', background: '#1a1a2e', borderRadius: 12, overflow: 'hidden' }}>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: 'rgba(0,0,0,0.4)', alignItems: 'center' }}>
-        {!placingLighting && (
-          <button
-            onClick={() => setTool(t => t === 'draw' ? 'move' : 'draw')}
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-              background: tool === 'draw' ? '#3880ff' : 'rgba(255,255,255,0.15)',
-              color: '#fff',
-            }}
-          >
-            {tool === 'draw' ? '✏️ Рисую' : '✋ Перемещение'}
-          </button>
-        )}
-        {placingLighting && (
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-            Размещение: {placingLighting.symbol} {placingLighting.title}
-          </span>
-        )}
-        <div style={{ flex: 1 }} />
-        {!placingLighting && points.length > 0 && (
-          <button onClick={handleUndoPoint} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
-            ↩ Отмена
-          </button>
-        )}
-        {!placingLighting && points.length > 0 && (
-          <button onClick={handleReset} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, background: 'rgba(220,50,50,0.6)', color: '#fff' }}>
-            🗑
-          </button>
-        )}
-      </div>
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (tool !== 'draw' || points.length === 0 || closed || placingLighting) return;
+    if (e.pointerType === 'touch' && pinchRef.current) return; // ignore during pinch
+    const stageEl = stageRef.current?.container();
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    const tx = (e.clientX - rect.left - viewport.x) / viewport.scale;
+    const ty = (e.clientY - rect.top  - viewport.y) / viewport.scale;
+    const last = points[points.length - 1];
+    setCursor(snapAngle(last, snapToGrid({ x: tx, y: ty })));
+  };
 
+  return (
+    <div
+      style={{ position: 'relative', background: '#1a1a2e', overflow: 'hidden' }}
+      onPointerMove={handlePointerMove}
+    >
       <Stage
         ref={stageRef}
         width={width}
@@ -343,6 +377,7 @@ const CeilingCanvas: React.FC<Props> = ({
         scaleY={viewport.scale}
         onMouseMove={handleStageMouseMove}
         onMouseDown={handleStageMouseDown}
+        onMouseUp={handleStageMouseUp}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -416,6 +451,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 stroke={i === 0 ? '#3880ff' : '#fff'}
                 strokeWidth={2}
                 draggable={closed && !placingLighting}
+                onDragStart={() => { lastMouse.current = null; }}
                 onDragMove={e => {
                   const newPts = [...points];
                   newPts[i] = { x: e.target.x(), y: e.target.y() };
@@ -496,6 +532,37 @@ const CeilingCanvas: React.FC<Props> = ({
           )}
         </Layer>
       </Stage>
+
+      {/* Floating undo/redo buttons */}
+      <div style={{
+        position: 'absolute', top: 8, right: 8,
+        display: 'flex', gap: 6,
+        pointerEvents: 'auto',
+      }}>
+        {placingLighting && (
+          <>
+            <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+              ↩
+            </button>
+            <button onClick={onRedoLightingPoint} disabled={!canRedoLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: canRedoLighting ? 'pointer' : 'default', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: canRedoLighting ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+              ↪
+            </button>
+            <button onClick={onCancelPlacingLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 16, background: 'rgba(220,50,50,0.6)', backdropFilter: 'blur(6px)', color: '#fff' }}>
+              ✕
+            </button>
+          </>
+        )}
+        {!placingLighting && points.length > 0 && (
+          <button onClick={handleUndoPoint} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: '#fff' }}>
+            ↩
+          </button>
+        )}
+        {!placingLighting && (
+          <button onClick={handleRedoPoint} disabled={redoStack.length === 0} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: redoStack.length === 0 ? 'default' : 'pointer', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: redoStack.length === 0 ? 'rgba(255,255,255,0.3)' : '#fff' }}>
+            ↪
+          </button>
+        )}
+      </div>
 
       {/* Empty state overlay */}
       {points.length === 0 && (

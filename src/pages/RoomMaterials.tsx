@@ -6,12 +6,12 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline, checkmarkOutline,
-  trashOutline, pencilOutline,
+  trashOutline, pencilOutline, addOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory } from '../types';
+import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
 import { edgeLengthM, edgeLabel } from '../lib/geometry';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
@@ -40,6 +40,8 @@ const RoomMaterials: React.FC = () => {
 
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
+  const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
+  const [addServiceOpen, setAddServiceOpen] = useState(false);
 
   const load = () => {
     const p = getProject(projectId);
@@ -104,6 +106,76 @@ const RoomMaterials: React.FC = () => {
   const deleteElement = (id: string) =>
     updateRoom({ lighting: (room.lighting ?? []).filter(e => e.id !== id) });
 
+  // ── Accessories ──
+  const roomAccessories = room.selectedAccessories ?? [];
+
+  const addAccessory = (acc: Accessory) => {
+    const existing = roomAccessories.find(a => a.accessoryId === acc.id);
+    if (existing) {
+      updateRoom({
+        selectedAccessories: roomAccessories.map(a =>
+          a.accessoryId === acc.id ? { ...a, quantity: a.quantity + 1 } : a
+        ),
+      });
+    } else {
+      const newItem: RoomAccessoryItem = {
+        id: crypto.randomUUID(),
+        accessoryId: acc.id,
+        accessory: { ...acc },
+        quantity: 1,
+      };
+      updateRoom({ selectedAccessories: [...roomAccessories, newItem] });
+    }
+  };
+
+  const changeAccessoryQty = (id: string, delta: number) => {
+    const updated = roomAccessories
+      .map(a => a.id === id ? { ...a, quantity: a.quantity + delta } : a)
+      .filter(a => a.quantity > 0);
+    updateRoom({ selectedAccessories: updated });
+  };
+
+  const removeAccessory = (id: string) =>
+    updateRoom({ selectedAccessories: roomAccessories.filter(a => a.id !== id) });
+
+  const accessoryTotal = roomAccessories.reduce((s, a) => s + a.accessory.price * a.quantity, 0);
+  const accessoryInstallTotal = roomAccessories.reduce((s, a) => s + a.accessory.priceInstall * a.quantity, 0);
+
+  // ── Services ──
+  const roomServices = room.selectedServices ?? [];
+
+  const addService = (svc: AdditionalService) => {
+    const existing = roomServices.find(s => s.serviceId === svc.id);
+    if (existing) {
+      updateRoom({
+        selectedServices: roomServices.map(s =>
+          s.serviceId === svc.id ? { ...s, quantity: s.quantity + 1 } : s
+        ),
+      });
+    } else {
+      const newItem: RoomServiceItem = {
+        id: crypto.randomUUID(),
+        serviceId: svc.id,
+        service: { ...svc },
+        quantity: 1,
+      };
+      updateRoom({ selectedServices: [...roomServices, newItem] });
+    }
+  };
+
+  const changeServiceQty = (id: string, delta: number) => {
+    const updated = roomServices
+      .map(s => s.id === id ? { ...s, quantity: s.quantity + delta } : s)
+      .filter(s => s.quantity > 0);
+    updateRoom({ selectedServices: updated });
+  };
+
+  const removeService = (id: string) =>
+    updateRoom({ selectedServices: roomServices.filter(s => s.id !== id) });
+
+  const serviceTotal = roomServices.reduce((s, a) => s + a.service.price * a.quantity, 0);
+  const serviceInstallTotal = roomServices.reduce((s, a) => s + a.service.priceInstall * a.quantity, 0);
+
   // ── Derived ──
   const corners = room.points.length;
   const segments = room.profileSegments ?? [];
@@ -148,9 +220,23 @@ const RoomMaterials: React.FC = () => {
           </IonButtons>
           <IonTitle>{meta.title}</IonTitle>
           <IonButtons slot="end">
-            <IonButton routerLink={backHref} routerDirection="back">
-              <IonIcon slot="icon-only" icon={checkmarkOutline} />
-            </IonButton>
+            {section === 'accessories' ? (
+              <IonButton onClick={() => setAddAccessoryOpen(true)} disabled={accessories.length === 0}>
+                <IonIcon slot="icon-only" icon={addOutline} />
+              </IonButton>
+            ) : section === 'services' ? (
+              <IonButton onClick={() => setAddServiceOpen(true)} disabled={services.length === 0}>
+                <IonIcon slot="icon-only" icon={addOutline} />
+              </IonButton>
+            ) : section === 'lighting' ? (
+              <IonButton onClick={() => router.push(`${backHref}?pickLighting=1`, 'back')}>
+                <IonIcon slot="icon-only" icon={addOutline} />
+              </IonButton>
+            ) : (
+              <IonButton routerLink={backHref} routerDirection="back">
+                <IonIcon slot="icon-only" icon={checkmarkOutline} />
+              </IonButton>
+            )}
           </IonButtons>
         </IonToolbar>
       </IonHeader>
@@ -321,122 +407,135 @@ const RoomMaterials: React.FC = () => {
 
         {/* ═══ ОСВЕЩЕНИЕ ═══ */}
         {section === 'lighting' && (
-          <div style={{ padding: '12px 16px 36px' }}>
-            <button
-              onClick={() => router.push(backHref, 'back')}
-              style={{
-                width: '100%', padding: '12px 16px', marginBottom: 12,
-                borderRadius: 14, border: '1.5px dashed rgba(30,136,229,0.4)',
-                background: 'rgba(30,136,229,0.04)',
-                color: '#1E88E5', fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', textAlign: 'center',
-              }}
-            >
-              + Разместить на чертеже
-            </button>
+          lighting.length === 0 ? (
+            <EmptyState
+              icon={bulbOutline}
+              iconColor="#F9A825"
+              iconBg="#FFFDE7"
+              text="Нет добавленных позиций"
+              sub="Разместите элементы освещения на чертеже помещения"
+              buttonLabel="Открыть чертёж"
+              buttonColor="#1E88E5"
+              onButton={() => router.push(`${backHref}?pickLighting=1`, 'back')}
+            />
+          ) : (
+            <div style={{ padding: '12px 16px 36px' }}>
+              {Object.values(lightingGroups).map(({ item, elements }) => {
+                const isPath = item.placement === 'path';
+                const totalLen = isPath
+                  ? elements.reduce((s, e) => s + (e as RoomLightingPath).lengthM, 0)
+                  : 0;
+                const total = isPath ? item.price * totalLen : item.price * elements.length;
 
-            {lighting.length === 0 ? (
-              <HintText text="Нет размещённых элементов" />
-            ) : (
-              <>
-                {Object.values(lightingGroups).map(({ item, elements }) => {
-                  const isPath = item.placement === 'path';
-                  const totalLen = isPath
-                    ? elements.reduce((s, e) => s + (e as RoomLightingPath).lengthM, 0)
-                    : 0;
-                  const total = isPath
-                    ? item.price * totalLen
-                    : item.price * elements.length;
-
-                  return (
-                    <div key={item.id} style={{
-                      background: '#fff', borderRadius: 16, marginBottom: 10,
-                      overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
+                return (
+                  <div key={item.id} style={{
+                    background: '#fff', borderRadius: 16, marginBottom: 10,
+                    overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
+                  }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px', borderBottom: '1px solid #F5F5F5',
                     }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '12px 16px',
-                        borderBottom: '1px solid #F5F5F5',
-                      }}>
-                        {isPath ? (
-                          <div style={{
-                            width: 28, height: 4, borderRadius: 2,
-                            background: lightColor(item.color), flexShrink: 0,
-                          }} />
-                        ) : (
-                          <span style={{ fontSize: 22, color: lightColor(item.color), lineHeight: 1 }}>
-                            {item.symbol}
-                          </span>
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
-                          <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
-                            {isPath
-                              ? `${totalLen.toFixed(2)} м · ${item.price} ₽/м = ${Math.round(total).toLocaleString('ru')} ₽`
-                              : `${elements.length} шт · ${item.price} ₽/шт = ${Math.round(total).toLocaleString('ru')} ₽`
-                            }
-                          </div>
+                      {isPath ? (
+                        <div style={{
+                          width: 28, height: 4, borderRadius: 2,
+                          background: lightColor(item.color), flexShrink: 0,
+                        }} />
+                      ) : (
+                        <span style={{ fontSize: 22, color: lightColor(item.color), lineHeight: 1 }}>
+                          {item.symbol}
+                        </span>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
+                        <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
+                          {isPath
+                            ? `${totalLen.toFixed(2)} м · ${item.price} ₽/м = ${Math.round(total).toLocaleString('ru')} ₽`
+                            : `${elements.length} шт · ${item.price} ₽/шт = ${Math.round(total).toLocaleString('ru')} ₽`
+                          }
                         </div>
                       </div>
-
-                      {elements.map((el, idx) => (
-                        <div key={el.id} style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '9px 16px',
-                          borderBottom: idx < elements.length - 1 ? '1px solid #F5F5F5' : 'none',
-                        }}>
-                          <span style={{ fontSize: 13, color: '#aaa' }}>
-                            {isPath
-                              ? `Линия ${idx + 1} · ${(el as RoomLightingPath).lengthM.toFixed(2)} м`
-                              : `Точка ${idx + 1}`
-                            }
-                          </span>
-                          <button
-                            onClick={() => deleteElement(el.id)}
-                            style={{
-                              background: 'none', border: 'none', padding: '4px 8px',
-                              cursor: 'pointer', color: '#E53935',
-                            }}
-                          >
-                            <IonIcon icon={trashOutline} style={{ fontSize: 17, display: 'block' }} />
-                          </button>
-                        </div>
-                      ))}
                     </div>
-                  );
-                })}
 
-                <div style={{ margin: '8px 0', padding: '12px 14px', background: '#F0F4FF', borderRadius: 12 }}>
-                  <PriceRow label="Стоимость освещения" value={Math.round(lightingTotal)} bold primary />
-                  {workerLighting > 0 && <PriceRow label="Монтаж" value={Math.round(workerLighting)} />}
-                </div>
-              </>
-            )}
-          </div>
+                    {elements.map((el, idx) => (
+                      <div key={el.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '9px 16px',
+                        borderBottom: idx < elements.length - 1 ? '1px solid #F5F5F5' : 'none',
+                      }}>
+                        <span style={{ fontSize: 13, color: '#aaa' }}>
+                          {isPath
+                            ? `Линия ${idx + 1} · ${(el as RoomLightingPath).lengthM.toFixed(2)} м`
+                            : `Точка ${idx + 1}`
+                          }
+                        </span>
+                        <button
+                          onClick={() => deleteElement(el.id)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 8px',
+                            cursor: 'pointer', color: '#E53935',
+                          }}
+                        >
+                          <IonIcon icon={trashOutline} style={{ fontSize: 17, display: 'block' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+
+              <div style={{ margin: '8px 0 12px', padding: '12px 14px', background: '#F0F4FF', borderRadius: 12 }}>
+                <PriceRow label="Стоимость освещения" value={Math.round(lightingTotal)} bold primary />
+                {workerLighting > 0 && <PriceRow label="Монтаж" value={Math.round(workerLighting)} />}
+              </div>
+
+              <button
+                onClick={() => router.push(`${backHref}?pickLighting=1`, 'back')}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 16,
+                  background: '#fff', border: '2px dashed #1E88E5',
+                  color: '#1E88E5', fontWeight: 600, fontSize: 15,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
+                Разместить ещё на чертеже
+              </button>
+            </div>
+          )
         )}
 
         {/* ═══ КОМПЛЕКТУЮЩИЕ ═══ */}
         {section === 'accessories' && (
-          <div style={{ padding: '12px 16px 36px' }}>
-            {accessories.length === 0 ? (
-              <div>
-                <HintText text="Нет позиций — добавьте в Ценники → Комплектующие" />
-                <button
-                  onClick={() => router.push('/tabs/price-list')}
-                  style={{
-                    marginTop: 8, padding: '10px 18px', borderRadius: 12,
-                    border: '1.5px solid #2E7D32', background: 'transparent',
-                    color: '#2E7D32', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  Открыть ценники →
-                </button>
-              </div>
-            ) : (
-              accessories.map(acc => (
-                <div key={acc.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  padding: '13px 16px', marginBottom: 8, borderRadius: 16,
+          accessories.length === 0 ? (
+            <EmptyState
+              icon={buildOutline}
+              iconColor="#2E7D32"
+              iconBg="#E8F5E9"
+              text="Нет комплектующих в ценнике"
+              sub="Добавьте позиции в Ценники → Комплектующие"
+              buttonLabel="Открыть ценники"
+              buttonColor="#2E7D32"
+              onButton={() => router.push('/tabs/price-list')}
+            />
+          ) : roomAccessories.length === 0 ? (
+            <EmptyState
+              icon={buildOutline}
+              iconColor="#2E7D32"
+              iconBg="#E8F5E9"
+              text="Нет добавленных позиций"
+              sub="Нажмите кнопку, чтобы добавить позиции к помещению"
+              buttonLabel="Добавить комплектующее"
+              buttonColor="#2E7D32"
+              onButton={() => setAddAccessoryOpen(true)}
+            />
+          ) : (
+            <div style={{ padding: '12px 16px 36px' }}>
+              {roomAccessories.map(item => (
+                <div key={item.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', marginBottom: 8, borderRadius: 16,
                   background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
                 }}>
                   <div style={{
@@ -447,65 +546,195 @@ const RoomMaterials: React.FC = () => {
                   }}>
                     <IonIcon icon={buildOutline} style={{ fontSize: 18, color: '#2E7D32' }} />
                   </div>
+
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{acc.title}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.accessory.title}</div>
                     <div style={{ fontSize: 12, color: '#999' }}>
-                      {acc.price.toLocaleString('ru')} ₽/{acc.unit}
-                      {acc.priceInstall > 0 && ` · монтаж ${acc.priceInstall.toLocaleString('ru')} ₽`}
+                      {item.accessory.price.toLocaleString('ru')} ₽/{item.accessory.unit}
+                      {' · итого '}
+                      <span style={{ color: '#2E7D32', fontWeight: 600 }}>
+                        {(item.accessory.price * item.quantity).toLocaleString('ru')} ₽
+                      </span>
                     </div>
                   </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => changeAccessoryQty(item.id, -1)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        border: '1.5px solid #ddd', background: '#fafafa',
+                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#666',
+                      }}
+                    >−</button>
+                    <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => changeAccessoryQty(item.id, 1)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        border: '1.5px solid #2E7D32', background: '#E8F5E9',
+                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#2E7D32',
+                      }}
+                    >+</button>
+                  </div>
+
+                  <button
+                    onClick={() => removeAccessory(item.id)}
+                    style={{
+                      background: 'none', border: 'none', padding: '4px 0 4px 4px',
+                      cursor: 'pointer', color: '#E53935', flexShrink: 0,
+                    }}
+                  >
+                    <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
+                  </button>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+
+              <div style={{ padding: '10px 14px', background: '#F0F4FF', borderRadius: 12, marginBottom: 12 }}>
+                <PriceRow label="Стоимость комплектующих" value={Math.round(accessoryTotal)} bold primary />
+                {accessoryInstallTotal > 0 && (
+                  <PriceRow label="Монтаж" value={Math.round(accessoryInstallTotal)} />
+                )}
+              </div>
+
+              <button
+                onClick={() => setAddAccessoryOpen(true)}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 16,
+                  background: '#fff', border: '2px dashed #2E7D32',
+                  color: '#2E7D32', fontWeight: 600, fontSize: 15,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
+                Добавить комплектующее
+              </button>
+            </div>
+          )
         )}
 
         {/* ═══ ДОП. УСЛУГИ ═══ */}
         {section === 'services' && (
-          <div style={{ padding: '12px 16px 36px' }}>
-            {services.length === 0 ? (
-              <div>
-                <HintText text="Нет позиций — добавьте в Ценники → Услуги" />
-                <button
-                  onClick={() => router.push('/tabs/price-list')}
-                  style={{
-                    marginTop: 8, padding: '10px 18px', borderRadius: 12,
-                    border: '1.5px solid #1E88E5', background: 'transparent',
-                    color: '#1E88E5', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  Открыть ценники →
-                </button>
-              </div>
-            ) : (
-              services.map(svc => (
-                <div key={svc.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 14,
-                  padding: '13px 16px', marginBottom: 8, borderRadius: 16,
+          services.length === 0 ? (
+            <EmptyState
+              icon={briefcaseOutline}
+              iconColor="#C62828"
+              iconBg="#FFF0F0"
+              text="Нет услуг в ценнике"
+              sub="Добавьте позиции в Ценники → Доп. услуги"
+              buttonLabel="Открыть ценники"
+              buttonColor="#1E88E5"
+              onButton={() => router.push('/tabs/price-list')}
+            />
+          ) : roomServices.length === 0 ? (
+            <EmptyState
+              icon={briefcaseOutline}
+              iconColor="#C62828"
+              iconBg="#FFF0F0"
+              text="Нет добавленных позиций"
+              sub="Нажмите кнопку, чтобы добавить услуги к помещению"
+              buttonLabel="Добавить услугу"
+              buttonColor="#C62828"
+              onButton={() => setAddServiceOpen(true)}
+            />
+          ) : (
+            <div style={{ padding: '12px 16px 36px' }}>
+              {roomServices.map(item => (
+                <div key={item.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', marginBottom: 8, borderRadius: 16,
                   background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
                 }}>
                   <div style={{
                     width: 38, height: 38, borderRadius: 11,
-                    background: '#F0F4FF',
+                    background: '#FFF0F0',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
                     <IonIcon icon={briefcaseOutline} style={{ fontSize: 18, color: '#C62828' }} />
                   </div>
+
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{svc.title}</div>
-                    {svc.description && (
-                      <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>{svc.description}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.service.title}</div>
+                    {item.service.description && (
+                      <div style={{ fontSize: 11, color: '#bbb', marginBottom: 2 }}>{item.service.description}</div>
                     )}
                     <div style={{ fontSize: 12, color: '#999' }}>
-                      {svc.price.toLocaleString('ru')} ₽
-                      {svc.priceInstall > 0 && ` · монтаж ${svc.priceInstall.toLocaleString('ru')} ₽`}
+                      {item.service.price.toLocaleString('ru')} ₽
+                      {' · итого '}
+                      <span style={{ color: '#C62828', fontWeight: 600 }}>
+                        {(item.service.price * item.quantity).toLocaleString('ru')} ₽
+                      </span>
                     </div>
                   </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => changeServiceQty(item.id, -1)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        border: '1.5px solid #ddd', background: '#fafafa',
+                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#666',
+                      }}
+                    >−</button>
+                    <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => changeServiceQty(item.id, 1)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        border: '1.5px solid #C62828', background: '#FFF0F0',
+                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#C62828',
+                      }}
+                    >+</button>
+                  </div>
+
+                  <button
+                    onClick={() => removeService(item.id)}
+                    style={{
+                      background: 'none', border: 'none', padding: '4px 0 4px 4px',
+                      cursor: 'pointer', color: '#E53935', flexShrink: 0,
+                    }}
+                  >
+                    <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
+                  </button>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+
+              <div style={{ padding: '10px 14px', background: '#F0F4FF', borderRadius: 12, marginBottom: 12 }}>
+                <PriceRow label="Стоимость доп. услуг" value={Math.round(serviceTotal)} bold primary />
+                {serviceInstallTotal > 0 && (
+                  <PriceRow label="Монтаж" value={Math.round(serviceInstallTotal)} />
+                )}
+              </div>
+
+              <button
+                onClick={() => setAddServiceOpen(true)}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 16,
+                  background: '#fff', border: '2px dashed #C62828',
+                  color: '#C62828', fontWeight: 600, fontSize: 15,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
+                Добавить услугу
+              </button>
+            </div>
+          )
         )}
 
       </IonContent>
@@ -545,11 +774,73 @@ const RoomMaterials: React.FC = () => {
         ]}
         onDidDismiss={() => setApplyAllOpen(false)}
       />
+
+      {/* Accessory picker */}
+      <IonActionSheet
+        isOpen={addAccessoryOpen}
+        header="Добавить комплектующее"
+        buttons={[
+          ...accessories.map(acc => ({
+            text: `${acc.title} — ${acc.price.toLocaleString('ru')} ₽/${acc.unit}`,
+            handler: () => { addAccessory(acc); setAddAccessoryOpen(false); },
+          })),
+          { text: 'Отмена', role: 'cancel' as const },
+        ]}
+        onDidDismiss={() => setAddAccessoryOpen(false)}
+      />
+
+      {/* Service picker */}
+      <IonActionSheet
+        isOpen={addServiceOpen}
+        header="Добавить услугу"
+        buttons={[
+          ...services.map(svc => ({
+            text: `${svc.title} — ${svc.price.toLocaleString('ru')} ₽`,
+            handler: () => { addService(svc); setAddServiceOpen(false); },
+          })),
+          { text: 'Отмена', role: 'cancel' as const },
+        ]}
+        onDidDismiss={() => setAddServiceOpen(false)}
+      />
     </IonPage>
   );
 };
 
 // ── UI helpers ──
+
+const EmptyState: React.FC<{
+  icon: string; iconColor: string; iconBg: string;
+  text: string; sub: string;
+  buttonLabel: string; buttonColor: string; onButton: () => void;
+}> = ({ icon, iconColor, iconBg, text, sub, buttonLabel, buttonColor, onButton }) => (
+  <div style={{
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    padding: '60px 32px', textAlign: 'center', gap: 12,
+  }}>
+    <div style={{
+      width: 64, height: 64, borderRadius: 20,
+      background: iconBg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      marginBottom: 4,
+    }}>
+      <IonIcon icon={icon} style={{ fontSize: 30, color: iconColor }} />
+    </div>
+    <div style={{ fontWeight: 700, fontSize: 16, color: '#333' }}>{text}</div>
+    <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.4 }}>{sub}</div>
+    <button
+      onClick={onButton}
+      style={{
+        marginTop: 8, padding: '12px 24px', borderRadius: 14,
+        background: buttonColor, border: 'none',
+        color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}
+    >
+      <IonIcon icon={addOutline} style={{ fontSize: 18 }} />
+      {buttonLabel}
+    </button>
+  </div>
+);
 
 const HintText: React.FC<{ text: string }> = ({ text }) => (
   <p style={{ fontSize: 13, color: '#c0c0c0', margin: '0 0 8px' }}>{text}</p>

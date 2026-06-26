@@ -34,7 +34,9 @@ const calcRoomClientPrice = (room: Room) => {
   const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
   const p = (room.profileSegments ?? []).reduce((s, seg) => s + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
   const l = (room.lighting ?? []).reduce((s, e) => s + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
-  return f + p + l;
+  const a = (room.selectedAccessories ?? []).reduce((s, a) => s + a.accessory.price * a.quantity, 0);
+  const sv = (room.selectedServices ?? []).reduce((s, sv) => s + sv.service.price * sv.quantity, 0);
+  return f + p + l + a + sv;
 };
 
 const ProjectDetail: React.FC = () => {

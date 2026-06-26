@@ -17,7 +17,9 @@ const calcClient = (room: Room) => {
   const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
   const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
   const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
-  return { fabric: f, profile: p, lighting: l, total: f + p + l };
+  const a = (room.selectedAccessories ?? []).reduce((sum, a) => sum + a.accessory.price * a.quantity, 0);
+  const sv = (room.selectedServices ?? []).reduce((sum, s) => sum + s.service.price * s.quantity, 0);
+  return { fabric: f, profile: p, lighting: l, accessories: a, services: sv, total: f + p + l + a + sv };
 };
 
 const calcWorker = (room: Room) => {
@@ -25,7 +27,9 @@ const calcWorker = (room: Room) => {
   const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * c : 0;
   const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.priceInstall * seg.lengthM, 0);
   const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as any).lengthM), 0);
-  return f + p + l;
+  const a = (room.selectedAccessories ?? []).reduce((sum, a) => sum + a.accessory.priceInstall * a.quantity, 0);
+  const sv = (room.selectedServices ?? []).reduce((sum, s) => sum + s.service.priceInstall * s.quantity, 0);
+  return f + p + l + a + sv;
 };
 
 const Summary: React.FC = () => {

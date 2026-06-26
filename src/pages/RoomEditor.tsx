@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonRange,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonRange, IonActionSheet, IonAlert,
   useIonToast, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
 import {
-  chevronBackOutline, checkmarkOutline,
+  chevronBackOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
+  closeOutline, ellipsisVerticalOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/storage';
@@ -33,9 +34,17 @@ const RoomEditor: React.FC = () => {
 
   const [placingLighting, setPlacingLighting] = useState<LightingCatalogItem | null>(null);
   const [lightingPathPts, setLightingPathPts] = useState<{ x: number; y: number }[]>([]);
+  const [lightingRedoStack, setLightingRedoStack] = useState<{ x: number; y: number }[]>([]);
+  const [lightingHistory, setLightingHistory] = useState<(RoomLightingPoint | RoomLightingPath)[]>([]);
+  const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [canvasKey, setCanvasKey] = useState(0);
 
   const load = () => {
     const p = getProject(projectId);
@@ -47,7 +56,12 @@ const RoomEditor: React.FC = () => {
   };
 
   useEffect(() => { load(); }, [projectId, roomId]);
-  useIonViewWillEnter(() => { load(); });
+  useIonViewWillEnter(() => {
+    load();
+    if (new URLSearchParams(window.location.search).get('pickLighting') === '1') {
+      setLightingPickerOpen(true);
+    }
+  });
 
   // Set up ResizeObserver after room is loaded (ref is null until JSX renders)
   useEffect(() => {
@@ -64,7 +78,7 @@ const RoomEditor: React.FC = () => {
     return () => obs.disconnect();
   }, [room?.id]);
 
-  useEffect(() => { setLightingPathPts([]); }, [placingLighting?.id]);
+  useEffect(() => { setLightingPathPts([]); setLightingRedoStack([]); setLightingHistory([]); }, [placingLighting?.id]);
 
   if (!project || !room) return null;
 
@@ -109,6 +123,24 @@ const RoomEditor: React.FC = () => {
     upsertProject(proj);
   };
 
+  const clearDrawing = () => {
+    updateRoom({ points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [] });
+    setLightingPathPts([]);
+    setLightingRedoStack([]);
+    setPlacingLighting(null);
+    setCanvasKey(k => k + 1);
+  };
+
+  const deleteRoom = () => {
+    const proj = {
+      ...project,
+      rooms: project.rooms.filter(r => r.id !== roomId),
+      updatedAt: new Date().toISOString(),
+    };
+    upsertProject(proj);
+    router.push(`/project/${projectId}`, 'back');
+  };
+
   const handleLightingTap = (pt: { x: number; y: number }) => {
     if (!placingLighting) return;
     if (placingLighting.placement === 'point') {
@@ -118,9 +150,37 @@ const RoomEditor: React.FC = () => {
         x: pt.x, y: pt.y,
       };
       updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
+      setLightingHistory(prev => [...prev, newEl]);
     } else {
+      setLightingRedoStack([]);
       setLightingPathPts(prev => [...prev, pt]);
     }
+  };
+
+  const handleUndoLightingPoint = () => {
+    if (lightingPathPts.length > 0) {
+      const last = lightingPathPts[lightingPathPts.length - 1];
+      setLightingRedoStack(prev => [...prev, last]);
+      setLightingPathPts(prev => prev.slice(0, -1));
+    } else if (lightingHistory.length > 0) {
+      const last = lightingHistory[lightingHistory.length - 1];
+      setLightingHistory(prev => prev.slice(0, -1));
+      updateRoom({ lighting: (room.lighting ?? []).filter(e => e.id !== last.id) });
+    }
+  };
+
+  const handleRedoLightingPoint = () => {
+    if (lightingRedoStack.length === 0) return;
+    const next = lightingRedoStack[lightingRedoStack.length - 1];
+    setLightingRedoStack(prev => prev.slice(0, -1));
+    setLightingPathPts(prev => [...prev, next]);
+  };
+
+  const handleCancelPlacingLighting = () => {
+    setPlacingLighting(null);
+    setLightingPathPts([]);
+    setLightingRedoStack([]);
+    setLightingHistory([]);
   };
 
   const finishLightingPath = () => {
@@ -134,6 +194,7 @@ const RoomEditor: React.FC = () => {
       points: lightingPathPts, lengthM: pxToMeters(totalPx, room.scale),
     };
     updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
+    setLightingHistory(prev => [...prev, newEl]);
     setLightingPathPts([]);
   };
 
@@ -149,8 +210,8 @@ const RoomEditor: React.FC = () => {
           </IonButtons>
           <IonTitle>{room.name}</IonTitle>
           <IonButtons slot="end">
-            <IonButton routerLink={`/project/${projectId}`} routerDirection="back">
-              <IonIcon slot="icon-only" icon={checkmarkOutline} />
+            <IonButton fill="clear" onClick={() => setMenuOpen(true)}>
+              <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
@@ -215,6 +276,7 @@ const RoomEditor: React.FC = () => {
             >
             {canvasSize.width > 0 && canvasSize.height > 0 && (
               <CeilingCanvas
+                key={canvasKey}
                 room={room}
                 onChange={updateRoom}
                 width={canvasSize.width}
@@ -222,6 +284,11 @@ const RoomEditor: React.FC = () => {
                 placingLighting={placingLighting}
                 inProgressLightingPath={lightingPathPts}
                 onLightingTap={handleLightingTap}
+                onUndoLightingPoint={handleUndoLightingPoint}
+                onRedoLightingPoint={handleRedoLightingPoint}
+                canUndoLighting={lightingPathPts.length > 0 || lightingHistory.length > 0}
+                canRedoLighting={lightingRedoStack.length > 0}
+                onCancelPlacingLighting={handleCancelPlacingLighting}
                 onOutOfBounds={() => presentToast({
                   message: 'Нельзя разместить за пределами помещения',
                   duration: 1500, position: 'bottom', color: 'danger',
@@ -241,6 +308,40 @@ const RoomEditor: React.FC = () => {
             padding: '12px 16px',
             paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
           }}>
+
+            {/* Path lighting finish bar */}
+            {isPlacingPath && lightingPathPts.length >= 2 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                marginBottom: 12, padding: '10px 14px',
+                background: 'rgba(249,168,37,0.12)',
+                borderRadius: 14,
+                border: '1px solid rgba(249,168,37,0.3)',
+              }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                  {placingLighting?.title} · {lightingPathPts.length} точек
+                </span>
+                <button
+                  onClick={() => { setPlacingLighting(null); setLightingPathPts([]); }}
+                  style={{
+                    background: 'none', border: 'none', padding: 4,
+                    cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
+                  }}
+                >
+                  <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
+                </button>
+                <button
+                  onClick={finishLightingPath}
+                  style={{
+                    padding: '6px 14px', borderRadius: 10,
+                    background: '#F9A825', border: 'none',
+                    color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  }}
+                >
+                  Готово
+                </button>
+              </div>
+            )}
 
             {/* Scale row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: room.areaSqm > 0 ? 12 : 0 }}>
@@ -284,9 +385,108 @@ const RoomEditor: React.FC = () => {
             )}
           </div>
         </div>
+
+      {/* ── Right-side drawer menu ── */}
+      {menuOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}
+          />
+          <div style={{
+            position: 'relative', zIndex: 1,
+            width: 240,
+            height: '100%',
+            background: '#16182a',
+            boxShadow: '-8px 0 40px rgba(0,0,0,0.6)',
+            display: 'flex', flexDirection: 'column',
+            paddingTop: 'max(60px, env(safe-area-inset-top, 60px))',
+          }}>
+            <div style={{ padding: '0 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                Помещение
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 4 }}>{room.name}</div>
+            </div>
+            <div style={{ flex: 1, paddingTop: 8 }}>
+              <MenuAction
+                label="Редактировать название"
+                color="#1E88E5"
+                onClick={() => { setMenuOpen(false); setRenameOpen(true); }}
+              />
+              <MenuAction
+                label="Очистить чертёж"
+                color="#F9A825"
+                onClick={() => { setMenuOpen(false); clearDrawing(); }}
+              />
+              <MenuAction
+                label="Удалить помещение"
+                color="#E53935"
+                onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rename alert ── */}
+      <IonAlert
+        isOpen={renameOpen}
+        header="Название помещения"
+        inputs={[{ name: 'name', type: 'text', value: room.name, placeholder: 'Введите название' }]}
+        buttons={[
+          { text: 'Отмена', role: 'cancel' },
+          {
+            text: 'Сохранить',
+            handler: (data: { name: string }) => {
+              const name = data.name?.trim();
+              if (name) updateRoom({ name });
+            },
+          },
+        ]}
+        onDidDismiss={() => setRenameOpen(false)}
+      />
+
+      {/* ── Delete confirmation ── */}
+      <IonAlert
+        isOpen={deleteConfirmOpen}
+        header="Удалить помещение?"
+        message={`Помещение «${room.name}» и все его данные будут удалены.`}
+        buttons={[
+          { text: 'Отмена', role: 'cancel' },
+          { text: 'Удалить', role: 'destructive', handler: deleteRoom },
+        ]}
+        onDidDismiss={() => setDeleteConfirmOpen(false)}
+      />
+
+      <IonActionSheet
+        isOpen={lightingPickerOpen}
+        header="Выберите элемент освещения"
+        buttons={[
+          ...lightings.map(l => ({
+            text: `${l.symbol}  ${l.title} — ${l.price.toLocaleString('ru')} ₽/${l.placement === 'path' ? 'м' : 'шт'}`,
+            handler: () => { setPlacingLighting(l); setLightingPickerOpen(false); },
+          })),
+          { text: 'Отмена', role: 'cancel' as const },
+        ]}
+        onDidDismiss={() => setLightingPickerOpen(false)}
+      />
     </IonPage>
   );
 };
+
+const MenuAction: React.FC<{ label: string; color: string; onClick: () => void }> = ({ label, color, onClick }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'block', width: '100%', padding: '16px 24px',
+      background: 'none', border: 'none', cursor: 'pointer',
+      textAlign: 'left', fontSize: 16, fontWeight: 600, color,
+    }}
+  >
+    {label}
+  </button>
+);
 
 const StatBadge: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div style={{

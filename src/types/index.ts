@@ -24,12 +24,26 @@ export interface AdditionalService {
   description: string;
 }
 
+export interface RoomServiceItem {
+  id: string;
+  serviceId: string;
+  service: AdditionalService;
+  quantity: number;
+}
+
 export interface Accessory {
   id: string;
   title: string;
   price: number;
   priceInstall: number;
   unit: string;
+}
+
+export interface RoomAccessoryItem {
+  id: string;
+  accessoryId: string;
+  accessory: Accessory;
+  quantity: number;
 }
 
 // --- Lighting catalog ---
@@ -83,6 +97,8 @@ export interface Room {
   fabric: CatalogItem | null;
   profileSegments: RoomProfileSegment[];
   lighting: RoomLightingElement[];
+  selectedAccessories: RoomAccessoryItem[];
+  selectedServices: RoomServiceItem[];
   areaSqm: number;
   perimeterM: number;
 }
