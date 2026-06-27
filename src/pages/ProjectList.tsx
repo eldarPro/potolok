@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonFab, IonFabButton, IonIcon, IonItem,
-  IonItemSliding, IonItemOptions, IonItemOption, IonButton,
+  IonItemSliding, IonItemOptions, IonItemOption,
+  useIonViewWillEnter,
 } from '@ionic/react';
-import { add, trashOutline } from 'ionicons/icons';
+import { add, trashOutline, folderOpenOutline, locationOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
 import { Project } from '../types';
+import ActionButton from '../components/ActionButton';
+import './ProjectList.css';
 
 const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
 
@@ -28,7 +31,7 @@ const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
 
   const refresh = () => setProjects(loadProjects());
-  useEffect(() => { refresh(); }, []);
+  useIonViewWillEnter(() => { refresh(); });
 
   const handleDelete = (id: string) => {
     deleteProject(id);
@@ -45,34 +48,24 @@ const ProjectList: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
+      <IonContent className="project-list-content">
         {projects.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', height: '75vh', gap: 20, padding: '0 32px',
-          }}>
-            <div style={{
-              width: 88, height: 88, borderRadius: 28,
-              background: '#E3F2FD',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44,
-            }}>
-              📐
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 8, color: '#1a1a1a' }}>
-                Проектов пока нет
+          <div className="project-list-empty">
+            <div className="empty-state">
+              <div className="empty-state__icon-wrap">
+                <IonIcon icon={folderOpenOutline} />
               </div>
-              <div style={{ fontSize: 14, color: '#999', lineHeight: 1.6 }}>
+              <p className="empty-state__title">Проектов пока нет</p>
+              <p className="empty-state__subtitle">
                 Создайте первый проект, чтобы начать замер и расчёт натяжных потолков
-              </div>
+              </p>
+              <ActionButton solid routerLink="/new-project">
+                Создать проект
+              </ActionButton>
             </div>
-            <IonButton routerLink="/new-project" style={{ '--border-radius': '14px', '--padding-start': '24px', '--padding-end': '24px' } as any}>
-              <IonIcon slot="start" icon={add} />
-              Создать проект
-            </IonButton>
           </div>
         ) : (
-          <div style={{ paddingTop: 8, paddingBottom: 88 }}>
+          <div className="card-list" style={{ paddingBottom: 88 }}>
             {projects.map(p => {
               const sqm = totalSqm(p);
               const initials = getInitials(p.clientName);
@@ -84,59 +77,27 @@ const ProjectList: React.FC = () => {
                     detail={false}
                     routerLink={`/project/${p.id}`}
                     lines="none"
-                    style={{
-                      '--background': 'transparent',
-                      '--padding-start': '0',
-                      '--padding-end': '0',
-                      '--inner-padding-end': '0',
-                    } as any}
+                    className="project-list-item"
                   >
-                    <div style={{
-                      margin: '0 16px 10px',
-                      padding: '14px 16px',
-                      background: '#fff',
-                      borderRadius: 18,
-                      boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      width: 'calc(100% - 32px)',
-                    }}>
-                      <div style={{
-                        width: 48, height: 48, borderRadius: 15,
-                        background: avatarColor,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#fff', fontWeight: 700, fontSize: 17, flexShrink: 0,
-                        letterSpacing: 0.5,
-                      }}>
+                    <div className="project-card card">
+                      <div className="avatar" style={{ background: avatarColor }}>
                         {initials}
                       </div>
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontWeight: 700, fontSize: 15, marginBottom: 3,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {p.clientName || 'Без имени'}
-                        </div>
-                        <div style={{
-                          fontSize: 12, color: '#999',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
+                      <div className="project-card__body">
+                        <div className="project-card__name">{p.clientName || 'Без имени'}</div>
+                        <div className="project-card__address">
+                          <IonIcon icon={locationOutline} className="project-card__address-icon" />
                           {p.address || 'Адрес не указан'}
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
-                        <div style={{
-                          background: '#E3F2FD', color: '#1E88E5',
-                          borderRadius: 9, padding: '3px 9px',
-                          fontSize: 12, fontWeight: 600,
-                        }}>
+                      <div className="project-card__meta">
+                        <span className="chip">
                           {p.rooms.length} {roomWord(p.rooms.length)}
-                        </div>
+                        </span>
                         {sqm > 0 && (
-                          <div style={{ fontSize: 12, color: '#aaa' }}>{sqm.toFixed(1)} м²</div>
+                          <span className="project-card__sqm">{sqm.toFixed(1)} м²</span>
                         )}
                       </div>
                     </div>

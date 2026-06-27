@@ -1,38 +1,66 @@
-/* For information on how to create your own theme, please refer to:
-http://ionicframework.com/docs/theming/ */
+/* http://ionicframework.com/docs/theming/ */
 
 :root {
-  --ion-color-primary: #1E88E5;
-  --ion-color-primary-rgb: 30, 136, 229;
+  /* Brand */
+  --color-primary: #1E88E5;
+  --color-primary-rgb: 30, 136, 229;
+  --color-primary-light: #E3F2FD;
+  --color-primary-dark: #1565C0;
+
+  /* Surfaces */
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+
+  /* Text */
+  --color-text: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+
+  /* Borders */
+  --color-border: #E5E7EB;
+
+  /* Semantic */
+  --color-danger: #EF4444;
+
+  /* Radius */
+  --radius-card: 16px;
+  --radius-sm: 10px;
+
+  /* Shadow */
+  --shadow-card: 0 1px 8px rgba(0, 0, 0, 0.08);
+
+  /* ── Ionic overrides ── */
+  --ion-color-primary: var(--color-primary);
+  --ion-color-primary-rgb: var(--color-primary-rgb);
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
   --ion-color-primary-shade: #1a78cc;
   --ion-color-primary-tint: #3594e8;
 
-  --ion-background-color: #F5F5F5;
-  --ion-background-color-rgb: 245, 245, 245;
+  --ion-background-color: var(--color-bg);
+  --ion-background-color-rgb: 247, 248, 250;
 
-  --ion-toolbar-background: #E3F2FD;
-  --ion-toolbar-color: #1E88E5;
+  --ion-toolbar-background: var(--color-surface);
+  --ion-toolbar-color: var(--color-text);
   --ion-toolbar-border-color: transparent;
 
-  --ion-tab-bar-background: #ffffff;
-  --ion-tab-bar-color: #aaaaaa;
-  --ion-tab-bar-color-selected: #1E88E5;
+  --ion-tab-bar-background: var(--color-surface);
+  --ion-tab-bar-color: var(--color-text-muted);
+  --ion-tab-bar-color-selected: var(--color-primary);
 
-  --ion-item-background: #ffffff;
+  --ion-item-background: var(--color-surface);
 
-  --ion-text-color: #1a1a1a;
-  --ion-text-color-rgb: 26, 26, 26;
+  --ion-text-color: var(--color-text);
+  --ion-text-color-rgb: 17, 24, 39;
 }
 
 ion-toolbar {
-  --background: linear-gradient(90deg, #ffffff 0%, #E3F2FD 100%);
+  --background: var(--color-surface);
 }
 
 ion-header {
   box-shadow: none !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07) !important;
+  border-bottom: 1px solid var(--color-border) !important;
 }
 
 ion-header::after {

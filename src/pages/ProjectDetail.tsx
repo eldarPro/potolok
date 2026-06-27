@@ -1,19 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon,
-  IonAlert, IonItem, IonItemSliding, IonItemOptions, IonItemOption,
-  useIonRouter,
+  IonModal, IonItem, IonItemSliding, IonItemOptions, IonItemOption,
+  useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
   chevronBackOutline, addOutline, trashOutline,
   documentTextOutline, chevronForwardOutline,
+  callOutline, locationOutline, squareOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom } from '../lib/storage';
 import { Project, Room } from '../types';
+import ActionButton from '../components/ActionButton';
+import './ProjectDetail.css';
 
 const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
+
+const RoomThumbnail: React.FC<{ points: { x: number; y: number }[] }> = ({ points }) => {
+  if (points.length < 3) return null;
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const w = maxX - minX || 1;
+  const h = maxY - minY || 1;
+  const PAD = 10;
+  const INNER = 32;
+  const sc = Math.min(INNER / w, INNER / h);
+  const ox = PAD + (INNER - w * sc) / 2;
+  const oy = PAD + (INNER - h * sc) / 2;
+  const poly = points.map(p => `${(p.x - minX) * sc + ox},${(p.y - minY) * sc + oy}`).join(' ');
+  const size = INNER + PAD * 2;
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ display: 'block' }}>
+      <polygon points={poly} fill="rgba(56,128,255,0.22)" stroke="#3880ff" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+};
 
 const getInitials = (name: string) => {
   if (!name?.trim()) return '?';
@@ -44,20 +69,37 @@ const ProjectDetail: React.FC = () => {
   const router = useIonRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [showNewRoom, setShowNewRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomError, setNewRoomError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const load = () => setProject(getProject(id));
   useEffect(() => { load(); }, [id]);
+  useIonViewWillEnter(() => { load(); });
 
   if (!project) return null;
 
-  const handleAddRoom = (name: string) => {
-    const roomName = name.trim() || `Помещение ${project.rooms.length + 1}`;
+  const handleAddRoom = () => {
+    const roomName = newRoomName.trim() || `Помещение ${project.rooms.length + 1}`;
+    if (project.rooms.some(r => r.name.toLowerCase() === roomName.toLowerCase())) {
+      setNewRoomError('Помещение с таким названием уже существует');
+      return;
+    }
     const room = createRoom(roomName);
     const updated = { ...project, rooms: [...project.rooms, room], updatedAt: new Date().toISOString() };
     upsertProject(updated);
     setProject(updated);
     setShowNewRoom(false);
+    setNewRoomName('');
+    setNewRoomError('');
     router.push(`/project/${id}/room/${room.id}`, 'forward', 'push');
+  };
+
+  const handleOpenNewRoom = () => {
+    setNewRoomName('');
+    setNewRoomError('');
+    setShowNewRoom(true);
+    setTimeout(() => inputRef.current?.focus(), 300);
   };
 
   const handleDeleteRoom = (roomId: string) => {
@@ -67,6 +109,7 @@ const ProjectDetail: React.FC = () => {
   };
 
   const totalSqm = project.rooms.reduce((s, r) => s + r.areaSqm, 0);
+  const totalPerimeterM = project.rooms.reduce((s, r) => s + r.perimeterM, 0);
   const totalPrice = project.rooms.reduce((s, r) => s + calcRoomClientPrice(r), 0);
   const initials = getInitials(project.clientName);
   const avatarColor = getAvatarColor(project.clientName);
@@ -81,93 +124,52 @@ const ProjectDetail: React.FC = () => {
           <IonTitle>{project.clientName || 'Проект'}</IonTitle>
           <IonButtons slot="end">
             <IonButton routerLink={`/project/${id}/summary`}>
-              <IonIcon slot="icon-only" icon={documentTextOutline} />
+              <IonIcon slot="icon-only" icon={documentTextOutline} style={{ color: '#4A90D9' }} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
-        {/* ── Hero ── */}
-        <div style={{
-          background: `linear-gradient(135deg, #1565C0 0%, ${avatarColor} 60%, #42A5F5 100%)`,
-          padding: '20px 20px 26px',
-          color: '#fff',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: project.address ? 12 : 16 }}>
-            <div style={{
-              width: 58, height: 58, borderRadius: 19,
-              background: 'rgba(255,255,255,0.2)',
-              border: '2px solid rgba(255,255,255,0.35)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22, fontWeight: 700, flexShrink: 0, letterSpacing: 0.5,
-            }}>
-              {initials}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, marginBottom: project.phone ? 4 : 0 }}>
-                {project.clientName || 'Проект'}
+      <IonContent className="project-detail-content">
+        {/* ── Client card ── */}
+        <div className="card-list" style={{ paddingBottom: 0 }}>
+          <div className="card project-detail-client-card">
+            <div className="project-detail-client-header">
+              <div className="avatar avatar--lg" style={{ background: avatarColor }}>
+                {initials}
               </div>
-              {project.phone && (
-                <div style={{ fontSize: 13, opacity: 0.85 }}>📞 {project.phone}</div>
-              )}
+              <div className="project-detail-client-info">
+                <div className="project-detail-client-name">{project.clientName || 'Проект'}</div>
+                {project.phone && (
+                  <div className="project-detail-client-meta">
+                    <IonIcon icon={callOutline} />
+                    {project.phone}
+                  </div>
+                )}
+                {project.address && (
+                  <div className="project-detail-client-meta">
+                    <IonIcon icon={locationOutline} />
+                    {project.address}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {project.address && (
-            <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 16, display: 'flex', gap: 6 }}>
-              <span>📍</span>
-              <span>{project.address}</span>
-            </div>
-          )}
-
-          {/* Stats row */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{
-              flex: 1, background: 'rgba(255,255,255,0.18)', borderRadius: 14,
-              padding: '10px 8px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{project.rooms.length}</div>
-              <div style={{ fontSize: 11, opacity: 0.82, marginTop: 3 }}>{roomWord(project.rooms.length)}</div>
-            </div>
-            {totalSqm > 0 && (
-              <div style={{
-                flex: 1, background: 'rgba(255,255,255,0.18)', borderRadius: 14,
-                padding: '10px 8px', textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{totalSqm.toFixed(1)}</div>
-                <div style={{ fontSize: 11, opacity: 0.82, marginTop: 3 }}>м²</div>
-              </div>
-            )}
-            {totalPrice > 0 && (
-              <div style={{
-                flex: 1.7, background: 'rgba(255,255,255,0.18)', borderRadius: 14,
-                padding: '10px 8px', textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>
-                  {Math.round(totalPrice).toLocaleString('ru')}
-                </div>
-                <div style={{ fontSize: 11, opacity: 0.82, marginTop: 3 }}>₽ ориентир.</div>
-              </div>
-            )}
           </div>
         </div>
 
         {/* ── Rooms header ── */}
-        <div style={{ padding: '20px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>Помещения</div>
-          {project.rooms.length > 0 && (
-            <div style={{ fontSize: 12, color: '#999' }}>{project.rooms.length} {roomWord(project.rooms.length)}</div>
-          )}
+        <div className="project-detail-section-header">
+          <div className="project-detail-section-title">Помещения</div>
         </div>
 
         {/* ── Room cards ── */}
         {project.rooms.length === 0 ? (
-          <div style={{ padding: '8px 16px 16px', textAlign: 'center', color: '#bbb', fontSize: 14 }}>
+          <div className="project-detail-no-rooms">
             Нет помещений — добавьте первое
           </div>
         ) : (
-          <div style={{ paddingBottom: 8 }}>
+          <div className="card-list" style={{ paddingTop: 0, paddingBottom: 8 }}>
             {project.rooms.map(room => {
               const roomPrice = calcRoomClientPrice(room);
               const drawn = room.areaSqm > 0;
@@ -178,46 +180,28 @@ const ProjectDetail: React.FC = () => {
                     detail={false}
                     routerLink={`/project/${id}/room/${room.id}`}
                     lines="none"
-                    style={{
-                      '--background': 'transparent',
-                      '--padding-start': '0',
-                      '--padding-end': '0',
-                      '--inner-padding-end': '0',
-                    } as any}
+                    className="project-detail-room-item"
                   >
-                    <div style={{
-                      margin: '0 16px 10px',
-                      padding: '14px 16px',
-                      background: '#fff',
-                      borderRadius: 18,
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
-                      width: 'calc(100% - 32px)',
-                      display: 'flex', alignItems: 'center', gap: 12,
-                    }}>
-                      <div style={{
-                        width: 42, height: 42, borderRadius: 13,
-                        background: drawn ? '#E3F2FD' : '#F5F5F5',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 20, flexShrink: 0,
-                      }}>
-                        {drawn ? '📐' : '⬜'}
+                    <div className="room-card card">
+                      <div className={`room-card__icon ${drawn ? 'room-card__icon--drawn' : ''}`}>
+                        {drawn ? <RoomThumbnail points={room.points} /> : <IonIcon icon={squareOutline} />}
                       </div>
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 5 }}>{room.name}</div>
+                      <div className="room-card__body">
+                        <div className="room-card__name">{room.name}</div>
                         {drawn ? (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            <Chip text={`${room.areaSqm.toFixed(1)} м²`} primary />
-                            <Chip text={`П ${room.perimeterM.toFixed(1)} м`} />
-                            {room.fabric && <Chip text={room.fabric.title} />}
+                          <div className="room-card__chips">
+                            <span className="chip">{room.areaSqm.toFixed(1)} м²</span>
+                            <span className="chip">{room.perimeterM.toFixed(1)} пог. м</span>
+                            {room.fabric && <span className="chip">{room.fabric.title}</span>}
                           </div>
                         ) : (
-                          <span style={{ fontSize: 12, color: '#c0c0c0' }}>Чертёж не начерчен</span>
+                          <span className="room-card__undrawned">Чертёж не начерчен</span>
                         )}
                       </div>
 
                       {roomPrice > 0 ? (
-                        <div style={{ fontWeight: 700, color: '#1E88E5', fontSize: 15, flexShrink: 0 }}>
+                        <div className="room-card__price">
                           {Math.round(roomPrice).toLocaleString('ru')} ₽
                         </div>
                       ) : (
@@ -238,49 +222,86 @@ const ProjectDetail: React.FC = () => {
         )}
 
         {/* ── Add room ── */}
-        <div style={{ padding: '8px 16px 36px' }}>
-          <button
-            onClick={() => setShowNewRoom(true)}
-            style={{
-              width: '100%', padding: '14px',
-              borderRadius: 18,
-              background: '#fff',
-              border: '2px dashed #1E88E5',
-              color: '#1E88E5', fontWeight: 600, fontSize: 15,
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
+        <div className="project-detail-add-room">
+          <ActionButton solid onClick={handleOpenNewRoom}>
             Добавить помещение
-          </button>
+          </ActionButton>
         </div>
 
-        <IonAlert
+        <IonModal
           isOpen={showNewRoom}
-          header="Новое помещение"
-          inputs={[{ name: 'name', type: 'text', placeholder: 'Зал, кухня, спальня...' }]}
-          buttons={[
-            { text: 'Отмена', role: 'cancel', handler: () => setShowNewRoom(false) },
-            { text: 'Добавить', handler: (data) => handleAddRoom(data.name ?? '') },
-          ]}
-          onDidDismiss={() => setShowNewRoom(false)}
-        />
+          onDidDismiss={() => { setShowNewRoom(false); setNewRoomName(''); setNewRoomError(''); }}
+          breakpoints={[0, 1]}
+          initialBreakpoint={1}
+          className="new-room-modal"
+        >
+          <div className="new-room-modal__content">
+            <div className="new-room-modal__handle" />
+            <div className="new-room-modal__header">
+              <div className="new-room-modal__title">Новое помещение</div>
+            </div>
+            <div className="new-room-modal__body">
+              <div className="new-room-modal__suggestions">
+                {['Зал', 'Гостиная', 'Кухня', 'Спальня', 'Детская', 'Прихожая', 'Ванная', 'Кабинет', 'Балкон'].map(s => (
+                  <button
+                    key={s}
+                    className={`new-room-modal__suggestion${newRoomName === s ? ' new-room-modal__suggestion--active' : ''}`}
+                    onClick={() => { setNewRoomName(s); inputRef.current?.focus(); }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <input
+                ref={inputRef}
+                className="new-room-modal__input"
+                type="text"
+                placeholder="Название"
+                value={newRoomName}
+                onChange={e => { setNewRoomName(e.target.value); setNewRoomError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddRoom(); }}
+              />
+              {newRoomError && <div className="new-room-modal__error">{newRoomError}</div>}
+            </div>
+            <div className="new-room-modal__footer">
+              <button
+                className="new-room-modal__btn new-room-modal__btn--cancel"
+                onClick={() => { setShowNewRoom(false); setNewRoomName(''); }}
+              >
+                Отмена
+              </button>
+              <ActionButton expand={false} solid onClick={handleAddRoom} className="new-room-modal__action-btn">
+                Добавить
+              </ActionButton>
+            </div>
+          </div>
+        </IonModal>
       </IonContent>
+
+      {totalSqm > 0 && (
+        <div className="project-detail-totals">
+          <div className="project-detail-totals__heading">Итого</div>
+          <div className="project-detail-totals__stat">
+            <span className="project-detail-totals__value">{totalSqm.toFixed(1)}</span>
+            <span className="project-detail-totals__label">м²</span>
+          </div>
+          {totalPerimeterM > 0 && (
+            <div className="project-detail-totals__stat">
+              <span className="project-detail-totals__value">{totalPerimeterM.toFixed(1)}</span>
+              <span className="project-detail-totals__label">пог. м</span>
+            </div>
+          )}
+          {totalPrice > 0 && (
+            <div className="project-detail-totals__stat project-detail-totals__stat--price">
+              <span className="project-detail-totals__value">{Math.round(totalPrice).toLocaleString('ru')} ₽</span>
+              <span className="project-detail-totals__label">ориентировочно</span>
+            </div>
+          )}
+        </div>
+      )}
     </IonPage>
   );
 };
-
-const Chip: React.FC<{ text: string; primary?: boolean }> = ({ text, primary }) => (
-  <span style={{
-    background: primary ? '#E3F2FD' : '#F5F5F5',
-    color: primary ? '#1E88E5' : '#777',
-    borderRadius: 8, padding: '2px 8px',
-    fontSize: 11, fontWeight: primary ? 600 : 400,
-  }}>
-    {text}
-  </span>
-);
 
 function roomWord(n: number): string {
   if (n % 10 === 1 && n % 100 !== 11) return 'помещение';

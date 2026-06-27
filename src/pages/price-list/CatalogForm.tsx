@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput,
-  IonToggle, IonButton, IonText, useIonRouter,
+  IonToggle, IonText, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { chevronBackOutline } from 'ionicons/icons';
 import { CatalogItem } from '../../types';
+import ActionButton from '../../components/ActionButton';
 import { loadFabrics, upsertFabric, loadProfiles, upsertProfile } from '../../lib/storage';
 
 interface Props {
@@ -131,9 +132,9 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
         )}
 
         <div style={{ padding: 16 }}>
-          <IonButton expand="block" onClick={handleSave}>
+          <ActionButton solid onClick={handleSave}>
             {isNew ? 'Добавить' : 'Сохранить'}
-          </IonButton>
+          </ActionButton>
         </div>
       </IonContent>
     </IonPage>

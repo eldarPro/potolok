@@ -12,6 +12,7 @@ import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 import '@ionic/react/css/palettes/dark.system.css';
 import './theme/variables.css';
+import './theme/global.css';
 
 import Tabs from './pages/Tabs';
 import NewProject from './pages/NewProject';

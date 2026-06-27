@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput,
-  IonButton, IonText, IonSelect, IonSelectOption, useIonRouter,
+  IonText, IonSelect, IonSelectOption, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { chevronBackOutline } from 'ionicons/icons';
 import { Accessory } from '../../types';
+import ActionButton from '../../components/ActionButton';
 import { loadAccessories, upsertAccessory } from '../../lib/storage';
 
 type FormState = Omit<Accessory, 'id'>;
@@ -81,9 +82,9 @@ const AccessoryForm: React.FC = () => {
         )}
 
         <div style={{ padding: 16 }}>
-          <IonButton expand="block" onClick={handleSave}>
+          <ActionButton solid onClick={handleSave}>
             {isNew ? 'Добавить' : 'Сохранить'}
-          </IonButton>
+          </ActionButton>
         </div>
       </IonContent>
     </IonPage>

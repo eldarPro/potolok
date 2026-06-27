@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonText,
+  IonButtons, IonBackButton, IonButton, IonIcon,
 } from '@ionic/react';
-import { chevronBackOutline, downloadOutline } from 'ionicons/icons';
+import { chevronBackOutline, downloadOutline, shareSocialOutline, callOutline, locationOutline } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject } from '../lib/storage';
-import { Project, Room } from '../types';
-import { edgeLabel } from '../lib/geometry';
+import { Room } from '../types';
 import jsPDF from 'jspdf';
+import './Summary.css';
 
 const corners = (room: Room) => room.points.length;
 
@@ -32,20 +32,30 @@ const calcWorker = (room: Room) => {
   return f + p + l + a + sv;
 };
 
+const getInitials = (name: string) => {
+  if (!name?.trim()) return '?';
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+};
+
+const fmt = (n: number) => Math.round(n).toLocaleString('ru');
+
 const Summary: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [project, setProject] = useState<Project | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [project, setProject] = useState<ReturnType<typeof getProject>>(null);
 
   useEffect(() => { setProject(getProject(id)); }, [id]);
 
   if (!project) return null;
 
-  const totalSqm = project.rooms.reduce((s, r) => s + r.areaSqm, 0);
-  const totalClient = project.rooms.reduce((s, r) => s + calcClient(r).total, 0);
-  const totalWorker = project.rooms.reduce((s, r) => s + calcWorker(r), 0);
+  const activeRooms = project.rooms.filter(r => r.areaSqm > 0);
+  const totalSqm = activeRooms.reduce((s, r) => s + r.areaSqm, 0);
+  const totalClient = activeRooms.reduce((s, r) => s + calcClient(r).total, 0);
+  const totalWorker = activeRooms.reduce((s, r) => s + calcWorker(r), 0);
 
-  const handlePDF = () => {
+  const buildPDF = () => {
     const doc = new jsPDF('p', 'mm', 'a4');
     const W = 210;
     const margin = 15;
@@ -65,8 +75,7 @@ const Summary: React.FC = () => {
     doc.setDrawColor(200, 200, 200);
     doc.line(margin, y, W - margin, y); y += 6;
 
-    project.rooms.forEach((room, i) => {
-      if (room.areaSqm === 0) return;
+    activeRooms.forEach((room, i) => {
       const c = corners(room);
       const cl = calcClient(room);
 
@@ -76,7 +85,7 @@ const Summary: React.FC = () => {
       doc.text(`   Площадь: ${room.areaSqm.toFixed(2)} м²  Периметр: ${room.perimeterM.toFixed(2)} м  Углов: ${c}`, margin, y); y += 5;
 
       if (room.fabric) {
-        doc.text(`   Полотно "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} угл. = ${Math.round(cl.fabric).toLocaleString('ru')} ₽`, margin, y); y += 5;
+        doc.text(`   Полотно "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} угл. = ${fmt(cl.fabric)} ₽`, margin, y); y += 5;
       }
       const segs = room.profileSegments ?? [];
       const pGroups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
@@ -86,23 +95,36 @@ const Summary: React.FC = () => {
         pGroups[seg.profileId].count += 1;
       });
       Object.values(pGroups).forEach(g => {
-        doc.text(`   Профиль "${g.title}": ${g.price} × ${g.totalLengthM.toFixed(2)} м + ${g.priceCorner} × ${g.count} угл. = ${Math.round(g.price * g.totalLengthM + g.priceCorner * g.count).toLocaleString('ru')} ₽`, margin, y); y += 5;
+        doc.text(`   Профиль "${g.title}": ${g.price} × ${g.totalLengthM.toFixed(2)} м + ${g.priceCorner} × ${g.count} угл. = ${fmt(g.price * g.totalLengthM + g.priceCorner * g.count)} ₽`, margin, y); y += 5;
       });
       doc.setFont('helvetica', 'bold');
-      doc.text(`   Итого по помещению: ${Math.round(cl.total).toLocaleString('ru')} ₽`, margin, y); y += 8;
+      doc.text(`   Итого по помещению: ${fmt(cl.total)} ₽`, margin, y); y += 8;
       doc.setFont('helvetica', 'normal');
     });
 
     doc.line(margin, y, W - margin, y); y += 8;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`ИТОГО: ${Math.round(totalClient).toLocaleString('ru')} ₽`, margin, y);
+    doc.text(`ИТОГО: ${fmt(totalClient)} ₽`, margin, y);
     y += 6;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`(${totalSqm.toFixed(2)} м² общей площади)`, margin, y);
 
-    doc.save(`smeta_${project.clientName.replace(/\s+/g, '_')}.pdf`);
+    return doc;
+  };
+
+  const pdfFileName = `smeta_${project.clientName.replace(/\s+/g, '_')}.pdf`;
+  const handlePDF = () => buildPDF().save(pdfFileName);
+
+  const handleShare = async () => {
+    const blob = buildPDF().output('blob');
+    const file = new File([blob], pdfFileName, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Смета' });
+    } else {
+      buildPDF().save(pdfFileName);
+    }
   };
 
   return (
@@ -114,120 +136,208 @@ const Summary: React.FC = () => {
           </IonButtons>
           <IonTitle>Смета</IonTitle>
           <IonButtons slot="end">
+            <IonButton onClick={handleShare}>
+              <IonIcon slot="icon-only" icon={shareSocialOutline} style={{ color: 'var(--color-primary)' }} />
+            </IonButton>
             <IonButton onClick={handlePDF}>
-              <IonIcon slot="icon-only" icon={downloadOutline} />
+              <IonIcon slot="icon-only" icon={downloadOutline} style={{ color: 'var(--color-primary)' }} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
-        <div ref={printRef} style={{ padding: 16 }}>
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ margin: '0 0 6px' }}>{project.clientName}</h2>
-            {project.phone && <IonText color="medium"><p style={{ margin: '2px 0', fontSize: 14 }}>{project.phone}</p></IonText>}
-            {project.address && <IonText color="medium"><p style={{ margin: '2px 0', fontSize: 14 }}>{project.address}</p></IonText>}
-            <IonText color="medium"><p style={{ margin: '6px 0 0', fontSize: 13 }}>{new Date().toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}</p></IonText>
+      <IonContent className="summary-content">
+        <div className="card-list" style={{ paddingBottom: 32 }}>
+
+          {/* ── Client card ── */}
+          <div className="card summary-client-card">
+            <div className="summary-client-row">
+              <div className="avatar avatar--lg" style={{ background: 'var(--color-primary)' }}>
+                {getInitials(project.clientName)}
+              </div>
+              <div className="summary-client-details">
+                <div className="summary-client-name">{project.clientName}</div>
+                {project.phone && (
+                  <div className="summary-contact-row">
+                    <IonIcon icon={callOutline} />
+                    {project.phone}
+                  </div>
+                )}
+                {project.address && (
+                  <div className="summary-contact-row">
+                    <IonIcon icon={locationOutline} />
+                    {project.address}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="summary-client-date">
+              {new Date().toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
           </div>
 
-          {project.rooms.map((room, i) => {
-            if (room.areaSqm === 0) return null;
+          {/* ── Room cards ── */}
+          {activeRooms.map((room, i) => {
             const c = corners(room);
             const cl = calcClient(room);
             const wk = calcWorker(room);
 
+            const segs = room.profileSegments ?? [];
+            const profileGroups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
+            segs.forEach(seg => {
+              if (!profileGroups[seg.profileId]) profileGroups[seg.profileId] = { title: seg.profile.title, totalLengthM: 0, count: 0, price: seg.profile.price, priceCorner: seg.profile.priceCorner };
+              profileGroups[seg.profileId].totalLengthM += seg.lengthM;
+              profileGroups[seg.profileId].count += 1;
+            });
+
+            const lightGroups: Record<string, { title: string; count: number; totalLen: number; price: number; isPath: boolean }> = {};
+            (room.lighting ?? []).forEach(e => {
+              if (!lightGroups[e.catalogItemId]) lightGroups[e.catalogItemId] = { title: e.catalogItem.title, count: 0, totalLen: 0, price: e.catalogItem.price, isPath: e.kind === 'path' };
+              lightGroups[e.catalogItemId].count += 1;
+              if (e.kind === 'path') lightGroups[e.catalogItemId].totalLen += (e as any).lengthM;
+            });
+
+            const hasMaterials = room.fabric || segs.length > 0;
+            const lightList = Object.values(lightGroups);
+            const accessories = room.selectedAccessories ?? [];
+            const services = room.selectedServices ?? [];
+
             return (
-              <div key={room.id} style={{ marginBottom: 16, padding: 16, background: 'var(--ion-color-light)', borderRadius: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                  <IonText><b>{i + 1}. {room.name}</b></IonText>
-                  {cl.total > 0 && <IonText color="primary"><b>{Math.round(cl.total).toLocaleString('ru')} ₽</b></IonText>}
+              <div key={room.id} className="card summary-room-card">
+
+                {/* Header */}
+                <div className="summary-room-header">
+                  <div className="summary-room-badge">{i + 1}</div>
+                  <span className="summary-room-name">{room.name}</span>
+                  {cl.total > 0 && <span className="summary-room-total">{fmt(cl.total)} ₽</span>}
                 </div>
 
-                <Row label="Площадь" value={`${room.areaSqm.toFixed(2)} м²`} />
-                <Row label="Периметр" value={`${room.perimeterM.toFixed(2)} м`} />
-                <Row label="Углов" value={`${c}`} />
+                {/* Dimensions */}
+                <div className="summary-dims">
+                  <div className="summary-dim">
+                    <span className="summary-dim__value">{room.areaSqm.toFixed(2)}</span>
+                    <span className="summary-dim__label">м²</span>
+                  </div>
+                  <div className="summary-dim-sep" />
+                  <div className="summary-dim">
+                    <span className="summary-dim__value">{room.perimeterM.toFixed(2)}</span>
+                    <span className="summary-dim__label">м периметр</span>
+                  </div>
+                  <div className="summary-dim-sep" />
+                  <div className="summary-dim">
+                    <span className="summary-dim__value">{c}</span>
+                    <span className="summary-dim__label">углов</span>
+                  </div>
+                </div>
 
-                {(room.fabric || (room.profileSegments ?? []).length > 0) && <div style={{ height: 8 }} />}
-
-                {room.fabric && (
+                {/* Materials */}
+                {hasMaterials && (
                   <>
-                    <Row label={`Полотно: ${room.fabric.title}`} value="" />
-                    <Row label={`  ${room.fabric.price} ₽ × ${room.areaSqm.toFixed(2)} м²`} value={`${Math.round(room.fabric.price * room.areaSqm).toLocaleString('ru')} ₽`} />
-                    {c > 0 && <Row label={`  Углы: ${room.fabric.priceCorner} ₽ × ${c}`} value={`${Math.round(room.fabric.priceCorner * c).toLocaleString('ru')} ₽`} />}
+                    <div className="summary-section-label">Материалы</div>
+                    <div className="summary-line-items">
+                      {room.fabric && (
+                        <div className="summary-line-item">
+                          <div className="summary-line-item__name">{room.fabric.title}</div>
+                          <div className="summary-line-item__calc">
+                            {room.fabric.price} ₽ × {room.areaSqm.toFixed(2)} м²
+                            {c > 0 && ` + ${room.fabric.priceCorner} ₽ × ${c} угл.`}
+                          </div>
+                          <div className="summary-line-item__total">{fmt(cl.fabric)} ₽</div>
+                        </div>
+                      )}
+                      {Object.values(profileGroups).map(g => (
+                        <div key={g.title} className="summary-line-item">
+                          <div className="summary-line-item__name">{g.title}</div>
+                          <div className="summary-line-item__calc">
+                            {g.price} ₽ × {g.totalLengthM.toFixed(2)} м
+                            {g.count > 0 && ` + ${g.priceCorner} ₽ × ${g.count} угл.`}
+                          </div>
+                          <div className="summary-line-item__total">{fmt(g.price * g.totalLengthM + g.priceCorner * g.count)} ₽</div>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 )}
-                {(() => {
-                  const segs = room.profileSegments ?? [];
-                  const groups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
-                  segs.forEach(seg => {
-                    if (!groups[seg.profileId]) groups[seg.profileId] = { title: seg.profile.title, totalLengthM: 0, count: 0, price: seg.profile.price, priceCorner: seg.profile.priceCorner };
-                    groups[seg.profileId].totalLengthM += seg.lengthM;
-                    groups[seg.profileId].count += 1;
-                  });
-                  return Object.values(groups).map(g => (
-                    <React.Fragment key={g.title}>
-                      <Row label={`Профиль: ${g.title}`} value="" />
-                      <Row label={`  ${g.price} ₽ × ${g.totalLengthM.toFixed(2)} м`} value={`${Math.round(g.price * g.totalLengthM).toLocaleString('ru')} ₽`} />
-                      {g.count > 0 && <Row label={`  Углы: ${g.priceCorner} ₽ × ${g.count}`} value={`${Math.round(g.priceCorner * g.count).toLocaleString('ru')} ₽`} />}
-                    </React.Fragment>
-                  ));
-                })()}
 
-                {!room.fabric && (room.profileSegments ?? []).length === 0 && (
-                  <IonText color="warning"><small>Материал не выбран</small></IonText>
+                {/* Lighting */}
+                {lightList.length > 0 && (
+                  <>
+                    <div className="summary-section-label">Освещение</div>
+                    <div className="summary-line-items">
+                      {lightList.map(g => (
+                        <div key={g.title} className="summary-line-item">
+                          <div className="summary-line-item__name">{g.title}</div>
+                          <div className="summary-line-item__calc">
+                            {g.isPath ? `${g.totalLen.toFixed(2)} м` : `${g.count} шт`}
+                          </div>
+                          <div className="summary-line-item__total">{fmt(g.isPath ? g.price * g.totalLen : g.price * g.count)} ₽</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
 
-                {(room.lighting ?? []).length > 0 && (() => {
-                  const groups: Record<string, { title: string; count: number; totalLen: number; price: number; isPath: boolean }> = {};
-                  (room.lighting ?? []).forEach(e => {
-                    if (!groups[e.catalogItemId]) groups[e.catalogItemId] = { title: e.catalogItem.title, count: 0, totalLen: 0, price: e.catalogItem.price, isPath: e.kind === 'path' };
-                    groups[e.catalogItemId].count += 1;
-                    if (e.kind === 'path') groups[e.catalogItemId].totalLen += (e as any).lengthM;
-                  });
-                  return Object.values(groups).map(g => (
-                    <Row key={g.title}
-                      label={g.isPath ? `${g.title} (${g.totalLen.toFixed(2)} м)` : `${g.title} × ${g.count} шт`}
-                      value={`${Math.round(g.isPath ? g.price * g.totalLen : g.price * g.count).toLocaleString('ru')} ₽`}
-                    />
-                  ));
-                })()}
+                {/* Accessories */}
+                {accessories.length > 0 && (
+                  <>
+                    <div className="summary-section-label">Аксессуары</div>
+                    <div className="summary-line-items">
+                      {accessories.map(a => (
+                        <div key={a.id} className="summary-line-item">
+                          <div className="summary-line-item__name">{a.accessory.title}</div>
+                          <div className="summary-line-item__calc">{a.quantity} {a.accessory.unit}</div>
+                          <div className="summary-line-item__total">{fmt(a.accessory.price * a.quantity)} ₽</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
 
+                {/* Services */}
+                {services.length > 0 && (
+                  <>
+                    <div className="summary-section-label">Услуги</div>
+                    <div className="summary-line-items">
+                      {services.map(s => (
+                        <div key={s.id} className="summary-line-item">
+                          <div className="summary-line-item__name">{s.service.title}</div>
+                          <div className="summary-line-item__calc">{s.quantity} ед.</div>
+                          <div className="summary-line-item__total">{fmt(s.service.price * s.quantity)} ₽</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Worker salary */}
                 {wk > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--ion-border-color)' }}>
-                    <Row label="Зарплата бригаде" value={`${Math.round(wk).toLocaleString('ru')} ₽`} muted />
+                  <div className="summary-worker-row">
+                    <span>Зарплата бригаде</span>
+                    <span>{fmt(wk)} ₽</span>
                   </div>
                 )}
               </div>
             );
           })}
 
-          <div style={{ padding: 20, background: 'var(--ion-color-primary)', borderRadius: 16, color: '#fff', marginTop: 8 }}>
-            <div style={{ fontSize: 14, marginBottom: 4, opacity: 0.85 }}>Общая площадь: {totalSqm.toFixed(2)} м²</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>Итого: {Math.round(totalClient).toLocaleString('ru')} ₽</div>
+          {/* ── Total card ── */}
+          <div className="summary-total-card">
+            <div className="summary-total-label">Итого к оплате</div>
+            <div className="summary-total-price">{fmt(totalClient)} ₽</div>
+            <div className="summary-total-meta">
+              {totalSqm.toFixed(2)} м² · {activeRooms.length} {activeRooms.length === 1 ? 'помещение' : activeRooms.length < 5 ? 'помещения' : 'помещений'}
+            </div>
             {totalWorker > 0 && (
-              <div style={{ fontSize: 13, marginTop: 6, opacity: 0.8 }}>
-                Зарплата бригаде: {Math.round(totalWorker).toLocaleString('ru')} ₽
+              <div className="summary-total-worker">
+                Зарплата бригаде: {fmt(totalWorker)} ₽
               </div>
             )}
           </div>
 
-          <div style={{ padding: '16px 0' }}>
-            <IonButton expand="block" onClick={handlePDF}>
-              <IonIcon slot="start" icon={downloadOutline} />
-              Скачать PDF
-            </IonButton>
-          </div>
         </div>
       </IonContent>
     </IonPage>
   );
 };
-
-const Row: React.FC<{ label: string; value: string; muted?: boolean }> = ({ label, value, muted }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-    <IonText color={muted ? 'medium' : 'medium'}><small>{label}</small></IonText>
-    {value && <IonText color={muted ? 'medium' : undefined}><small><b>{value}</b></small></IonText>}
-  </div>
-);
 
 export default Summary;

@@ -6,7 +6,7 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline, checkmarkOutline,
-  trashOutline, pencilOutline, addOutline,
+  trashOutline, pencilOutline, addOutline, settingsOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
@@ -381,7 +381,7 @@ const RoomMaterials: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <IonIcon icon={pencilOutline} color="medium" style={{ fontSize: 16, flexShrink: 0 }} />
+                      <IonIcon icon={settingsOutline} style={{ fontSize: 16, flexShrink: 0, color: '#42A5F5' }} />
                     </button>
                   );
                 })}

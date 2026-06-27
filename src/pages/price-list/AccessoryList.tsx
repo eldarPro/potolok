@@ -4,7 +4,8 @@ import {
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline, settingsOutline, trashOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, settingsOutline, trashOutline, buildOutline } from 'ionicons/icons';
+import ActionButton from '../../components/ActionButton';
 import { Accessory } from '../../types';
 import { loadAccessories, deleteAccessory } from '../../lib/storage';
 import './ItemCard.css';
@@ -38,8 +39,14 @@ const AccessoryList: React.FC = () => {
       <IonContent className="price-items-content">
         {items.length === 0 ? (
           <div className="price-items-empty">
-            <span>Нет позиций</span>
-            <span style={{ fontSize: 13 }}>Нажмите + чтобы добавить</span>
+            <div className="empty-state">
+              <div className="empty-state__icon-wrap" style={{ background: '#E8F5E9' }}>
+                <IonIcon icon={buildOutline} style={{ color: '#2E7D32' }} />
+              </div>
+              <p className="empty-state__title">Нет позиций</p>
+              <p className="empty-state__subtitle">Добавьте комплектующие, чтобы включать их в расчёты</p>
+              <ActionButton solid onClick={() => router.push('/price-list/accessories/new')}>Добавить</ActionButton>
+            </div>
           </div>
         ) : (
           <div className="price-items-list">

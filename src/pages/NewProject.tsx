@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonList, IonItem, IonLabel,
-  IonInput, IonTextarea, IonButton, IonText,
+  IonInput, IonTextarea, IonIcon,
 } from '@ionic/react';
-import { chevronBackOutline } from 'ionicons/icons';
+import { chevronBackOutline, addOutline } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { createProject, upsertProject } from '../lib/storage';
+import ActionButton from '../components/ActionButton';
+import './NewProject.css';
 
 const NewProject: React.FC = () => {
   const router = useIonRouter();
@@ -37,13 +39,13 @@ const NewProject: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
-        <IonList inset>
+      <IonContent className="new-project-content">
+        <IonList inset className="new-project-form">
           <IonItem>
             <IonLabel position="stacked">Клиент *</IonLabel>
             <IonInput
               value={clientName}
-              onIonInput={e => setClientName(e.detail.value ?? '')}
+              onIonInput={e => { setClientName(e.detail.value ?? ''); setError(''); }}
               placeholder="Иванов Иван"
               clearInput
             />
@@ -65,7 +67,7 @@ const NewProject: React.FC = () => {
               placeholder="ул. Ленина 1, кв. 5"
             />
           </IonItem>
-          <IonItem>
+          <IonItem lines="none">
             <IonLabel position="stacked">Заметки</IonLabel>
             <IonTextarea
               value={notes}
@@ -77,15 +79,13 @@ const NewProject: React.FC = () => {
         </IonList>
 
         {error && (
-          <div style={{ padding: '0 16px' }}>
-            <IonText color="danger"><small>{error}</small></IonText>
-          </div>
+          <div className="new-project-error">{error}</div>
         )}
 
-        <div style={{ padding: 16 }}>
-          <IonButton expand="block" onClick={handleCreate}>
+        <div className="new-project-footer">
+          <ActionButton solid onClick={handleCreate}>
             Создать проект
-          </IonButton>
+          </ActionButton>
         </div>
       </IonContent>
     </IonPage>

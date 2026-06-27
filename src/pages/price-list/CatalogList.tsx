@@ -4,7 +4,8 @@ import {
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline, settingsOutline, trashOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, settingsOutline, trashOutline, layersOutline, reorderThreeOutline } from 'ionicons/icons';
+import ActionButton from '../../components/ActionButton';
 import { CatalogItem } from '../../types';
 import { loadFabrics, deleteFabric, loadProfiles, deleteProfile } from '../../lib/storage';
 import './ItemCard.css';
@@ -13,6 +14,11 @@ interface Props {
   category: 'fabrics' | 'profiles';
   title: string;
 }
+
+const CATALOG_META = {
+  fabrics:  { icon: layersOutline,       bg: '#E3F2FD', iconColor: '#1E88E5', subtitle: 'Добавьте полотна, чтобы использовать их в расчётах' },
+  profiles: { icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', subtitle: 'Добавьте профили, чтобы использовать их в расчётах' },
+} as const;
 
 const CatalogList: React.FC<Props> = ({ category, title }) => {
   const router = useIonRouter();
@@ -31,6 +37,7 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
   };
 
   const basePath = `/price-list/${category}`;
+  const meta = CATALOG_META[category];
 
   return (
     <IonPage>
@@ -46,8 +53,14 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
       <IonContent className="price-items-content">
         {items.length === 0 ? (
           <div className="price-items-empty">
-            <span>Нет позиций</span>
-            <span style={{ fontSize: 13 }}>Нажмите + чтобы добавить</span>
+            <div className="empty-state">
+              <div className="empty-state__icon-wrap" style={{ background: meta.bg }}>
+                <IonIcon icon={meta.icon} style={{ color: meta.iconColor }} />
+              </div>
+              <p className="empty-state__title">Нет позиций</p>
+              <p className="empty-state__subtitle">{meta.subtitle}</p>
+              <ActionButton solid onClick={() => router.push(`${basePath}/new`)}>Добавить</ActionButton>
+            </div>
           </div>
         ) : (
           <div className="price-items-list">

@@ -1,0 +1,22 @@
+.new-project-content {
+  --background: var(--color-bg);
+}
+
+.new-project-form {
+  margin-top: 16px;
+}
+
+.new-project-form ion-item {
+  --background: var(--color-surface);
+  --border-color: var(--color-border);
+}
+
+.new-project-error {
+  padding: 0 20px 4px;
+  font-size: 13px;
+  color: var(--color-danger);
+}
+
+.new-project-footer {
+  padding: 8px 16px 24px;
+}

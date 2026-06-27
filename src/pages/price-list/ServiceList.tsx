@@ -4,7 +4,8 @@ import {
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline, settingsOutline, trashOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, settingsOutline, trashOutline, briefcaseOutline } from 'ionicons/icons';
+import ActionButton from '../../components/ActionButton';
 import { AdditionalService } from '../../types';
 import { loadServices, deleteService } from '../../lib/storage';
 import './ItemCard.css';
@@ -38,8 +39,14 @@ const ServiceList: React.FC = () => {
       <IonContent className="price-items-content">
         {items.length === 0 ? (
           <div className="price-items-empty">
-            <span>Нет позиций</span>
-            <span style={{ fontSize: 13 }}>Нажмите + чтобы добавить</span>
+            <div className="empty-state">
+              <div className="empty-state__icon-wrap" style={{ background: '#FCE4EC' }}>
+                <IonIcon icon={briefcaseOutline} style={{ color: '#C62828' }} />
+              </div>
+              <p className="empty-state__title">Нет позиций</p>
+              <p className="empty-state__subtitle">Добавьте дополнительные услуги, чтобы включать их в расчёты</p>
+              <ActionButton solid onClick={() => router.push('/price-list/services/new')}>Добавить</ActionButton>
+            </div>
           </div>
         ) : (
           <div className="price-items-list">

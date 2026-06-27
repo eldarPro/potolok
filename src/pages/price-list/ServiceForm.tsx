@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput, IonTextarea,
-  IonButton, IonText, useIonRouter,
+  IonText, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { chevronBackOutline } from 'ionicons/icons';
 import { AdditionalService } from '../../types';
+import ActionButton from '../../components/ActionButton';
 import { loadServices, upsertService } from '../../lib/storage';
 
 type FormState = Omit<AdditionalService, 'id'>;
@@ -82,9 +83,9 @@ const ServiceForm: React.FC = () => {
         )}
 
         <div style={{ padding: 16 }}>
-          <IonButton expand="block" onClick={handleSave}>
+          <ActionButton solid onClick={handleSave}>
             {isNew ? 'Добавить' : 'Сохранить'}
-          </IonButton>
+          </ActionButton>
         </div>
       </IonContent>
     </IonPage>
