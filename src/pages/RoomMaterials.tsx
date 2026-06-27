@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
@@ -12,7 +12,7 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
-import { edgeLengthM, edgeLabel } from '../lib/geometry';
+import { edgeLengthM, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE } from '../lib/geometry';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
@@ -39,6 +39,7 @@ const RoomMaterials: React.FC = () => {
   const [services, setServices] = useState<AdditionalService[]>([]);
 
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
+  const [editingSizeEdge, setEditingSizeEdge] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
@@ -101,6 +102,30 @@ const RoomMaterials: React.FC = () => {
         lengthM: edgeLengthM(room.points, i, room.scale),
       })),
     });
+
+  const resizeEdge = (edgeIndex: number, newLenM: number) => {
+    if (newLenM <= 0) return;
+    const n = room.points.length;
+    const pts = room.points;
+    const a = pts[edgeIndex % n];
+    const b = pts[(edgeIndex + 1) % n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const currentPx = Math.sqrt(dx * dx + dy * dy);
+    if (currentPx === 0) return;
+    const newPx = (newLenM * GRID_SIZE * 100) / room.scale;
+    const ratio = newPx / currentPx;
+    const newPts = [...pts];
+    newPts[(edgeIndex + 1) % n] = { x: a.x + dx * ratio, y: a.y + dy * ratio };
+    const areaPx = polygonArea(newPts);
+    const perimPx = polygonPerimeter(newPts);
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const updatedSegments = (room.profileSegments ?? []).map(s => ({
+      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex, room.scale),
+    }));
+    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
+  };
 
   // ── Lighting delete ──
   const deleteElement = (id: string) =>
@@ -350,19 +375,17 @@ const RoomMaterials: React.FC = () => {
                   const seg = segments.find(s => s.edgeIndex === i);
                   const lenM = edgeLengthM(room.points, i, room.scale);
                   return (
-                    <button
+                    <div
                       key={i}
-                      onClick={() => setEditingEdge(i)}
                       style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '13px 16px', marginBottom: 8, borderRadius: 16,
-                        background: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left',
-                        boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 14px', marginBottom: 8, borderRadius: 16,
+                        background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
                       }}
                     >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-                          Стена {edgeLabel(i, room.points.length)} · {lenM.toFixed(2)} м
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: '#222' }}>
+                          Стена {edgeLabel(i, room.points.length)}
                         </div>
                         {seg ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -381,8 +404,34 @@ const RoomMaterials: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <IonIcon icon={settingsOutline} style={{ fontSize: 16, flexShrink: 0, color: '#42A5F5' }} />
-                    </button>
+
+                      {/* Size chip */}
+                      <button
+                        onClick={() => setEditingSizeEdge(i)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '6px 10px', borderRadius: 10,
+                          background: '#E3F2FD', border: 'none', cursor: 'pointer', flexShrink: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1E88E5' }}>
+                          {lenM.toFixed(2)} м
+                        </span>
+                        <IonIcon icon={pencilOutline} style={{ fontSize: 12, color: '#1E88E5' }} />
+                      </button>
+
+                      {/* Profile picker */}
+                      <button
+                        onClick={() => setEditingEdge(i)}
+                        style={{
+                          width: 34, height: 34, borderRadius: 10,
+                          background: '#F3E5F5', border: 'none', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        }}
+                      >
+                        <IonIcon icon={settingsOutline} style={{ fontSize: 16, color: '#8E24AA' }} />
+                      </button>
+                    </div>
                   );
                 })}
 
@@ -414,7 +463,7 @@ const RoomMaterials: React.FC = () => {
               iconBg="#FFFDE7"
               text="Нет добавленных позиций"
               sub="Разместите элементы освещения на чертеже помещения"
-              buttonLabel="Открыть чертёж"
+              buttonLabel="Добавить"
               buttonColor="#1E88E5"
               onButton={() => router.push(`${backHref}?pickLighting=1`, 'back')}
             />
@@ -517,7 +566,7 @@ const RoomMaterials: React.FC = () => {
               sub="Добавьте позиции в Ценники → Комплектующие"
               buttonLabel="Открыть ценники"
               buttonColor="#2E7D32"
-              onButton={() => router.push('/tabs/price-list')}
+              onButton={() => router.push('/tabs/prices')}
             />
           ) : roomAccessories.length === 0 ? (
             <EmptyState
@@ -631,7 +680,7 @@ const RoomMaterials: React.FC = () => {
               sub="Добавьте позиции в Ценники → Доп. услуги"
               buttonLabel="Открыть ценники"
               buttonColor="#1E88E5"
-              onButton={() => router.push('/tabs/price-list')}
+              onButton={() => router.push('/tabs/prices')}
             />
           ) : roomServices.length === 0 ? (
             <EmptyState
@@ -759,6 +808,36 @@ const RoomMaterials: React.FC = () => {
           { text: 'Отмена', role: 'cancel' as const },
         ]}
         onDidDismiss={() => setEditingEdge(null)}
+      />
+
+      {/* Size editor */}
+      <IonAlert
+        isOpen={editingSizeEdge !== null}
+        header={editingSizeEdge !== null
+          ? `Размер стены ${edgeLabel(editingSizeEdge, room.points.length)}`
+          : undefined}
+        inputs={[{
+          name: 'length',
+          type: 'number',
+          placeholder: 'Длина в метрах',
+          value: editingSizeEdge !== null
+            ? edgeLengthM(room.points, editingSizeEdge, room.scale).toFixed(2)
+            : '',
+          min: 0.01,
+        }]}
+        buttons={[
+          { text: 'Отмена', role: 'cancel' },
+          {
+            text: 'Применить',
+            handler: (data: { length: string }) => {
+              const val = parseFloat(data.length);
+              if (editingSizeEdge !== null && !isNaN(val) && val > 0) {
+                resizeEdge(editingSizeEdge, val);
+              }
+            },
+          },
+        ]}
+        onDidDismiss={() => setEditingSizeEdge(null)}
       />
 
       {/* Profile — apply all */}

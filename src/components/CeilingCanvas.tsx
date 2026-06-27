@@ -1,4 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { IonIcon } from '@ionic/react';
+import { arrowUndoOutline, arrowRedoOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
 import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon, GRID_SIZE } from '../lib/geometry';
@@ -19,7 +21,6 @@ interface Props {
   onRedoLightingPoint?: () => void;
   canUndoLighting?: boolean;
   canRedoLighting?: boolean;
-  onCancelPlacingLighting?: () => void;
   onOutOfBounds?: () => void;
 }
 
@@ -36,7 +37,6 @@ const CeilingCanvas: React.FC<Props> = ({
   onRedoLightingPoint,
   canUndoLighting = false,
   canRedoLighting = false,
-  onCancelPlacingLighting,
   onOutOfBounds,
 }) => {
   const [points, setPoints] = useState<Point[]>(room.points);
@@ -535,31 +535,28 @@ const CeilingCanvas: React.FC<Props> = ({
 
       {/* Floating undo/redo buttons */}
       <div style={{
-        position: 'absolute', top: 8, right: 8,
-        display: 'flex', gap: 6,
+        position: 'absolute', top: 10, left: 10,
+        display: 'flex', gap: 8,
         pointerEvents: 'auto',
       }}>
         {placingLighting && (
           <>
-            <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)' }}>
-              ↩
+            <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
             </button>
-            <button onClick={onRedoLightingPoint} disabled={!canRedoLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: canRedoLighting ? 'pointer' : 'default', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: canRedoLighting ? '#fff' : 'rgba(255,255,255,0.3)' }}>
-              ↪
-            </button>
-            <button onClick={onCancelPlacingLighting} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 16, background: 'rgba(220,50,50,0.6)', backdropFilter: 'blur(6px)', color: '#fff' }}>
-              ✕
+            <button onClick={onRedoLightingPoint} disabled={!canRedoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
             </button>
           </>
         )}
         {!placingLighting && points.length > 0 && (
-          <button onClick={handleUndoPoint} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: '#fff' }}>
-            ↩
+          <button onClick={handleUndoPoint} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: 'pointer', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
           </button>
         )}
         {!placingLighting && (
-          <button onClick={handleRedoPoint} disabled={redoStack.length === 0} style={{ padding: '6px 10px', borderRadius: 20, border: 'none', cursor: redoStack.length === 0 ? 'default' : 'pointer', fontSize: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', color: redoStack.length === 0 ? 'rgba(255,255,255,0.3)' : '#fff' }}>
-            ↪
+          <button onClick={handleRedoPoint} disabled={redoStack.length === 0} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: redoStack.length === 0 ? 'default' : 'pointer', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: redoStack.length === 0 ? 'rgba(255,255,255,0.3)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
           </button>
         )}
       </div>

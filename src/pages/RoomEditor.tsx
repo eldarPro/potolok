@@ -176,7 +176,16 @@ const RoomEditor: React.FC = () => {
     setLightingPathPts(prev => [...prev, next]);
   };
 
+  const handleFinishPlacingLighting = () => {
+    setPlacingLighting(null);
+    setLightingPathPts([]);
+    setLightingRedoStack([]);
+    setLightingHistory([]);
+  };
+
   const handleCancelPlacingLighting = () => {
+    const ids = new Set(lightingHistory.map(e => e.id));
+    if (ids.size > 0) updateRoom({ lighting: (room.lighting ?? []).filter(e => !ids.has(e.id)) });
     setPlacingLighting(null);
     setLightingPathPts([]);
     setLightingRedoStack([]);
@@ -194,8 +203,10 @@ const RoomEditor: React.FC = () => {
       points: lightingPathPts, lengthM: pxToMeters(totalPx, room.scale),
     };
     updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
-    setLightingHistory(prev => [...prev, newEl]);
+    setPlacingLighting(null);
     setLightingPathPts([]);
+    setLightingRedoStack([]);
+    setLightingHistory([]);
   };
 
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
@@ -288,7 +299,6 @@ const RoomEditor: React.FC = () => {
                 onRedoLightingPoint={handleRedoLightingPoint}
                 canUndoLighting={lightingPathPts.length > 0 || lightingHistory.length > 0}
                 canRedoLighting={lightingRedoStack.length > 0}
-                onCancelPlacingLighting={handleCancelPlacingLighting}
                 onOutOfBounds={() => presentToast({
                   message: 'Нельзя разместить за пределами помещения',
                   duration: 1500, position: 'bottom', color: 'danger',
@@ -308,6 +318,40 @@ const RoomEditor: React.FC = () => {
             padding: '12px 16px',
             paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
           }}>
+
+            {/* Point lighting finish bar */}
+            {placingLighting?.placement === 'point' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                marginBottom: 12, padding: '10px 14px',
+                background: 'rgba(249,168,37,0.12)',
+                borderRadius: 14,
+                border: '1px solid rgba(249,168,37,0.3)',
+              }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                  {placingLighting.title} · {lightingHistory.length} шт
+                </span>
+                <button
+                  onClick={handleCancelPlacingLighting}
+                  style={{
+                    background: 'none', border: 'none', padding: 4,
+                    cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
+                  }}
+                >
+                  <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
+                </button>
+                <button
+                  onClick={handleFinishPlacingLighting}
+                  style={{
+                    padding: '6px 14px', borderRadius: 10,
+                    background: '#F9A825', border: 'none',
+                    color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  }}
+                >
+                  Готово
+                </button>
+              </div>
+            )}
 
             {/* Path lighting finish bar */}
             {isPlacingPath && lightingPathPts.length >= 2 && (
