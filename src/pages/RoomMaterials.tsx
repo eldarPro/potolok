@@ -6,7 +6,7 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline, checkmarkOutline,
-  trashOutline, pencilOutline, addOutline, settingsOutline,
+  trashOutline, pencilOutline, addOutline, settingsOutline, ellipsisVerticalOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
@@ -40,6 +40,7 @@ const RoomMaterials: React.FC = () => {
 
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
   const [editingSizeEdge, setEditingSizeEdge] = useState<number | null>(null);
+  const [edgeMenuOpen, setEdgeMenuOpen] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
@@ -386,6 +387,9 @@ const RoomMaterials: React.FC = () => {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: '#222' }}>
                           Стена {edgeLabel(i, room.points.length)}
+                          <span style={{ fontWeight: 400, fontSize: 13, color: '#1E88E5', marginLeft: 8 }}>
+                            {lenM.toFixed(2)} м
+                          </span>
                         </div>
                         {seg ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -405,31 +409,15 @@ const RoomMaterials: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Size chip */}
                       <button
-                        onClick={() => setEditingSizeEdge(i)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 5,
-                          padding: '6px 10px', borderRadius: 10,
-                          background: '#E3F2FD', border: 'none', cursor: 'pointer', flexShrink: 0,
-                        }}
-                      >
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1E88E5' }}>
-                          {lenM.toFixed(2)} м
-                        </span>
-                        <IonIcon icon={pencilOutline} style={{ fontSize: 12, color: '#1E88E5' }} />
-                      </button>
-
-                      {/* Profile picker */}
-                      <button
-                        onClick={() => setEditingEdge(i)}
+                        onClick={() => setEdgeMenuOpen(i)}
                         style={{
                           width: 34, height: 34, borderRadius: 10,
-                          background: '#F3E5F5', border: 'none', cursor: 'pointer',
+                          background: 'transparent', border: 'none', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         }}
                       >
-                        <IonIcon icon={settingsOutline} style={{ fontSize: 16, color: '#8E24AA' }} />
+                        <IonIcon icon={ellipsisVerticalOutline} style={{ fontSize: 20, color: '#999' }} />
                       </button>
                     </div>
                   );
@@ -838,6 +826,26 @@ const RoomMaterials: React.FC = () => {
           },
         ]}
         onDidDismiss={() => setEditingSizeEdge(null)}
+      />
+
+      {/* Edge context menu */}
+      <IonActionSheet
+        isOpen={edgeMenuOpen !== null}
+        header={edgeMenuOpen !== null
+          ? `Стена ${edgeLabel(edgeMenuOpen, room.points.length)} · ${edgeLengthM(room.points, edgeMenuOpen, room.scale).toFixed(2)} м`
+          : undefined}
+        buttons={[
+          {
+            text: 'Изменить профиль',
+            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingEdge(e); },
+          },
+          {
+            text: 'Изменить размер',
+            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingSizeEdge(e); },
+          },
+          { text: 'Отмена', role: 'cancel' as const },
+        ]}
+        onDidDismiss={() => setEdgeMenuOpen(null)}
       />
 
       {/* Profile — apply all */}
