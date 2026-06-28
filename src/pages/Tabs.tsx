@@ -6,6 +6,8 @@ import { folderOutline, pricetagOutline, personOutline } from 'ionicons/icons';
 import ProjectList from './ProjectList';
 import PriceList from './PriceList';
 import Cabinet from './Cabinet';
+import Profile from './Profile';
+import Statistics from './Statistics';
 
 const Tabs: React.FC = () => (
   <IonTabs>
@@ -13,6 +15,8 @@ const Tabs: React.FC = () => (
       <Route exact path="/tabs/projects" component={ProjectList} />
       <Route exact path="/tabs/prices" component={PriceList} />
       <Route exact path="/tabs/cabinet" component={Cabinet} />
+      <Route exact path="/tabs/cabinet/profile" component={Profile} />
+      <Route exact path="/tabs/cabinet/stats" component={Statistics} />
       <Route exact path="/tabs" render={() => <Redirect to="/tabs/projects" />} />
     </IonRouterOutlet>
 

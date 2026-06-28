@@ -28,6 +28,16 @@ type Tool = 'draw' | 'move';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
+const labelOffset = (pts: Point[], p: Point, dist = 18): { ox: number; oy: number } => {
+  if (pts.length === 0) return { ox: 10, oy: -18 };
+  const cx = pts.reduce((s, q) => s + q.x, 0) / pts.length;
+  const cy = pts.reduce((s, q) => s + q.y, 0) / pts.length;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  return { ox: (dx / len) * dist - 6, oy: (dy / len) * dist - 6 };
+};
+
 const CeilingCanvas: React.FC<Props> = ({
   room, onChange, width, height,
   placingLighting = null,
@@ -49,6 +59,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
   const isDragging = useRef(false);
+  const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
   const lastMouse = useRef<Point | null>(null);
   const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null);
@@ -56,11 +67,33 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
+  const fitView = useCallback((pts: Point[]) => {
+    if (pts.length === 0) return;
+    const xs = pts.map(p => p.x);
+    const ys = pts.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const bw = maxX - minX || 1;
+    const bh = maxY - minY || 1;
+    const padding = 60;
+    const scale = Math.min(4, (width - padding * 2) / bw, (height - padding * 2) / bh);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    setViewport({ scale, x: width / 2 - cx * scale, y: height / 2 - cy * scale });
+  }, [width, height]);
+
   useEffect(() => {
-    setPoints(room.points);
-    setClosed(room.points.length >= MIN_POINTS && room.areaSqm > 0);
-    setTool(room.points.length >= MIN_POINTS ? 'move' : 'draw');
-  }, [room.id]);
+    if (isDraggingPoint.current) return;
+    const pts = room.points;
+    setPoints(pts);
+    setClosed(pts.length >= MIN_POINTS && room.areaSqm > 0);
+    setTool(pts.length >= MIN_POINTS && room.areaSqm > 0 ? 'move' : 'draw');
+    if (pts.length >= MIN_POINTS) {
+      fitView(pts);
+    } else {
+      setViewport({ x: 0, y: 0, scale: 1 });
+    }
+  }, [room.id, room.points.length, room.perimeterM, fitView]);
 
   // Clear cursor when switching lighting item
   useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedLighting(null); }, [placingLighting?.id]);
@@ -137,7 +170,8 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (points.length >= MIN_POINTS) {
       const first = points[0];
-      if (dist(snapped, first) < CLOSE_THRESHOLD * 2) {
+      const candidate = points.length > 0 ? snapAngle(points[points.length - 1], snapped) : snapped;
+      if (dist(candidate, first) * viewport.scale < CLOSE_THRESHOLD) {
         finishPolygon(points);
         return;
       }
@@ -337,6 +371,7 @@ const CeilingCanvas: React.FC<Props> = ({
     if (closed) {
       setClosed(false);
       setTool('draw');
+      onChange({ areaSqm: 0, perimeterM: 0 });
       return;
     }
     setPoints(prev => prev.slice(0, -1));
@@ -349,6 +384,9 @@ const CeilingCanvas: React.FC<Props> = ({
     setPoints(next.points);
     setClosed(next.closed);
     setTool(next.closed ? 'move' : 'draw');
+    if (next.closed) {
+      onChange({ points: next.points, ...computeMetrics(next.points) });
+    }
   };
 
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
@@ -370,7 +408,7 @@ const CeilingCanvas: React.FC<Props> = ({
   }).filter(Boolean);
 
   const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
-    ? dist(cursor, points[0]) < CLOSE_THRESHOLD * 2
+    ? dist(cursor, points[0]) * viewport.scale < CLOSE_THRESHOLD
     : false;
 
   const metrics = closed ? computeMetrics(points) : null;
@@ -497,7 +535,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 3 : 2}
                   draggable={closed && !placingLighting}
-                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; }}
+                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { x: e.target.x(), y: e.target.y() };
@@ -505,6 +543,7 @@ const CeilingCanvas: React.FC<Props> = ({
                     const m = computeMetrics(newPts);
                     onChange({ points: newPts, ...m });
                   }}
+                  onDragEnd={() => { isDraggingPoint.current = false; }}
                   onClick={e => {
                     if (closed && !placingLighting) {
                       e.cancelBubble = true;
@@ -521,7 +560,8 @@ const CeilingCanvas: React.FC<Props> = ({
                   }}
                 />
                 <Text
-                  x={p.x + 10} y={p.y - 18}
+                  x={p.x + labelOffset(points, p).ox}
+                  y={p.y + labelOffset(points, p).oy}
                   text={pointLabel(i)}
                   fontSize={13} fontStyle="bold" fill="#fff"
                   shadowColor="rgba(0,0,0,0.8)" shadowBlur={3} shadowOffsetX={1} shadowOffsetY={1}

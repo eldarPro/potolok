@@ -2,14 +2,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle,
   IonButtons, IonBackButton, IonButton, IonIcon, IonRange, IonActionSheet, IonAlert,
-  useIonToast, useIonViewWillEnter, useIonRouter,
+  useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
 import {
   chevronBackOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
   closeOutline, ellipsisVerticalOutline,
 } from 'ionicons/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
@@ -26,15 +26,20 @@ const MAT_TABS = [
 const RoomEditor: React.FC = () => {
   const { projectId, roomId } = useParams<{ projectId: string; roomId: string }>();
   const router = useIonRouter();
+  const history = useHistory();
   const [presentToast] = useIonToast();
   const [project, setProject] = useState<Project | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
   const [profiles, setProfiles] = useState<CatalogItem[]>([]);
   const [lightings, setLightings] = useState<LightingCatalogItem[]>([]);
 
+  type LightingRedoItem =
+    | { type: 'pathPt'; pt: { x: number; y: number } }
+    | { type: 'placed'; el: RoomLightingPoint | RoomLightingPath };
+
   const [placingLighting, setPlacingLighting] = useState<LightingCatalogItem | null>(null);
   const [lightingPathPts, setLightingPathPts] = useState<{ x: number; y: number }[]>([]);
-  const [lightingRedoStack, setLightingRedoStack] = useState<{ x: number; y: number }[]>([]);
+  const [lightingRedoStack, setLightingRedoStack] = useState<LightingRedoItem[]>([]);
   const [lightingHistory, setLightingHistory] = useState<(RoomLightingPoint | RoomLightingPath)[]>([]);
   const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
 
@@ -60,6 +65,7 @@ const RoomEditor: React.FC = () => {
     load();
     if (new URLSearchParams(window.location.search).get('pickLighting') === '1') {
       setLightingPickerOpen(true);
+      history.replace(window.location.pathname);
     }
   });
 
@@ -79,6 +85,12 @@ const RoomEditor: React.FC = () => {
   }, [room?.id]);
 
   useEffect(() => { setLightingPathPts([]); setLightingRedoStack([]); setLightingHistory([]); }, [placingLighting?.id]);
+  useIonViewWillLeave(() => {
+    setPlacingLighting(null);
+    setLightingPathPts([]);
+    setLightingRedoStack([]);
+    setLightingHistory([]);
+  });
 
   if (!project || !room) return null;
 
@@ -151,6 +163,7 @@ const RoomEditor: React.FC = () => {
       };
       updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
       setLightingHistory(prev => [...prev, newEl]);
+      setLightingRedoStack([]);
     } else {
       setLightingRedoStack([]);
       setLightingPathPts(prev => [...prev, pt]);
@@ -160,10 +173,11 @@ const RoomEditor: React.FC = () => {
   const handleUndoLightingPoint = () => {
     if (lightingPathPts.length > 0) {
       const last = lightingPathPts[lightingPathPts.length - 1];
-      setLightingRedoStack(prev => [...prev, last]);
+      setLightingRedoStack(prev => [...prev, { type: 'pathPt', pt: last }]);
       setLightingPathPts(prev => prev.slice(0, -1));
     } else if (lightingHistory.length > 0) {
       const last = lightingHistory[lightingHistory.length - 1];
+      setLightingRedoStack(prev => [...prev, { type: 'placed', el: last }]);
       setLightingHistory(prev => prev.slice(0, -1));
       updateRoom({ lighting: (room.lighting ?? []).filter(e => e.id !== last.id) });
     }
@@ -171,9 +185,14 @@ const RoomEditor: React.FC = () => {
 
   const handleRedoLightingPoint = () => {
     if (lightingRedoStack.length === 0) return;
-    const next = lightingRedoStack[lightingRedoStack.length - 1];
+    const item = lightingRedoStack[lightingRedoStack.length - 1];
     setLightingRedoStack(prev => prev.slice(0, -1));
-    setLightingPathPts(prev => [...prev, next]);
+    if (item.type === 'pathPt') {
+      setLightingPathPts(prev => [...prev, item.pt]);
+    } else {
+      setLightingHistory(prev => [...prev, item.el]);
+      updateRoom({ lighting: [...(room.lighting ?? []), item.el] });
+    }
   };
 
   const handleFinishPlacingLighting = () => {
@@ -430,29 +449,32 @@ const RoomEditor: React.FC = () => {
           </div>
         </div>
 
-      {/* ── Right-side drawer menu ── */}
+      {/* ── Bottom sheet menu ── */}
       {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', alignItems: 'flex-end' }}>
           <div
             onClick={() => setMenuOpen(false)}
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}
           />
           <div style={{
             position: 'relative', zIndex: 1,
-            width: 240,
-            height: '100%',
+            width: '100%',
             background: '#16182a',
-            boxShadow: '-8px 0 40px rgba(0,0,0,0.6)',
+            boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+            borderRadius: '20px 20px 0 0',
             display: 'flex', flexDirection: 'column',
-            paddingTop: 'max(60px, env(safe-area-inset-top, 60px))',
+            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
           }}>
-            <div style={{ padding: '0 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+            </div>
+            <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>
                 Помещение
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 4 }}>{room.name}</div>
             </div>
-            <div style={{ flex: 1, paddingTop: 8 }}>
+            <div style={{ paddingTop: 8 }}>
               <MenuAction
                 label="Редактировать название"
                 color="#1E88E5"

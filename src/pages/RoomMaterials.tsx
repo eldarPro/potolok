@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
+  IonList, IonItem, IonLabel,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
@@ -272,8 +273,35 @@ const RoomMaterials: React.FC = () => {
   const workerLighting = lighting.reduce((s, e) =>
     s + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as RoomLightingPath).lengthM), 0);
 
+  const sectionTotal =
+    section === 'fabric' ? fabricTotal :
+    section === 'profile' ? profileTotal :
+    section === 'lighting' ? lightingTotal :
+    section === 'accessories' ? accessoryTotal :
+    section === 'services' ? serviceTotal : 0;
+
+  const sectionWorker =
+    section === 'fabric' ? workerFabric :
+    section === 'profile' ? workerProfile :
+    section === 'lighting' ? workerLighting :
+    section === 'accessories' ? accessoryInstallTotal :
+    section === 'services' ? serviceInstallTotal : 0;
+
+  const showTotalsBar =
+    (section === 'fabric' && room.fabric != null && room.areaSqm > 0) ||
+    (section === 'profile' && segments.length > 0) ||
+    (section === 'lighting' && lighting.length > 0) ||
+    (section === 'accessories' && roomAccessories.length > 0) ||
+    (section === 'services' && roomServices.length > 0);
+
   const meta = SECTION_META[section as Section] ?? SECTION_META.fabric;
   const backHref = `/project/${projectId}/room/${roomId}`;
+
+  const fabAction: (() => void) | null =
+    (section === 'lighting' && lightings.length > 0) ? () => router.push(`${backHref}?pickLighting=1`, 'back') :
+    (section === 'accessories' && accessories.length > 0) ? () => setAddAccessoryOpen(true) :
+    (section === 'services' && services.length > 0) ? () => setAddServiceOpen(true) :
+    null;
 
   return (
     <IonPage>
@@ -283,23 +311,6 @@ const RoomMaterials: React.FC = () => {
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={backHref} />
           </IonButtons>
           <IonTitle>{meta.title}</IonTitle>
-          <IonButtons slot="end">
-            {section === 'accessories' ? (
-              <IonButton onClick={() => setAddAccessoryOpen(true)} disabled={accessories.length === 0}>
-                <IonIcon slot="icon-only" icon={addOutline} />
-              </IonButton>
-            ) : section === 'services' ? (
-              <IonButton onClick={() => setAddServiceOpen(true)} disabled={services.length === 0}>
-                <IonIcon slot="icon-only" icon={addOutline} />
-              </IonButton>
-            ) : section === 'lighting' ? (
-              <IonButton onClick={() => router.push(`${backHref}?pickLighting=1`, 'back')}>
-                <IonIcon slot="icon-only" icon={addOutline} />
-              </IonButton>
-            ) : (
-              null
-            )}
-          </IonButtons>
         </IonToolbar>
       </IonHeader>
 
@@ -307,7 +318,7 @@ const RoomMaterials: React.FC = () => {
 
         {/* ═══ ПОЛОТНО ═══ */}
         {section === 'fabric' && (
-          <div style={{ padding: '12px 0 36px' }}>
+          <div style={{ padding: '12px 0 100px' }}>
             {fabrics.length === 0 ? (
               <div style={{ padding: '20px 16px' }}>
                 <HintText text="Нет позиций — добавьте в Ценники → Полотна" />
@@ -354,18 +365,6 @@ const RoomMaterials: React.FC = () => {
                   );
                 })}
 
-                {room.fabric && room.areaSqm > 0 && (
-                  <div style={{
-                    margin: '8px 0', padding: '12px 14px',
-                    background: '#F0F4FF', borderRadius: 12,
-                  }}>
-                    <PriceRow label={`${room.fabric.title} · ${room.areaSqm.toFixed(2)} м²`} value={Math.round(room.fabric.price * room.areaSqm)} />
-                    {corners > 0 && <PriceRow label={`Углы × ${corners}`} value={Math.round(room.fabric.priceCorner * corners)} />}
-                    <div style={{ borderTop: '1px solid #D8E4FF', margin: '8px 0' }} />
-                    <PriceRow label="Стоимость полотна" value={Math.round(fabricTotal)} bold primary />
-                    {workerFabric > 0 && <PriceRow label="Монтаж" value={Math.round(workerFabric)} />}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -373,7 +372,7 @@ const RoomMaterials: React.FC = () => {
 
         {/* ═══ ПРОФИЛЬ ═══ */}
         {section === 'profile' && (
-          <div style={{ padding: '12px 0 36px' }}>
+          <div style={{ padding: '12px 0 100px' }}>
             {profiles.length > 0 && room.points.length >= 3 && (
               <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'flex-end' }}>
                 <button
@@ -408,71 +407,52 @@ const RoomMaterials: React.FC = () => {
               </div>
             ) : (
               <div style={{ padding: '0 16px' }}>
-                {room.points.map((_, i) => {
-                  const seg = segments.find(s => s.edgeIndex === i);
-                  const lenM = edgeLengthM(room.points, i, room.scale);
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 14px', marginBottom: 8, borderRadius: 16,
-                        background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: '#222' }}>
-                          Стена {edgeLabel(i, room.points.length)}
-                          <span style={{ fontWeight: 400, fontSize: 13, color: '#1E88E5', marginLeft: 8 }}>
-                            {lenM.toFixed(2)} м
-                          </span>
-                        </div>
-                        {seg ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{
-                              width: 10, height: 10, borderRadius: 3,
-                              background: seg.profile.color,
-                              border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0,
-                            }} />
-                            <span style={{ fontSize: 12, color: '#888' }}>
-                              {seg.profile.title} · {seg.profile.price} ₽/м
-                            </span>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 12, color: '#FB8C00', fontWeight: 500 }}>
-                            Профиль не выбран
-                          </span>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => setEdgeMenuOpen(i)}
-                        style={{
-                          width: 34, height: 34, borderRadius: 10,
-                          background: 'transparent', border: 'none', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                        }}
-                      >
-                        <IonIcon icon={ellipsisVerticalOutline} style={{ fontSize: 20, color: '#999' }} />
-                      </button>
-                    </div>
-                  );
-                })}
-
-                {segments.length > 0 && (
-                  <div style={{ margin: '8px 0', padding: '12px 14px', background: '#F0F4FF', borderRadius: 12 }}>
-                    {Object.values(profileGroups).map(({ profile, totalLengthM, count }) => (
-                      <PriceRow
-                        key={profile.id}
-                        label={`${profile.title} · ${totalLengthM.toFixed(2)} м`}
-                        value={Math.round(profile.price * totalLengthM + profile.priceCorner * count)}
-                      />
-                    ))}
-                    <div style={{ borderTop: '1px solid #D8E4FF', margin: '8px 0' }} />
-                    <PriceRow label="Стоимость профиля" value={Math.round(profileTotal)} bold primary />
-                    {workerProfile > 0 && <PriceRow label="Монтаж" value={Math.round(workerProfile)} />}
-                  </div>
-                )}
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
+                    {room.points.map((_, i) => {
+                      const seg = segments.find(s => s.edgeIndex === i);
+                      const lenM = edgeLengthM(room.points, i, room.scale);
+                      return (
+                        <IonItem
+                          key={i}
+                          button
+                          detail={false}
+                          lines={i === room.points.length - 1 ? 'none' : 'inset'}
+                          onClick={() => setEdgeMenuOpen(i)}
+                          style={{ '--background': 'transparent' } as React.CSSProperties}
+                        >
+                          <IonLabel>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>
+                                Стена {edgeLabel(i, room.points.length)}
+                              </span>
+                              <span style={{ fontWeight: 400, fontSize: 13, color: '#888', marginLeft: 8 }}>
+                                {lenM.toFixed(2)} м
+                              </span>
+                            </div>
+                            {seg ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                <div style={{
+                                  width: 10, height: 10, borderRadius: 3,
+                                  background: seg.profile.color,
+                                  border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0,
+                                }} />
+                                <span style={{ fontSize: 12, color: '#888' }}>
+                                  {seg.profile.title} · {seg.profile.price} ₽/м
+                                </span>
+                              </div>
+                            ) : (
+                              <p style={{ fontSize: 12, color: '#FB8C00', fontWeight: 500, margin: '2px 0 0' }}>
+                                Профиль не выбран
+                              </p>
+                            )}
+                          </IonLabel>
+                          <IonIcon icon={ellipsisVerticalOutline} slot="end" style={{ fontSize: 20, color: '#999' }} />
+                        </IonItem>
+                      );
+                    })}
+                  </IonList>
+                </div>
               </div>
             )}
           </div>
@@ -480,19 +460,27 @@ const RoomMaterials: React.FC = () => {
 
         {/* ═══ ОСВЕЩЕНИЕ ═══ */}
         {section === 'lighting' && (
-          lighting.length === 0 ? (
+          lightings.length === 0 ? (
+            <EmptyState
+              icon={bulbOutline}
+              iconColor="#F9A825"
+              iconBg="#FFFDE7"
+              text="Нет освещения в ценнике"
+              sub="Добавьте позиции в Ценники → Освещение"
+              buttonLabel="Открыть ценники"
+              buttonColor="#1E88E5"
+              onButton={() => router.push('/price-list/lightings')}
+            />
+          ) : lighting.length === 0 ? (
             <EmptyState
               icon={bulbOutline}
               iconColor="#F9A825"
               iconBg="#FFFDE7"
               text="Нет добавленных позиций"
-              sub="Разместите элементы освещения на чертеже помещения"
-              buttonLabel="Добавить"
-              buttonColor="#1E88E5"
-              onButton={() => router.push(`${backHref}?pickLighting=1`, 'back')}
+              sub="Нажмите кнопку + чтобы разместить элементы освещения на чертеже"
             />
           ) : (
-            <div style={{ padding: '12px 16px 36px' }}>
+            <div style={{ padding: '12px 16px 100px' }}>
               {Object.values(lightingGroups).map(({ item, elements }) => {
                 const isPath = item.placement === 'path';
                 const totalLen = isPath
@@ -523,8 +511,8 @@ const RoomMaterials: React.FC = () => {
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
                         <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
                           {isPath
-                            ? `${totalLen.toFixed(2)} м · ${item.price} ₽/м = ${Math.round(total).toLocaleString('ru')} ₽`
-                            : `${elements.length} шт · ${item.price} ₽/шт = ${Math.round(total).toLocaleString('ru')} ₽`
+                            ? `${totalLen.toFixed(2)} м · ${item.price} ₽ = ${Math.round(total).toLocaleString('ru')} ₽`
+                            : `${elements.length} шт · ${item.price} ₽ = ${Math.round(total).toLocaleString('ru')} ₽`
                           }
                         </div>
                       </div>
@@ -557,24 +545,6 @@ const RoomMaterials: React.FC = () => {
                 );
               })}
 
-              <div style={{ margin: '8px 0 12px', padding: '12px 14px', background: '#F0F4FF', borderRadius: 12 }}>
-                <PriceRow label="Стоимость освещения" value={Math.round(lightingTotal)} bold primary />
-                {workerLighting > 0 && <PriceRow label="Монтаж" value={Math.round(workerLighting)} />}
-              </div>
-
-              <button
-                onClick={() => router.push(`${backHref}?pickLighting=1`, 'back')}
-                style={{
-                  width: '100%', padding: '13px', borderRadius: 16,
-                  background: '#fff', border: '2px dashed #1E88E5',
-                  color: '#1E88E5', fontWeight: 600, fontSize: 15,
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
-                Разместить ещё на чертеже
-              </button>
             </div>
           )
         )}
@@ -589,8 +559,8 @@ const RoomMaterials: React.FC = () => {
               text="Нет комплектующих в ценнике"
               sub="Добавьте позиции в Ценники → Комплектующие"
               buttonLabel="Открыть ценники"
-              buttonColor="#2E7D32"
-              onButton={() => router.push('/tabs/prices')}
+              buttonColor="#1E88E5"
+              onButton={() => router.push('/price-list/accessories')}
             />
           ) : roomAccessories.length === 0 ? (
             <EmptyState
@@ -598,97 +568,62 @@ const RoomMaterials: React.FC = () => {
               iconColor="#2E7D32"
               iconBg="#E8F5E9"
               text="Нет добавленных позиций"
-              sub="Нажмите кнопку, чтобы добавить позиции к помещению"
-              buttonLabel="Добавить комплектующее"
-              buttonColor="#2E7D32"
-              onButton={() => setAddAccessoryOpen(true)}
+              sub="Нажмите кнопку + чтобы добавить позиции к помещению"
             />
           ) : (
-            <div style={{ padding: '12px 16px 36px' }}>
-              {roomAccessories.map(item => (
-                <div key={item.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 14px', marginBottom: 8, borderRadius: 16,
-                  background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-                }}>
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 11,
-                    background: '#E8F5E9',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <IonIcon icon={buildOutline} style={{ fontSize: 18, color: '#2E7D32' }} />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.accessory.title}</div>
-                    <div style={{ fontSize: 12, color: '#999' }}>
-                      {item.accessory.price.toLocaleString('ru')} ₽/{item.accessory.unit}
-                      {' · итого '}
-                      <span style={{ color: '#2E7D32', fontWeight: 600 }}>
-                        {(item.accessory.price * item.quantity).toLocaleString('ru')} ₽
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <button
-                      onClick={() => changeAccessoryQty(item.id, -1)}
-                      style={{
-                        width: 28, height: 28, borderRadius: 8,
-                        border: '1.5px solid #ddd', background: '#fafafa',
-                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#666',
-                      }}
-                    >−</button>
-                    <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => changeAccessoryQty(item.id, 1)}
-                      style={{
-                        width: 28, height: 28, borderRadius: 8,
-                        border: '1.5px solid #2E7D32', background: '#E8F5E9',
-                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#2E7D32',
-                      }}
-                    >+</button>
-                  </div>
-
-                  <button
-                    onClick={() => removeAccessory(item.id)}
-                    style={{
-                      background: 'none', border: 'none', padding: '4px 0 4px 4px',
-                      cursor: 'pointer', color: '#E53935', flexShrink: 0,
-                    }}
-                  >
-                    <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
-                  </button>
-                </div>
-              ))}
-
-              <div style={{ padding: '10px 14px', background: '#F0F4FF', borderRadius: 12, marginBottom: 12 }}>
-                <PriceRow label="Стоимость комплектующих" value={Math.round(accessoryTotal)} bold primary />
-                {accessoryInstallTotal > 0 && (
-                  <PriceRow label="Монтаж" value={Math.round(accessoryInstallTotal)} />
-                )}
+            <div style={{ padding: '12px 16px 100px' }}>
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
+                  {roomAccessories.map((item, idx) => (
+                    <IonItem
+                      key={item.id}
+                      lines={idx === roomAccessories.length - 1 ? 'none' : 'inset'}
+                      style={{ '--background': 'transparent' } as React.CSSProperties}
+                    >
+                      <IonLabel>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{item.accessory.title}</div>
+                        <p style={{ fontSize: 12, color: '#999', margin: '2px 0 0' }}>
+                          {item.quantity} {item.accessory.unit} · {item.accessory.price.toLocaleString('ru')} ₽ = {(item.accessory.price * item.quantity).toLocaleString('ru')} ₽
+                        </p>
+                      </IonLabel>
+                      <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => changeAccessoryQty(item.id, -1)}
+                          style={{
+                            width: 28, height: 28, borderRadius: 8,
+                            border: '1.5px solid #ddd', background: '#fafafa',
+                            fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#666',
+                          }}
+                        >−</button>
+                        <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => changeAccessoryQty(item.id, 1)}
+                          style={{
+                            width: 28, height: 28, borderRadius: 8,
+                            border: '1.5px solid #1E88E5', background: 'rgba(30,136,229,0.08)',
+                            fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#1E88E5',
+                          }}
+                        >+</button>
+                        <button
+                          onClick={() => removeAccessory(item.id)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 0 4px 8px',
+                            cursor: 'pointer', color: '#E53935',
+                          }}
+                        >
+                          <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
+                        </button>
+                      </div>
+                    </IonItem>
+                  ))}
+                </IonList>
               </div>
-
-              <button
-                onClick={() => setAddAccessoryOpen(true)}
-                style={{
-                  width: '100%', padding: '13px', borderRadius: 16,
-                  background: '#fff', border: '2px dashed #2E7D32',
-                  color: '#2E7D32', fontWeight: 600, fontSize: 15,
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
-                Добавить комплектующее
-              </button>
             </div>
           )
         )}
@@ -704,7 +639,7 @@ const RoomMaterials: React.FC = () => {
               sub="Добавьте позиции в Ценники → Доп. услуги"
               buttonLabel="Открыть ценники"
               buttonColor="#1E88E5"
-              onButton={() => router.push('/tabs/prices')}
+              onButton={() => router.push('/price-list/services')}
             />
           ) : roomServices.length === 0 ? (
             <EmptyState
@@ -712,105 +647,139 @@ const RoomMaterials: React.FC = () => {
               iconColor="#C62828"
               iconBg="#FFF0F0"
               text="Нет добавленных позиций"
-              sub="Нажмите кнопку, чтобы добавить услуги к помещению"
-              buttonLabel="Добавить услугу"
-              buttonColor="#C62828"
-              onButton={() => setAddServiceOpen(true)}
+              sub="Нажмите кнопку + чтобы добавить услуги к помещению"
             />
           ) : (
-            <div style={{ padding: '12px 16px 36px' }}>
-              {roomServices.map(item => (
-                <div key={item.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 14px', marginBottom: 8, borderRadius: 16,
-                  background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-                }}>
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 11,
-                    background: '#FFF0F0',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <IonIcon icon={briefcaseOutline} style={{ fontSize: 18, color: '#C62828' }} />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.service.title}</div>
-                    {item.service.description && (
-                      <div style={{ fontSize: 11, color: '#bbb', marginBottom: 2 }}>{item.service.description}</div>
-                    )}
-                    <div style={{ fontSize: 12, color: '#999' }}>
-                      {item.service.price.toLocaleString('ru')} ₽
-                      {' · итого '}
-                      <span style={{ color: '#C62828', fontWeight: 600 }}>
-                        {(item.service.price * item.quantity).toLocaleString('ru')} ₽
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <button
-                      onClick={() => changeServiceQty(item.id, -1)}
-                      style={{
-                        width: 28, height: 28, borderRadius: 8,
-                        border: '1.5px solid #ddd', background: '#fafafa',
-                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#666',
-                      }}
-                    >−</button>
-                    <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => changeServiceQty(item.id, 1)}
-                      style={{
-                        width: 28, height: 28, borderRadius: 8,
-                        border: '1.5px solid #C62828', background: '#FFF0F0',
-                        fontSize: 18, lineHeight: 1, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#C62828',
-                      }}
-                    >+</button>
-                  </div>
-
-                  <button
-                    onClick={() => removeService(item.id)}
-                    style={{
-                      background: 'none', border: 'none', padding: '4px 0 4px 4px',
-                      cursor: 'pointer', color: '#E53935', flexShrink: 0,
-                    }}
-                  >
-                    <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
-                  </button>
-                </div>
-              ))}
-
-              <div style={{ padding: '10px 14px', background: '#F0F4FF', borderRadius: 12, marginBottom: 12 }}>
-                <PriceRow label="Стоимость доп. услуг" value={Math.round(serviceTotal)} bold primary />
-                {serviceInstallTotal > 0 && (
-                  <PriceRow label="Монтаж" value={Math.round(serviceInstallTotal)} />
-                )}
+            <div style={{ padding: '12px 16px 100px' }}>
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
+                  {roomServices.map((item, idx) => (
+                    <IonItem
+                      key={item.id}
+                      lines={idx === roomServices.length - 1 ? 'none' : 'inset'}
+                      style={{ '--background': 'transparent' } as React.CSSProperties}
+                    >
+                      <IonLabel>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{item.service.title}</div>
+                        {item.service.description && (
+                          <p style={{ fontSize: 11, color: '#bbb', margin: '2px 0 0' }}>{item.service.description}</p>
+                        )}
+                        <p style={{ fontSize: 12, color: '#999', margin: '2px 0 0' }}>
+                          {item.quantity} шт · {item.service.price.toLocaleString('ru')} ₽ = {(item.service.price * item.quantity).toLocaleString('ru')} ₽
+                        </p>
+                      </IonLabel>
+                      <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => changeServiceQty(item.id, -1)}
+                          style={{
+                            width: 28, height: 28, borderRadius: 8,
+                            border: '1.5px solid #ddd', background: '#fafafa',
+                            fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#666',
+                          }}
+                        >−</button>
+                        <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => changeServiceQty(item.id, 1)}
+                          style={{
+                            width: 28, height: 28, borderRadius: 8,
+                            border: '1.5px solid #C62828', background: '#FFF0F0',
+                            fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#C62828',
+                          }}
+                        >+</button>
+                        <button
+                          onClick={() => removeService(item.id)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 0 4px 8px',
+                            cursor: 'pointer', color: '#E53935',
+                          }}
+                        >
+                          <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
+                        </button>
+                      </div>
+                    </IonItem>
+                  ))}
+                </IonList>
               </div>
-
-              <button
-                onClick={() => setAddServiceOpen(true)}
-                style={{
-                  width: '100%', padding: '13px', borderRadius: 16,
-                  background: '#fff', border: '2px dashed #C62828',
-                  color: '#C62828', fontWeight: 600, fontSize: 15,
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <IonIcon icon={addOutline} style={{ fontSize: 20 }} />
-                Добавить услугу
-              </button>
             </div>
           )
         )}
 
       </IonContent>
+
+      {showTotalsBar && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0, left: 0, right: 0,
+          display: 'flex',
+          alignItems: 'center',
+          background: 'var(--color-surface)',
+          borderTop: '1px solid var(--color-border)',
+          padding: '10px 16px calc(10px + env(safe-area-inset-bottom))',
+          zIndex: 100,
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700,
+            color: 'var(--color-text-muted)',
+            textTransform: 'uppercase', letterSpacing: '0.6px',
+            paddingRight: 14,
+            borderRight: '1px solid var(--color-border)',
+            alignSelf: 'stretch',
+            display: 'flex', alignItems: 'center',
+          }}>
+            Итого
+          </div>
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 2,
+          }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1 }}>
+              {Math.round(sectionTotal).toLocaleString('ru')} ₽
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              {meta.title.toLowerCase()}
+            </span>
+          </div>
+          {sectionWorker > 0 && (
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 2,
+              borderLeft: '1px solid var(--color-border)',
+            }}>
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1 }}>
+                {Math.round(sectionWorker).toLocaleString('ru')} ₽
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>монтаж</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {fabAction && (
+        <button
+          onClick={fabAction}
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: showTotalsBar
+              ? 'calc(70px + env(safe-area-inset-bottom, 0px))'
+              : 'calc(16px + env(safe-area-inset-bottom, 0px))',
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'var(--ion-color-primary, #3880ff)',
+            border: 'none', cursor: 'pointer', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            transition: 'bottom 0.2s ease',
+          }}
+        >
+          <IonIcon icon={addOutline} style={{ fontSize: 28, color: '#fff' }} />
+        </button>
+      )}
 
       {/* Profile picker — single wall */}
       <IonActionSheet
@@ -921,7 +890,7 @@ const RoomMaterials: React.FC = () => {
       {/* Profile — apply all */}
       <IonActionSheet
         isOpen={applyAllOpen}
-        header="Применить ко всем стенам"
+        header="Применить ко всем стенам профиль:"
         buttons={[
           ...profiles.map(p => ({
             text: p.title,
@@ -968,7 +937,7 @@ const RoomMaterials: React.FC = () => {
 const EmptyState: React.FC<{
   icon: string; iconColor: string; iconBg: string;
   text: string; sub: string;
-  buttonLabel: string; buttonColor: string; onButton: () => void;
+  buttonLabel?: string; buttonColor?: string; onButton?: () => void;
 }> = ({ icon, iconColor, iconBg, text, sub, buttonLabel, buttonColor, onButton }) => (
   <div style={{
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -984,18 +953,20 @@ const EmptyState: React.FC<{
     </div>
     <div style={{ fontWeight: 700, fontSize: 16, color: '#333' }}>{text}</div>
     <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.4 }}>{sub}</div>
-    <button
-      onClick={onButton}
-      style={{
-        marginTop: 8, padding: '12px 24px', borderRadius: 14,
-        background: buttonColor, border: 'none',
-        color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}
-    >
-      <IonIcon icon={addOutline} style={{ fontSize: 18 }} />
-      {buttonLabel}
-    </button>
+    {buttonLabel && onButton && (
+      <button
+        onClick={onButton}
+        style={{
+          marginTop: 8, padding: '12px 24px', borderRadius: 14,
+          background: buttonColor, border: 'none',
+          color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}
+      >
+        <IonIcon icon={addOutline} style={{ fontSize: 18 }} />
+        {buttonLabel}
+      </button>
+    )}
   </div>
 );
 

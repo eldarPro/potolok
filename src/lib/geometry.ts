@@ -7,7 +7,7 @@ export function pointLabel(index: number): string {
 }
 
 export function edgeLabel(fromIndex: number, n: number): string {
-  return `${pointLabel(fromIndex)}–${pointLabel((fromIndex + 1) % n)}`;
+  return `${pointLabel(fromIndex)} – ${pointLabel((fromIndex + 1) % n)}`;
 }
 
 /** Polygon area in canvas px², using shoelace formula */

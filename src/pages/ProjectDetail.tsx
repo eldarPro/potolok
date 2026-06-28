@@ -2,16 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon,
+  IonFab, IonFabButton,
   IonModal, IonItem, IonItemSliding, IonItemOptions, IonItemOption,
+  IonActionSheet, IonAlert, IonList, IonLabel, IonInput, IonTextarea,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
   chevronBackOutline, addOutline, trashOutline,
-  documentTextOutline, chevronForwardOutline,
+  chevronForwardOutline, documentTextOutline, settingsOutline, ellipsisVerticalOutline, readerOutline,
   callOutline, locationOutline, squareOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
-import { getProject, upsertProject, createRoom } from '../lib/storage';
+import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
 import { Project, Room } from '../types';
 import ActionButton from '../components/ActionButton';
 import './ProjectDetail.css';
@@ -73,6 +75,15 @@ const ProjectDetail: React.FC = () => {
   const [newRoomError, setNewRoomError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editError, setEditError] = useState('');
+
   const load = () => setProject(getProject(id));
   useEffect(() => { load(); }, [id]);
   useIonViewWillEnter(() => { load(); });
@@ -108,6 +119,28 @@ const ProjectDetail: React.FC = () => {
     setProject(updated);
   };
 
+  const handleOpenEdit = () => {
+    setEditName(project.clientName);
+    setEditPhone(project.phone ?? '');
+    setEditAddress(project.address ?? '');
+    setEditNotes(project.notes ?? '');
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editName.trim()) { setEditError('Укажите имя клиента'); return; }
+    const updated = { ...project, clientName: editName.trim(), phone: editPhone, address: editAddress, notes: editNotes, updatedAt: new Date().toISOString() };
+    upsertProject(updated);
+    setProject(updated);
+    setShowEditModal(false);
+  };
+
+  const handleDeleteProject = () => {
+    deleteProject(project.id);
+    router.push('/', 'back', 'pop');
+  };
+
   const totalSqm = project.rooms.reduce((s, r) => s + r.areaSqm, 0);
   const totalPerimeterM = project.rooms.reduce((s, r) => s + r.perimeterM, 0);
   const totalPrice = project.rooms.reduce((s, r) => s + calcRoomClientPrice(r), 0);
@@ -121,10 +154,13 @@ const ProjectDetail: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/" />
           </IonButtons>
-          <IonTitle>{project.clientName || 'Проект'}</IonTitle>
           <IonButtons slot="end">
-            <IonButton routerLink={`/project/${id}/summary`}>
-              <IonIcon slot="icon-only" icon={documentTextOutline} style={{ color: '#4A90D9' }} />
+            <IonButton fill="clear" color="primary" onClick={() => router.push(`/project/${id}/summary`, 'forward', 'push')}>
+              <IonIcon icon={documentTextOutline} style={{ marginRight: 4 }} />
+              Смета
+            </IonButton>
+            <IonButton fill="clear" onClick={() => setShowMenu(true)}>
+              <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
@@ -152,6 +188,12 @@ const ProjectDetail: React.FC = () => {
                     {project.address}
                   </div>
                 )}
+                {project.notes && (
+                  <div className="project-detail-client-meta">
+                    <IonIcon icon={readerOutline} />
+                    {project.notes}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -166,7 +208,7 @@ const ProjectDetail: React.FC = () => {
         {/* ── Room cards ── */}
         {project.rooms.length === 0 ? (
           <div className="project-detail-no-rooms">
-            Нет помещений — добавьте первое
+            Нет помещений — добавьте нажимая на кнопку +
           </div>
         ) : (
           <div className="card-list" style={{ paddingTop: 0, paddingBottom: 8 }}>
@@ -221,12 +263,16 @@ const ProjectDetail: React.FC = () => {
           </div>
         )}
 
-        {/* ── Add room ── */}
-        <div className="project-detail-add-room">
-          <ActionButton solid onClick={handleOpenNewRoom}>
-            Добавить помещение
-          </ActionButton>
-        </div>
+        <IonFab
+          vertical="bottom"
+          horizontal="end"
+          slot="fixed"
+          style={totalSqm > 0 ? { marginBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' } : undefined}
+        >
+          <IonFabButton onClick={handleOpenNewRoom}>
+            <IonIcon icon={addOutline} />
+          </IonFabButton>
+        </IonFab>
 
         <IonModal
           isOpen={showNewRoom}
@@ -299,6 +345,70 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
       )}
+      <IonActionSheet
+        isOpen={showMenu}
+        onDidDismiss={() => setShowMenu(false)}
+        buttons={[
+          { text: 'Редактировать', handler: () => handleOpenEdit() },
+          { text: 'Удалить', role: 'destructive', handler: () => setShowDeleteConfirm(true) },
+          { text: 'Отмена', role: 'cancel' },
+        ]}
+      />
+
+      <IonAlert
+        isOpen={showDeleteConfirm}
+        onDidDismiss={() => setShowDeleteConfirm(false)}
+        header="Удалить проект?"
+        message="Все помещения и данные будут удалены без возможности восстановления."
+        buttons={[
+          { text: 'Отмена', role: 'cancel' },
+          { text: 'Удалить', role: 'destructive', handler: handleDeleteProject },
+        ]}
+      />
+
+      <IonModal
+        isOpen={showEditModal}
+        onDidDismiss={() => setShowEditModal(false)}
+        breakpoints={[0, 1]}
+        initialBreakpoint={1}
+        className="new-room-modal"
+      >
+        <div className="new-room-modal__content">
+          <div className="new-room-modal__handle" />
+          <div className="new-room-modal__header">
+            <div className="new-room-modal__title">Редактировать проект</div>
+          </div>
+          <div className="new-room-modal__body" style={{ paddingBottom: 8 }}>
+            <IonList inset style={{ margin: '0 0 12px' }}>
+              <IonItem>
+                <IonLabel position="stacked">Клиент *</IonLabel>
+                <IonInput value={editName} onIonInput={e => { setEditName(e.detail.value ?? ''); setEditError(''); }} placeholder="Иванов Иван" clearInput />
+              </IonItem>
+              <IonItem>
+                <IonLabel position="stacked">Телефон</IonLabel>
+                <IonInput value={editPhone} onIonInput={e => setEditPhone(e.detail.value ?? '')} type="tel" placeholder="+7 (999) 000-00-00" />
+              </IonItem>
+              <IonItem>
+                <IonLabel position="stacked">Адрес объекта</IonLabel>
+                <IonInput value={editAddress} onIonInput={e => setEditAddress(e.detail.value ?? '')} placeholder="ул. Ленина 1, кв. 5" />
+              </IonItem>
+              <IonItem lines="none">
+                <IonLabel position="stacked">Заметки</IonLabel>
+                <IonTextarea value={editNotes} onIonInput={e => setEditNotes(e.detail.value ?? '')} placeholder="Дополнительная информация..." rows={3} />
+              </IonItem>
+            </IonList>
+            {editError && <div className="new-room-modal__error">{editError}</div>}
+          </div>
+          <div className="new-room-modal__footer">
+            <button className="new-room-modal__btn new-room-modal__btn--cancel" onClick={() => setShowEditModal(false)}>
+              Отмена
+            </button>
+            <ActionButton expand={false} solid onClick={handleSaveEdit} className="new-room-modal__action-btn">
+              Сохранить
+            </ActionButton>
+          </div>
+        </div>
+      </IonModal>
     </IonPage>
   );
 };
