@@ -40,6 +40,7 @@ const RoomMaterials: React.FC = () => {
 
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
   const [editingSizeEdge, setEditingSizeEdge] = useState<number | null>(null);
+  const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
   const [edgeMenuOpen, setEdgeMenuOpen] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
@@ -126,6 +127,43 @@ const RoomMaterials: React.FC = () => {
       ...s, lengthM: edgeLengthM(newPts, s.edgeIndex, room.scale),
     }));
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
+  };
+
+  const splitEdgeAt = (edgeIndex: number, distM: number) => {
+    const n = room.points.length;
+    const pts = room.points;
+    const a = pts[edgeIndex % n];
+    const b = pts[(edgeIndex + 1) % n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const edgePx = Math.sqrt(dx * dx + dy * dy);
+    if (edgePx === 0) return;
+    const edgeTotalM = edgeLengthM(pts, edgeIndex, room.scale);
+    if (distM <= 0 || distM >= edgeTotalM) return;
+    const splitPx = (distM * GRID_SIZE * 100) / room.scale;
+    const ratio = splitPx / edgePx;
+    const splitPt = { x: a.x + dx * ratio, y: a.y + dy * ratio };
+    const newPts = [...pts.slice(0, edgeIndex + 1), splitPt, ...pts.slice(edgeIndex + 1)];
+    const existingSegs = room.profileSegments ?? [];
+    const profileAtEdge = existingSegs.find(s => s.edgeIndex === edgeIndex);
+    const updatedSegs = existingSegs.map(s => {
+      const newIdx = s.edgeIndex > edgeIndex ? s.edgeIndex + 1 : s.edgeIndex;
+      return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx, room.scale) };
+    });
+    if (profileAtEdge) {
+      updatedSegs.push({
+        edgeIndex: edgeIndex + 1,
+        profileId: profileAtEdge.profileId,
+        profile: { ...profileAtEdge.profile },
+        lengthM: edgeLengthM(newPts, edgeIndex + 1, room.scale),
+      });
+      updatedSegs.sort((a, b) => a.edgeIndex - b.edgeIndex);
+    }
+    const areaPx = polygonArea(newPts);
+    const perimPx = polygonPerimeter(newPts);
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegs });
   };
 
   // ── Lighting delete ──
@@ -259,9 +297,7 @@ const RoomMaterials: React.FC = () => {
                 <IonIcon slot="icon-only" icon={addOutline} />
               </IonButton>
             ) : (
-              <IonButton routerLink={backHref} routerDirection="back">
-                <IonIcon slot="icon-only" icon={checkmarkOutline} />
-              </IonButton>
+              null
             )}
           </IonButtons>
         </IonToolbar>
@@ -828,6 +864,36 @@ const RoomMaterials: React.FC = () => {
         onDidDismiss={() => setEditingSizeEdge(null)}
       />
 
+      {/* Split edge */}
+      <IonAlert
+        isOpen={splitEdgeIdx !== null}
+        header={splitEdgeIdx !== null
+          ? `Разделить стену ${edgeLabel(splitEdgeIdx, room.points.length)}`
+          : undefined}
+        message={splitEdgeIdx !== null
+          ? `Длина: ${edgeLengthM(room.points, splitEdgeIdx, room.scale).toFixed(2)} м. Укажите расстояние от начала стены.`
+          : undefined}
+        inputs={[{
+          name: 'dist',
+          type: 'number',
+          placeholder: 'Расстояние в метрах',
+          min: 0.01,
+        }]}
+        buttons={[
+          { text: 'Отмена', role: 'cancel' },
+          {
+            text: 'Разделить',
+            handler: (data: { dist: string }) => {
+              const val = parseFloat(data.dist);
+              if (splitEdgeIdx !== null && !isNaN(val) && val > 0) {
+                splitEdgeAt(splitEdgeIdx, val);
+              }
+            },
+          },
+        ]}
+        onDidDismiss={() => setSplitEdgeIdx(null)}
+      />
+
       {/* Edge context menu */}
       <IonActionSheet
         isOpen={edgeMenuOpen !== null}
@@ -842,6 +908,10 @@ const RoomMaterials: React.FC = () => {
           {
             text: 'Изменить размер',
             handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingSizeEdge(e); },
+          },
+          {
+            text: 'Разделить',
+            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setSplitEdgeIdx(e); },
           },
           { text: 'Отмена', role: 'cancel' as const },
         ]}

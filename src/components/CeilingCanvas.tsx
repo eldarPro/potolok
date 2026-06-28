@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, trashOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon, GRID_SIZE } from '../lib/geometry';
+import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon, edgeLengthM, GRID_SIZE } from '../lib/geometry';
 import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
@@ -46,6 +46,8 @@ const CeilingCanvas: React.FC<Props> = ({
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const [redoStack, setRedoStack] = useState<{ points: Point[]; closed: boolean }[]>([]);
+  const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
+  const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
   const isDragging = useRef(false);
   const lastTouch = useRef<Point | null>(null);
   const lastMouse = useRef<Point | null>(null);
@@ -61,7 +63,8 @@ const CeilingCanvas: React.FC<Props> = ({
   }, [room.id]);
 
   // Clear cursor when switching lighting item
-  useEffect(() => { setCursor(null); }, [placingLighting?.id]);
+  useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedLighting(null); }, [placingLighting?.id]);
+  useEffect(() => { if (!closed) setSelectedPoint(null); }, [closed]);
 
   const toCanvas = useCallback((clientX: number, clientY: number, stageEl: HTMLDivElement): Point => {
     const rect = stageEl.getBoundingClientRect();
@@ -82,6 +85,34 @@ const CeilingCanvas: React.FC<Props> = ({
     const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
     const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
     return { areaSqm, perimeterM };
+  };
+
+  const deletePoint = (i: number) => {
+    if (points.length <= 3) return;
+    const n = points.length;
+    const newPts = [...points.slice(0, i), ...points.slice(i + 1)];
+    const prevEdgeIdx = (i - 1 + n) % n;
+    const existingSegs = room.profileSegments ?? [];
+    const updatedSegs = existingSegs
+      .filter(s => s.edgeIndex !== i)
+      .map(s => {
+        let newIdx = s.edgeIndex;
+        if (s.edgeIndex === prevEdgeIdx) {
+          newIdx = i === 0 ? n - 2 : i - 1;
+        } else if (s.edgeIndex > i) {
+          newIdx = s.edgeIndex - 1;
+        }
+        return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx, room.scale) };
+      })
+      .sort((a, b) => a.edgeIndex - b.edgeIndex);
+    const areaPx = polygonArea(newPts);
+    const perimPx = polygonPerimeter(newPts);
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    setPoints(newPts);
+    setSelectedPoint(null);
+    setRedoStack([]);
+    onChange({ points: newPts, profileSegments: updatedSegs, areaSqm, perimeterM });
   };
 
   const finishPolygon = (pts: Point[]) => {
@@ -382,6 +413,8 @@ const CeilingCanvas: React.FC<Props> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={() => { setSelectedPoint(null); setSelectedLighting(null); }}
+        onTap={() => { setSelectedPoint(null); setSelectedLighting(null); }}
         style={{ cursor: placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
       >
         <Layer>
@@ -442,62 +475,112 @@ const CeilingCanvas: React.FC<Props> = ({
           ))}
 
           {/* Vertices */}
-          {points.map((p, i) => (
-            <Group key={i}>
-              <Circle
-                x={p.x} y={p.y}
-                radius={i === 0 && nearStart ? 14 : 7}
-                fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
-                stroke={i === 0 ? '#3880ff' : '#fff'}
-                strokeWidth={2}
-                draggable={closed && !placingLighting}
-                onDragStart={() => { lastMouse.current = null; }}
-                onDragMove={e => {
-                  const newPts = [...points];
-                  newPts[i] = { x: e.target.x(), y: e.target.y() };
-                  setPoints(newPts);
-                  const m = computeMetrics(newPts);
-                  onChange({ points: newPts, ...m });
-                }}
-              />
-              <Text
-                x={p.x + 10} y={p.y - 18}
-                text={pointLabel(i)}
-                fontSize={13} fontStyle="bold" fill="#fff"
-                shadowColor="rgba(0,0,0,0.8)" shadowBlur={3} shadowOffsetX={1} shadowOffsetY={1}
-                listening={false}
-              />
-            </Group>
-          ))}
+          {points.map((p, i) => {
+            const isSelected = selectedPoint === i;
+            const baseRadius = i === 0 && nearStart ? 14 : 7;
+            return (
+              <Group key={i}>
+                {isSelected && (
+                  <Circle
+                    x={p.x} y={p.y}
+                    radius={baseRadius + 7}
+                    fill="rgba(229,57,53,0.25)"
+                    stroke="#E53935"
+                    strokeWidth={2}
+                    listening={false}
+                  />
+                )}
+                <Circle
+                  x={p.x} y={p.y}
+                  radius={baseRadius}
+                  fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
+                  stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
+                  strokeWidth={isSelected ? 3 : 2}
+                  draggable={closed && !placingLighting}
+                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; }}
+                  onDragMove={e => {
+                    const newPts = [...points];
+                    newPts[i] = { x: e.target.x(), y: e.target.y() };
+                    setPoints(newPts);
+                    const m = computeMetrics(newPts);
+                    onChange({ points: newPts, ...m });
+                  }}
+                  onClick={e => {
+                    if (closed && !placingLighting) {
+                      e.cancelBubble = true;
+                      setSelectedLighting(null);
+                      setSelectedPoint(prev => prev === i ? null : i);
+                    }
+                  }}
+                  onTap={e => {
+                    if (closed && !placingLighting) {
+                      e.cancelBubble = true;
+                      setSelectedLighting(null);
+                      setSelectedPoint(prev => prev === i ? null : i);
+                    }
+                  }}
+                />
+                <Text
+                  x={p.x + 10} y={p.y - 18}
+                  text={pointLabel(i)}
+                  fontSize={13} fontStyle="bold" fill="#fff"
+                  shadowColor="rgba(0,0,0,0.8)" shadowBlur={3} shadowOffsetX={1} shadowOffsetY={1}
+                  listening={false}
+                />
+              </Group>
+            );
+          })}
 
           {/* ── Placed point lighting elements ── */}
           {(room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
             const el = e as RoomLightingPoint;
+            const isSel = selectedLighting === el.id;
             return (
-              <Text
-                key={el.id}
-                x={el.x - 10} y={el.y - 10}
-                text={el.catalogItem.symbol}
-                fontSize={20}
-                fill={lightColor(el.catalogItem.color)}
-                shadowColor="rgba(0,0,0,0.6)" shadowBlur={4}
-                listening={false}
-              />
+              <Group key={el.id}>
+                {isSel && (
+                  <Circle
+                    x={el.x} y={el.y} radius={18}
+                    fill="rgba(229,57,53,0.2)" stroke="#E53935" strokeWidth={2}
+                    listening={false}
+                  />
+                )}
+                <Circle
+                  x={el.x} y={el.y} radius={16}
+                  fill="transparent"
+                  listening={!placingLighting}
+                  onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
+                  onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
+                />
+                <Text
+                  x={el.x - 10} y={el.y - 10}
+                  text={el.catalogItem.symbol}
+                  fontSize={20}
+                  fill={lightColor(el.catalogItem.color)}
+                  shadowColor="rgba(0,0,0,0.6)" shadowBlur={4}
+                  listening={false}
+                />
+              </Group>
             );
           })}
 
           {/* ── Placed path lighting elements ── */}
           {(room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
             const el = e as RoomLightingPath;
+            const isSel = selectedLighting === el.id;
             return (
               <Line
                 key={el.id}
                 points={el.points.flatMap(p => [p.x, p.y])}
                 stroke={lightColor(el.catalogItem.color)}
-                strokeWidth={5}
+                strokeWidth={isSel ? 9 : 5}
                 lineCap="round"
                 lineJoin="round"
-                listening={false}
+                shadowColor={isSel ? '#E53935' : undefined}
+                shadowBlur={isSel ? 12 : 0}
+                listening={!placingLighting}
+                hitStrokeWidth={20}
+                onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
+                onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
               />
             );
           })}
@@ -560,6 +643,77 @@ const CeilingCanvas: React.FC<Props> = ({
           </button>
         )}
       </div>
+
+      {/* Delete point button */}
+      {selectedPoint !== null && points.length > 3 && (() => {
+        const p = points[selectedPoint];
+        const sx = p.x * viewport.scale + viewport.x;
+        const sy = p.y * viewport.scale + viewport.y;
+        return (
+          <button
+            onClick={() => deletePoint(selectedPoint)}
+            style={{
+              position: 'absolute',
+              left: sx - 18,
+              top: sy - 58,
+              width: 36, height: 36,
+              borderRadius: '50%',
+              background: '#E53935',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
+              zIndex: 100,
+              pointerEvents: 'auto',
+            }}
+          >
+            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
+          </button>
+        );
+      })()}
+
+      {/* Delete lighting button */}
+      {selectedLighting && !placingLighting && (() => {
+        const el = (room.lighting ?? []).find(e => e.id === selectedLighting);
+        if (!el) return null;
+        let wx: number, wy: number;
+        if (el.kind === 'point') {
+          wx = (el as RoomLightingPoint).x;
+          wy = (el as RoomLightingPoint).y;
+        } else {
+          const pts = (el as RoomLightingPath).points;
+          wx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+          wy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        }
+        const sx = wx * viewport.scale + viewport.x;
+        const sy = wy * viewport.scale + viewport.y;
+        return (
+          <button
+            onClick={() => {
+              onChange({ lighting: (room.lighting ?? []).filter(e => e.id !== selectedLighting) });
+              setSelectedLighting(null);
+            }}
+            style={{
+              position: 'absolute',
+              left: sx - 18,
+              top: sy - 58,
+              width: 36, height: 36,
+              borderRadius: '50%',
+              background: '#E53935',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
+              zIndex: 100,
+              pointerEvents: 'auto',
+            }}
+          >
+            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
+          </button>
+        );
+      })()}
 
       {/* Empty state overlay */}
       {points.length === 0 && (
