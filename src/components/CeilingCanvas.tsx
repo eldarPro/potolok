@@ -22,6 +22,7 @@ interface Props {
   canUndoLighting?: boolean;
   canRedoLighting?: boolean;
   onOutOfBounds?: () => void;
+  onOpenTemplates?: () => void;
 }
 
 type Tool = 'draw' | 'move';
@@ -48,6 +49,7 @@ const CeilingCanvas: React.FC<Props> = ({
   canUndoLighting = false,
   canRedoLighting = false,
   onOutOfBounds,
+  onOpenTemplates,
 }) => {
   const [points, setPoints] = useState<Point[]>(room.points);
   const [closed, setClosed] = useState(room.points.length >= MIN_POINTS);
@@ -170,8 +172,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (points.length >= MIN_POINTS) {
       const first = points[0];
-      const candidate = points.length > 0 ? snapAngle(points[points.length - 1], snapped) : snapped;
-      if (dist(candidate, first) * viewport.scale < CLOSE_THRESHOLD) {
+      if (dist(pt, first) * viewport.scale < CLOSE_THRESHOLD) {
         finishPolygon(points);
         return;
       }
@@ -179,7 +180,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (points.length > 0) {
       const last = points[points.length - 1];
-      const snappedAngle = snapAngle(last, snapped);
+      const snappedAngle = snapToGrid(snapAngle(last, snapped));
       setRedoStack([]);
       setPoints(prev => [...prev, snappedAngle]);
     } else {
@@ -243,7 +244,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (tool !== 'draw' || points.length === 0 || closed) return;
     const last = points[points.length - 1];
-    setCursor(snapAngle(last, snapToGrid(pos)));
+    setCursor(snapToGrid(snapAngle(last, snapToGrid(pos))));
   };
 
   const handleStageMouseUp = () => {
@@ -293,7 +294,7 @@ const CeilingCanvas: React.FC<Props> = ({
       const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
       handleTap(pt);
       setCursor(null);
-    } else {
+    } else if (!isDraggingPoint.current) {
       lastTouch.current = { x: touches[0].clientX, y: touches[0].clientY };
     }
   };
@@ -341,8 +342,8 @@ const CeilingCanvas: React.FC<Props> = ({
       const tx = (touches[0].clientX - rect.left - viewport.x) / viewport.scale;
       const ty = (touches[0].clientY - rect.top  - viewport.y) / viewport.scale;
       const last = points[points.length - 1];
-      setCursor(snapAngle(last, snapToGrid({ x: tx, y: ty })));
-    } else if (tool === 'move' && lastTouch.current && touches.length === 1) {
+      setCursor(snapToGrid(snapAngle(last, snapToGrid({ x: tx, y: ty }))));
+    } else if (tool === 'move' && lastTouch.current && touches.length === 1 && !isDraggingPoint.current) {
       const ddx = touches[0].clientX - lastTouch.current.x;
       const ddy = touches[0].clientY - lastTouch.current.y;
       setViewport(v => ({ ...v, x: v.x + ddx, y: v.y + ddy }));
@@ -353,6 +354,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const handleTouchEnd = () => {
     pinchRef.current = null;
     lastTouch.current = null;
+    isDraggingPoint.current = false;
     // small delay so the ghost mousedown that fires after touchend is still blocked
     setTimeout(() => { isTouching.current = false; }, 300);
   };
@@ -428,7 +430,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const tx = (e.clientX - rect.left - viewport.x) / viewport.scale;
     const ty = (e.clientY - rect.top  - viewport.y) / viewport.scale;
     const last = points[points.length - 1];
-    setCursor(snapAngle(last, snapToGrid({ x: tx, y: ty })));
+    setCursor(snapToGrid(snapAngle(last, snapToGrid({ x: tx, y: ty }))));
   };
 
   return (
@@ -534,8 +536,10 @@ const CeilingCanvas: React.FC<Props> = ({
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 3 : 2}
+                  listening={closed && !placingLighting}
                   draggable={closed && !placingLighting}
-                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; isDraggingPoint.current = true; }}
+                  onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
+                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { x: e.target.x(), y: e.target.y() };
@@ -766,6 +770,7 @@ const CeilingCanvas: React.FC<Props> = ({
             background: 'rgba(0,0,0,0.45)',
             backdropFilter: 'blur(6px)',
             borderRadius: 18, padding: '20px 28px', textAlign: 'center',
+            pointerEvents: 'auto',
           }}>
             <div style={{ fontSize: 32, marginBottom: 10 }}>📐</div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
@@ -774,6 +779,22 @@ const CeilingCanvas: React.FC<Props> = ({
             <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
               чтобы добавить точки контура
             </div>
+            {onOpenTemplates && (
+              <div style={{ marginTop: 12, fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+                или{' '}
+                <button
+                  onClick={onOpenTemplates}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    color: '#1E88E5', fontWeight: 600, fontSize: 13,
+                    cursor: 'pointer', textDecoration: 'underline',
+                    textUnderlineOffset: 3,
+                  }}
+                >
+                  готовые шаблоны
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

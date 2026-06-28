@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonFab, IonFabButton, IonIcon, IonItem,
   IonItemSliding, IonItemOptions, IonItemOption,
+  IonSearchbar, IonButtons, IonButton,
   useIonViewWillEnter,
 } from '@ionic/react';
-import { add, trashOutline, folderOpenOutline, locationOutline } from 'ionicons/icons';
+import { add, trashOutline, folderOpenOutline, locationOutline, searchOutline, closeOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
 import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
@@ -29,6 +30,19 @@ const getAvatarColor = (name: string) => {
 
 const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchbarRef = useRef<HTMLIonSearchbarElement>(null);
+
+  const openSearch = () => {
+    setSearchOpen(true);
+    setTimeout(() => searchbarRef.current?.setFocus(), 50);
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery('');
+  };
 
   const refresh = () => setProjects(loadProjects());
   useIonViewWillEnter(() => { refresh(); });
@@ -40,11 +54,47 @@ const ProjectList: React.FC = () => {
 
   const totalSqm = (p: Project) => p.rooms.reduce((s, r) => s + r.areaSqm, 0);
 
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? projects.filter(p =>
+        p.clientName.toLowerCase().includes(q) ||
+        p.address.toLowerCase().includes(q) ||
+        p.phone.toLowerCase().includes(q)
+      )
+    : projects;
+
   return (
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>Проекты</IonTitle>
+          {searchOpen ? (
+            <>
+              <IonSearchbar
+                ref={searchbarRef}
+                value={query}
+                onIonInput={e => setQuery(e.detail.value ?? '')}
+                placeholder="Поиск"
+                debounce={100}
+                className="project-searchbar-inline"
+              />
+              <IonButtons slot="end">
+                <IonButton onClick={closeSearch}>
+                  <IonIcon slot="icon-only" icon={closeOutline} />
+                </IonButton>
+              </IonButtons>
+            </>
+          ) : (
+            <>
+              <IonTitle>Проекты</IonTitle>
+              {projects.length > 0 && (
+                <IonButtons slot="end">
+                  <IonButton onClick={openSearch}>
+                    <IonIcon slot="icon-only" icon={searchOutline} />
+                  </IonButton>
+                </IonButtons>
+              )}
+            </>
+          )}
         </IonToolbar>
       </IonHeader>
 
@@ -66,7 +116,12 @@ const ProjectList: React.FC = () => {
           </div>
         ) : (
           <div className="card-list" style={{ paddingBottom: 88 }}>
-            {projects.map(p => {
+            {filtered.length === 0 && searchOpen ? (
+              <div className="project-list-no-results">
+                <IonIcon icon={searchOutline} />
+                <p>Ничего не найдено</p>
+              </div>
+            ) : filtered.map(p => {
               const sqm = totalSqm(p);
               const initials = getInitials(p.clientName);
               const avatarColor = getAvatarColor(p.clientName);

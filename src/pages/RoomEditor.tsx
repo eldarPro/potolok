@@ -13,7 +13,7 @@ import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
-import { edgeLengthM, dist, pxToMeters } from '../lib/geometry';
+import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
 
 const MAT_TABS = [
   { section: 'fabric',      label: 'Полотна',  icon: layersOutline,       color: '#1E88E5' },
@@ -46,6 +46,7 @@ const RoomEditor: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -93,6 +94,39 @@ const RoomEditor: React.FC = () => {
   });
 
   if (!project || !room) return null;
+
+  // ── Room templates ──────────────────────────────────────────────────────────
+
+  // Shapes in integer grid-cell units. All corners are whole numbers →
+  // after scaling by (k × GRID_SIZE) every point lands exactly on the grid.
+  const TEMPLATES: { id: string; label: string; w: number; h: number; shape: [number, number][] }[] = [
+    { id: 'rect',   label: 'Прямоугольник', w: 8, h: 5, shape: [[0,0],[8,0],[8,5],[0,5]] },
+    { id: 'square', label: 'Квадрат',       w: 6, h: 6, shape: [[0,0],[6,0],[6,6],[0,6]] },
+    { id: 'lshape', label: 'Г-образная',    w: 8, h: 8, shape: [[0,0],[8,0],[8,4],[4,4],[4,8],[0,8]] },
+    { id: 'ushape', label: 'П-образная',    w: 8, h: 8, shape: [[0,0],[3,0],[3,5],[5,5],[5,0],[8,0],[8,8],[0,8]] },
+    { id: 'tshape', label: 'Т-образная',    w: 8, h: 8, shape: [[0,0],[8,0],[8,3],[5,3],[5,8],[3,8],[3,3],[0,3]] },
+    { id: 'trap',   label: 'Трапеция',      w: 8, h: 6, shape: [[1,0],[7,0],[8,6],[0,6]] },
+  ];
+
+  const applyTemplate = (shape: [number, number][], tw: number, th: number) => {
+    const pad = GRID_SIZE * 2;
+    const W = canvasSize.width - pad * 2;
+    const H = canvasSize.height - pad * 2;
+    // k — сколько пикселей сетки на одну единицу шаблона (кратно GRID_SIZE)
+    const k = Math.max(1, Math.floor(Math.min(W / tw, H / th) / GRID_SIZE));
+    const sc = k * GRID_SIZE;
+    const sw = tw * sc;
+    const sh = th * sc;
+    // Начало координат — с привязкой к сетке
+    const ox = Math.round((canvasSize.width - sw) / 2 / GRID_SIZE) * GRID_SIZE;
+    const oy = Math.round((canvasSize.height - sh) / 2 / GRID_SIZE) * GRID_SIZE;
+    const pts = shape.map(([gx, gy]) => ({ x: ox + gx * sc, y: oy + gy * sc }));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts)), room.scale) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts), room.scale).toFixed(2));
+    setTemplatesOpen(false);
+    updateRoom({ points: pts, areaSqm, perimeterM, lighting: [] });
+    setCanvasKey(k => k + 1);
+  };
 
   const updateRoom = (partial: Partial<Room>) => {
     let updated: Room = { ...room, ...partial };
@@ -322,6 +356,7 @@ const RoomEditor: React.FC = () => {
                   message: 'Нельзя разместить за пределами помещения',
                   duration: 1500, position: 'bottom', color: 'danger',
                 })}
+                onOpenTemplates={() => setTemplatesOpen(true)}
               />
             )}
 
@@ -448,6 +483,66 @@ const RoomEditor: React.FC = () => {
             )}
           </div>
         </div>
+
+      {/* ── Templates sheet ── */}
+      {templatesOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', alignItems: 'flex-end' }}>
+          <div
+            onClick={() => setTemplatesOpen(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+          />
+          <div style={{
+            position: 'relative', zIndex: 1, width: '100%',
+            background: '#16182a',
+            boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+            borderRadius: '20px 20px 0 0',
+            paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+            </div>
+            <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Готовые шаблоны</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                Выберите форму — она заполнит холст
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, padding: '16px 20px' }}>
+              {TEMPLATES.map(t => {
+                const pad = 1.5;
+                const vw = t.w + pad * 2;
+                const vh = t.h + pad * 2;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTemplate(t.shape, t.w, t.h)}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 14, padding: '14px 8px',
+                      cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', gap: 10,
+                    }}
+                  >
+                    <svg width={56} height={44} viewBox={`0 0 ${vw} ${vh}`} style={{ overflow: 'visible' }}>
+                      <polygon
+                        points={t.shape.map(([gx, gy]) => `${gx + pad},${gy + pad}`).join(' ')}
+                        fill="rgba(30,136,229,0.25)"
+                        stroke="#1E88E5"
+                        strokeWidth={0.6}
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 1.3 }}>
+                      {t.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Bottom sheet menu ── */}
       {menuOpen && (

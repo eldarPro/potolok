@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonList, IonItem, IonLabel, IonText, IonIcon, IonToast,
+  IonList, IonItem, IonLabel, IonText, IonIcon,
   useIonViewWillEnter,
 } from '@ionic/react';
 import {
-  personOutline, barChartOutline, downloadOutline, cloudUploadOutline,
+  personOutline, barChartOutline,
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import { MasterProfile } from '../types';
@@ -15,7 +15,6 @@ import './Cabinet.css';
 const Cabinet: React.FC = () => {
   const history = useHistory();
   const [profile, setProfile] = useState<MasterProfile>(loadMasterProfile());
-  const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
     setProfile(loadMasterProfile());
@@ -62,28 +61,13 @@ const Cabinet: React.FC = () => {
               <IonIcon icon={personOutline} slot="start" className="cabinet-menu-icon" />
               <IonLabel>Личный профиль</IonLabel>
             </IonItem>
-            <IonItem button detail onClick={() => history.push('/tabs/cabinet/stats')} lines="full">
+            <IonItem button detail onClick={() => history.push('/tabs/cabinet/stats')} lines="none">
               <IonIcon icon={barChartOutline} slot="start" className="cabinet-menu-icon" />
               <IonLabel>Статистика</IonLabel>
-            </IonItem>
-            <IonItem button detail onClick={() => setToastMsg('В разработке')} lines="full">
-              <IonIcon icon={downloadOutline} slot="start" className="cabinet-menu-icon" />
-              <IonLabel>Экспорт данных</IonLabel>
-            </IonItem>
-            <IonItem button detail onClick={() => setToastMsg('В разработке')} lines="none">
-              <IonIcon icon={cloudUploadOutline} slot="start" className="cabinet-menu-icon" />
-              <IonLabel>Импорт данных</IonLabel>
             </IonItem>
           </IonList>
         </div>
 
-        <IonToast
-          isOpen={!!toastMsg}
-          onDidDismiss={() => setToastMsg('')}
-          message={toastMsg}
-          duration={1800}
-          position="bottom"
-        />
       </IonContent>
     </IonPage>
   );
