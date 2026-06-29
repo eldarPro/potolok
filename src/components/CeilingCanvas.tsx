@@ -21,6 +21,12 @@ interface Props {
   onRedoLightingPoint?: () => void;
   canUndoLighting?: boolean;
   canRedoLighting?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onVertexDragStart?: () => void;
+  onVertexDragEnd?: () => void;
   onOutOfBounds?: () => void;
   onOpenTemplates?: () => void;
 }
@@ -48,6 +54,12 @@ const CeilingCanvas: React.FC<Props> = ({
   onRedoLightingPoint,
   canUndoLighting = false,
   canRedoLighting = false,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  onVertexDragStart,
+  onVertexDragEnd,
   onOutOfBounds,
   onOpenTemplates,
 }) => {
@@ -57,7 +69,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
-  const [redoStack, setRedoStack] = useState<{ points: Point[]; closed: boolean }[]>([]);
+  const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
   const isDragging = useRef(false);
@@ -146,13 +158,13 @@ const CeilingCanvas: React.FC<Props> = ({
     const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
     setPoints(newPts);
     setSelectedPoint(null);
-    setRedoStack([]);
+    setDrawRedoStack([]);
     onChange({ points: newPts, profileSegments: updatedSegs, areaSqm, perimeterM });
   };
 
   const finishPolygon = (pts: Point[]) => {
     const metrics = computeMetrics(pts);
-    setRedoStack([]);
+    setDrawRedoStack([]);
     setPoints(pts);
     setClosed(true);
     setTool('move');
@@ -181,10 +193,10 @@ const CeilingCanvas: React.FC<Props> = ({
     if (points.length > 0) {
       const last = points[points.length - 1];
       const snappedAngle = snapToGrid(snapAngle(last, snapped));
-      setRedoStack([]);
+      setDrawRedoStack([]);
       setPoints(prev => [...prev, snappedAngle]);
     } else {
-      setRedoStack([]);
+      setDrawRedoStack([]);
       setPoints([snapped]);
     }
   };
@@ -360,7 +372,7 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleReset = () => {
-    setRedoStack([]);
+    setDrawRedoStack([]);
     setPoints([]);
     setClosed(false);
     setCursor(null);
@@ -368,28 +380,39 @@ const CeilingCanvas: React.FC<Props> = ({
     onChange({ points: [], areaSqm: 0, perimeterM: 0 });
   };
 
-  const handleUndoPoint = () => {
-    setRedoStack(prev => [...prev, { points, closed }]);
-    if (closed) {
-      setClosed(false);
-      setTool('draw');
-      onChange({ areaSqm: 0, perimeterM: 0 });
-      return;
-    }
+  // Undo/redo while drawing (pre-commit, local state only)
+  const localUndoPoint = () => {
+    if (points.length === 0) return;
+    setDrawRedoStack(prev => [...prev, points]);
     setPoints(prev => prev.slice(0, -1));
   };
 
-  const handleRedoPoint = () => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack(prev => prev.slice(0, -1));
-    setPoints(next.points);
-    setClosed(next.closed);
-    setTool(next.closed ? 'move' : 'draw');
-    if (next.closed) {
-      onChange({ points: next.points, ...computeMetrics(next.points) });
+  const localRedoPoint = () => {
+    if (drawRedoStack.length === 0) return;
+    const restored = drawRedoStack[drawRedoStack.length - 1];
+    setDrawRedoStack(prev => prev.slice(0, -1));
+    setPoints(restored);
+  };
+
+  // Unified undo: local draw undo when drawing, global undo when committed
+  const handleUndoBtn = () => {
+    if (!closed && points.length > 0) {
+      localUndoPoint();
+    } else {
+      onUndo?.();
     }
   };
+
+  const handleRedoBtn = () => {
+    if (!closed && drawRedoStack.length > 0) {
+      localRedoPoint();
+    } else {
+      onRedo?.();
+    }
+  };
+
+  const canUndoBtn = !closed ? points.length > 0 || canUndo : canUndo;
+  const canRedoBtn = !closed ? drawRedoStack.length > 0 || canRedo : canRedo;
 
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
 
@@ -539,7 +562,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   listening={closed && !placingLighting}
                   draggable={closed && !placingLighting}
                   onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
-                  onDragStart={() => { setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
+                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { x: e.target.x(), y: e.target.y() };
@@ -547,7 +570,7 @@ const CeilingCanvas: React.FC<Props> = ({
                     const m = computeMetrics(newPts);
                     onChange({ points: newPts, ...m });
                   }}
-                  onDragEnd={() => { isDraggingPoint.current = false; }}
+                  onDragEnd={() => { isDraggingPoint.current = false; onVertexDragEnd?.(); }}
                   onClick={e => {
                     if (closed && !placingLighting) {
                       e.cancelBubble = true;
@@ -666,7 +689,7 @@ const CeilingCanvas: React.FC<Props> = ({
         display: 'flex', gap: 8,
         pointerEvents: 'auto',
       }}>
-        {placingLighting && (
+        {placingLighting ? (
           <>
             <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
@@ -675,16 +698,15 @@ const CeilingCanvas: React.FC<Props> = ({
               <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
             </button>
           </>
-        )}
-        {!placingLighting && points.length > 0 && (
-          <button onClick={handleUndoPoint} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: 'pointer', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
-          </button>
-        )}
-        {!placingLighting && (
-          <button onClick={handleRedoPoint} disabled={redoStack.length === 0} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: redoStack.length === 0 ? 'default' : 'pointer', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: redoStack.length === 0 ? 'rgba(255,255,255,0.3)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
-          </button>
+        ) : (
+          <>
+            <button onClick={handleUndoBtn} disabled={!canUndoBtn} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoBtn ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoBtn ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
+            </button>
+            <button onClick={handleRedoBtn} disabled={!canRedoBtn} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoBtn ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoBtn ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
+            </button>
+          </>
         )}
       </div>
 

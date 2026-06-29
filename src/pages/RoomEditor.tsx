@@ -33,14 +33,15 @@ const RoomEditor: React.FC = () => {
   const [profiles, setProfiles] = useState<CatalogItem[]>([]);
   const [lightings, setLightings] = useState<LightingCatalogItem[]>([]);
 
-  type LightingRedoItem =
-    | { type: 'pathPt'; pt: { x: number; y: number } }
-    | { type: 'placed'; el: RoomLightingPoint | RoomLightingPath };
+  const [undoStack, setUndoStack] = useState<Room[]>([]);
+  const [redoStack, setRedoStack] = useState<Room[]>([]);
+  const isDraggingRef = useRef(false);
 
   const [placingLighting, setPlacingLighting] = useState<LightingCatalogItem | null>(null);
   const [lightingPathPts, setLightingPathPts] = useState<{ x: number; y: number }[]>([]);
-  const [lightingRedoStack, setLightingRedoStack] = useState<LightingRedoItem[]>([]);
-  const [lightingHistory, setLightingHistory] = useState<(RoomLightingPoint | RoomLightingPath)[]>([]);
+  const [pathRedoStack, setPathRedoStack] = useState<{ x: number; y: number }[]>([]);
+  // IDs of lights placed in the current session (for cancel to remove them)
+  const [lightingSessionIds, setLightingSessionIds] = useState<Set<string>>(new Set());
   const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -59,6 +60,8 @@ const RoomEditor: React.FC = () => {
     setRoom(p.rooms.find(r => r.id === roomId) ?? null);
     setProfiles(loadProfiles());
     setLightings(loadLightings());
+    setUndoStack([]);
+    setRedoStack([]);
   };
 
   useEffect(() => { load(); }, [projectId, roomId]);
@@ -85,12 +88,12 @@ const RoomEditor: React.FC = () => {
     return () => obs.disconnect();
   }, [room?.id]);
 
-  useEffect(() => { setLightingPathPts([]); setLightingRedoStack([]); setLightingHistory([]); }, [placingLighting?.id]);
+  useEffect(() => { setLightingPathPts([]); setPathRedoStack([]); }, [placingLighting?.id]);
   useIonViewWillLeave(() => {
     setPlacingLighting(null);
     setLightingPathPts([]);
-    setLightingRedoStack([]);
-    setLightingHistory([]);
+    setPathRedoStack([]);
+    setLightingSessionIds(new Set());
   });
 
   if (!project || !room) return null;
@@ -128,7 +131,51 @@ const RoomEditor: React.FC = () => {
     setCanvasKey(k => k + 1);
   };
 
+  const handleVertexDragStart = () => {
+    if (!isDraggingRef.current) {
+      setUndoStack(prev => [...prev.slice(-30), room]);
+      setRedoStack([]);
+      isDraggingRef.current = true;
+    }
+  };
+
+  const handleVertexDragEnd = () => { isDraggingRef.current = false; };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setRedoStack(s => [...s, room]);
+    setUndoStack(s => s.slice(0, -1));
+    setRoom(prev);
+    const proj = {
+      ...project,
+      rooms: project!.rooms.map(r => r.id === roomId ? prev : r),
+      updatedAt: new Date().toISOString(),
+    };
+    setProject(proj);
+    upsertProject(proj);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setUndoStack(s => [...s, room]);
+    setRedoStack(s => s.slice(0, -1));
+    setRoom(next);
+    const proj = {
+      ...project,
+      rooms: project!.rooms.map(r => r.id === roomId ? next : r),
+      updatedAt: new Date().toISOString(),
+    };
+    setProject(proj);
+    upsertProject(proj);
+  };
+
   const updateRoom = (partial: Partial<Room>) => {
+    if (!isDraggingRef.current) {
+      setUndoStack(prev => [...prev.slice(-30), room]);
+      setRedoStack([]);
+    }
     let updated: Room = { ...room, ...partial };
 
     if (partial.points !== undefined) {
@@ -172,7 +219,7 @@ const RoomEditor: React.FC = () => {
   const clearDrawing = () => {
     updateRoom({ points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [] });
     setLightingPathPts([]);
-    setLightingRedoStack([]);
+    setPathRedoStack([]);
     setPlacingLighting(null);
     setCanvasKey(k => k + 1);
   };
@@ -196,10 +243,10 @@ const RoomEditor: React.FC = () => {
         x: pt.x, y: pt.y,
       };
       updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
-      setLightingHistory(prev => [...prev, newEl]);
-      setLightingRedoStack([]);
+      setLightingSessionIds(prev => new Set([...prev, newEl.id]));
+      setPathRedoStack([]);
     } else {
-      setLightingRedoStack([]);
+      setPathRedoStack([]);
       setLightingPathPts(prev => [...prev, pt]);
     }
   };
@@ -207,42 +254,38 @@ const RoomEditor: React.FC = () => {
   const handleUndoLightingPoint = () => {
     if (lightingPathPts.length > 0) {
       const last = lightingPathPts[lightingPathPts.length - 1];
-      setLightingRedoStack(prev => [...prev, { type: 'pathPt', pt: last }]);
+      setPathRedoStack(prev => [...prev, last]);
       setLightingPathPts(prev => prev.slice(0, -1));
-    } else if (lightingHistory.length > 0) {
-      const last = lightingHistory[lightingHistory.length - 1];
-      setLightingRedoStack(prev => [...prev, { type: 'placed', el: last }]);
-      setLightingHistory(prev => prev.slice(0, -1));
-      updateRoom({ lighting: (room.lighting ?? []).filter(e => e.id !== last.id) });
+    } else {
+      // Undo last committed action (placed light or finished path) via global undo
+      handleUndo();
     }
   };
 
   const handleRedoLightingPoint = () => {
-    if (lightingRedoStack.length === 0) return;
-    const item = lightingRedoStack[lightingRedoStack.length - 1];
-    setLightingRedoStack(prev => prev.slice(0, -1));
-    if (item.type === 'pathPt') {
-      setLightingPathPts(prev => [...prev, item.pt]);
+    if (pathRedoStack.length > 0) {
+      const pt = pathRedoStack[pathRedoStack.length - 1];
+      setPathRedoStack(prev => prev.slice(0, -1));
+      setLightingPathPts(prev => [...prev, pt]);
     } else {
-      setLightingHistory(prev => [...prev, item.el]);
-      updateRoom({ lighting: [...(room.lighting ?? []), item.el] });
+      handleRedo();
     }
   };
 
   const handleFinishPlacingLighting = () => {
     setPlacingLighting(null);
     setLightingPathPts([]);
-    setLightingRedoStack([]);
-    setLightingHistory([]);
+    setPathRedoStack([]);
+    setLightingSessionIds(new Set());
   };
 
   const handleCancelPlacingLighting = () => {
-    const ids = new Set(lightingHistory.map(e => e.id));
+    const ids = lightingSessionIds;
     if (ids.size > 0) updateRoom({ lighting: (room.lighting ?? []).filter(e => !ids.has(e.id)) });
     setPlacingLighting(null);
     setLightingPathPts([]);
-    setLightingRedoStack([]);
-    setLightingHistory([]);
+    setPathRedoStack([]);
+    setLightingSessionIds(new Set());
   };
 
   const finishLightingPath = () => {
@@ -258,8 +301,8 @@ const RoomEditor: React.FC = () => {
     updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
     setPlacingLighting(null);
     setLightingPathPts([]);
-    setLightingRedoStack([]);
-    setLightingHistory([]);
+    setPathRedoStack([]);
+    setLightingSessionIds(new Set());
   };
 
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
@@ -350,8 +393,14 @@ const RoomEditor: React.FC = () => {
                 onLightingTap={handleLightingTap}
                 onUndoLightingPoint={handleUndoLightingPoint}
                 onRedoLightingPoint={handleRedoLightingPoint}
-                canUndoLighting={lightingPathPts.length > 0 || lightingHistory.length > 0}
-                canRedoLighting={lightingRedoStack.length > 0}
+                canUndoLighting={lightingPathPts.length > 0 || undoStack.length > 0}
+                canRedoLighting={pathRedoStack.length > 0 || redoStack.length > 0}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                canUndo={undoStack.length > 0}
+                canRedo={redoStack.length > 0}
+                onVertexDragStart={handleVertexDragStart}
+                onVertexDragEnd={handleVertexDragEnd}
                 onOutOfBounds={() => presentToast({
                   message: 'Нельзя разместить за пределами помещения',
                   duration: 1500, position: 'bottom', color: 'danger',
@@ -383,7 +432,7 @@ const RoomEditor: React.FC = () => {
                 border: '1px solid rgba(249,168,37,0.3)',
               }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingLighting.title} · {lightingHistory.length} шт
+                  {placingLighting.title} · {lightingSessionIds.size} шт
                 </span>
                 <button
                   onClick={handleCancelPlacingLighting}
