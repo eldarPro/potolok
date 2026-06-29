@@ -173,7 +173,18 @@ const RoomEditor: React.FC = () => {
 
   const updateRoom = (partial: Partial<Room>) => {
     if (!isDraggingRef.current) {
-      setUndoStack(prev => [...prev.slice(-30), room]);
+      // When committing a new polygon (points arrive from local canvas state),
+      // push an "open polygon" snapshot so undo goes back to editable outline,
+      // not to empty canvas.
+      let undoTarget = room;
+      if (
+        partial.points !== undefined &&
+        (partial.areaSqm ?? 0) > 0 &&
+        room.areaSqm === 0
+      ) {
+        undoTarget = { ...room, points: partial.points, areaSqm: 0, perimeterM: 0, profileSegments: [] };
+      }
+      setUndoStack(prev => [...prev.slice(-30), undoTarget]);
       setRedoStack([]);
     }
     let updated: Room = { ...room, ...partial };
@@ -257,8 +268,10 @@ const RoomEditor: React.FC = () => {
       setPathRedoStack(prev => [...prev, last]);
       setLightingPathPts(prev => prev.slice(0, -1));
     } else {
-      // Undo last committed action (placed light or finished path) via global undo
-      handleUndo();
+      // Only undo if the previous snapshot still has a committed polygon,
+      // so we don't accidentally switch back to draw mode while in lighting mode.
+      const prev = undoStack.length > 0 ? undoStack[undoStack.length - 1] : null;
+      if (prev && prev.areaSqm > 0) handleUndo();
     }
   };
 
@@ -268,7 +281,8 @@ const RoomEditor: React.FC = () => {
       setPathRedoStack(prev => prev.slice(0, -1));
       setLightingPathPts(prev => [...prev, pt]);
     } else {
-      handleRedo();
+      const next = redoStack.length > 0 ? redoStack[redoStack.length - 1] : null;
+      if (next && next.areaSqm > 0) handleRedo();
     }
   };
 
@@ -393,8 +407,8 @@ const RoomEditor: React.FC = () => {
                 onLightingTap={handleLightingTap}
                 onUndoLightingPoint={handleUndoLightingPoint}
                 onRedoLightingPoint={handleRedoLightingPoint}
-                canUndoLighting={lightingPathPts.length > 0 || undoStack.length > 0}
-                canRedoLighting={pathRedoStack.length > 0 || redoStack.length > 0}
+                canUndoLighting={lightingPathPts.length > 0 || (undoStack.length > 0 && (undoStack[undoStack.length - 1]?.areaSqm ?? 0) > 0)}
+                canRedoLighting={pathRedoStack.length > 0 || (redoStack.length > 0 && (redoStack[redoStack.length - 1]?.areaSqm ?? 0) > 0)}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 canUndo={undoStack.length > 0}

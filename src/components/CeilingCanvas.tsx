@@ -99,6 +99,7 @@ const CeilingCanvas: React.FC<Props> = ({
   useEffect(() => {
     if (isDraggingPoint.current) return;
     const pts = room.points;
+    setDrawRedoStack([]);
     setPoints(pts);
     setClosed(pts.length >= MIN_POINTS && room.areaSqm > 0);
     setTool(pts.length >= MIN_POINTS && room.areaSqm > 0 ? 'move' : 'draw');

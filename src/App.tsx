@@ -33,7 +33,7 @@ setupIonicReact();
 
 const App: React.FC = () => (
   <IonApp>
-    <IonReactRouter>
+    <IonReactRouter basename={import.meta.env.BASE_URL}>
       <IonRouterOutlet>
         <Route exact path="/" render={() => <Redirect to="/tabs/projects" />} />
         <Route path="/tabs" component={Tabs} />
