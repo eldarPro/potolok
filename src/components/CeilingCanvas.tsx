@@ -306,7 +306,9 @@ const CeilingCanvas: React.FC<Props> = ({
       if (!pos) return;
       const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
       handleTap(pt);
-      setCursor(null);
+      // Keep cursor at tap position so the dashed preview appears as soon as
+      // the user starts moving toward the next point (on touch, mousemove doesn't fire)
+      if (!closed) setCursor(pt);
     } else if (!isDraggingPoint.current) {
       lastTouch.current = { x: touches[0].clientX, y: touches[0].clientY };
     }
@@ -804,7 +806,7 @@ const CeilingCanvas: React.FC<Props> = ({
             </div>
             {onOpenTemplates && (
               <div style={{ marginTop: 12, fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-                или{' '}
+                или выберите{' '}
                 <button
                   onClick={onOpenTemplates}
                   style={{
