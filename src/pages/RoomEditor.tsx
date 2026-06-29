@@ -14,16 +14,18 @@ import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/s
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
 import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
+import { useT } from '../lib/i18n';
 
 const MAT_TABS = [
-  { section: 'fabric',      label: 'Полотна',  icon: layersOutline,       color: '#1E88E5' },
-  { section: 'profile',     label: 'Профили',  icon: reorderThreeOutline, color: '#8E24AA' },
-  { section: 'lighting',    label: 'Свет',     icon: bulbOutline,         color: '#F9A825' },
-  { section: 'accessories', label: 'Компл.',   icon: buildOutline,        color: '#2E7D32' },
-  { section: 'services',    label: 'Доп. услуги', icon: briefcaseOutline, color: '#C62828', noWrap: true },
+  { section: 'fabric',      labelKey: 'mat.tabFabric',   icon: layersOutline,       color: '#1E88E5' },
+  { section: 'profile',     labelKey: 'mat.tabProfile',  icon: reorderThreeOutline, color: '#8E24AA' },
+  { section: 'lighting',    labelKey: 'mat.tabLight',    icon: bulbOutline,         color: '#F9A825' },
+  { section: 'accessories', labelKey: 'mat.tabAccess',   icon: buildOutline,        color: '#2E7D32' },
+  { section: 'services',    labelKey: 'mat.tabServices', icon: briefcaseOutline,    color: '#C62828', noWrap: true },
 ];
 
 const RoomEditor: React.FC = () => {
+  const { t } = useT();
   const { projectId, roomId } = useParams<{ projectId: string; roomId: string }>();
   const router = useIonRouter();
   const history = useHistory();
@@ -104,13 +106,13 @@ const RoomEditor: React.FC = () => {
 
   // Shapes in integer grid-cell units. All corners are whole numbers →
   // after scaling by (k × GRID_SIZE) every point lands exactly on the grid.
-  const TEMPLATES: { id: string; label: string; w: number; h: number; shape: [number, number][] }[] = [
-    { id: 'rect',   label: 'Прямоугольник', w: 8, h: 5, shape: [[0,0],[8,0],[8,5],[0,5]] },
-    { id: 'square', label: 'Квадрат',       w: 6, h: 6, shape: [[0,0],[6,0],[6,6],[0,6]] },
-    { id: 'lshape', label: 'Г-образная',    w: 8, h: 8, shape: [[0,0],[8,0],[8,4],[4,4],[4,8],[0,8]] },
-    { id: 'ushape', label: 'П-образная',    w: 8, h: 8, shape: [[0,0],[3,0],[3,5],[5,5],[5,0],[8,0],[8,8],[0,8]] },
-    { id: 'tshape', label: 'Т-образная',    w: 8, h: 8, shape: [[0,0],[8,0],[8,3],[5,3],[5,8],[3,8],[3,3],[0,3]] },
-    { id: 'trap',   label: 'Трапеция',      w: 8, h: 6, shape: [[1,0],[7,0],[8,6],[0,6]] },
+  const TEMPLATES: { id: string; labelKey: string; w: number; h: number; shape: [number, number][] }[] = [
+    { id: 'rect',   labelKey: 'tpl.rect',   w: 8, h: 5, shape: [[0,0],[8,0],[8,5],[0,5]] },
+    { id: 'square', labelKey: 'tpl.square', w: 6, h: 6, shape: [[0,0],[6,0],[6,6],[0,6]] },
+    { id: 'lshape', labelKey: 'tpl.lshape', w: 8, h: 8, shape: [[0,0],[8,0],[8,4],[4,4],[4,8],[0,8]] },
+    { id: 'ushape', labelKey: 'tpl.ushape', w: 8, h: 8, shape: [[0,0],[3,0],[3,5],[5,5],[5,0],[8,0],[8,8],[0,8]] },
+    { id: 'tshape', labelKey: 'tpl.tshape', w: 8, h: 8, shape: [[0,0],[8,0],[8,3],[5,3],[5,8],[3,8],[3,3],[0,3]] },
+    { id: 'trap',   labelKey: 'tpl.trap',   w: 8, h: 6, shape: [[1,0],[7,0],[8,6],[0,6]] },
   ];
 
   const applyTemplate = (shape: [number, number][], tw: number, th: number) => {
@@ -383,7 +385,7 @@ const RoomEditor: React.FC = () => {
                       color: 'rgba(255,255,255,0.5)',
                       whiteSpace: (tab as any).noWrap ? 'nowrap' : 'normal',
                     }}>
-                      {tab.label}
+                      {t(tab.labelKey)}
                     </span>
                   </button>
                 </React.Fragment>
@@ -418,7 +420,7 @@ const RoomEditor: React.FC = () => {
                 onVertexDragStart={handleVertexDragStart}
                 onVertexDragEnd={handleVertexDragEnd}
                 onOutOfBounds={() => presentToast({
-                  message: 'Нельзя разместить за пределами помещения',
+                  message: t('re.outOfBounds'),
                   duration: 1500, position: 'bottom', color: 'danger',
                 })}
                 onOpenTemplates={() => setTemplatesOpen(true)}
@@ -448,7 +450,7 @@ const RoomEditor: React.FC = () => {
                 border: '1px solid rgba(249,168,37,0.3)',
               }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingLighting.title} · {lightingSessionIds.size} шт
+                  {placingLighting.title} · {lightingSessionIds.size} {t('mc.pcs')}
                 </span>
                 <button
                   onClick={handleCancelPlacingLighting}
@@ -467,7 +469,7 @@ const RoomEditor: React.FC = () => {
                     color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
                   }}
                 >
-                  Готово
+                  {t('re.done')}
                 </button>
               </div>
             )}
@@ -482,7 +484,7 @@ const RoomEditor: React.FC = () => {
                 border: '1px solid rgba(249,168,37,0.3)',
               }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingLighting?.title} · {lightingPathPts.length} точек
+                  {placingLighting?.title} · {lightingPathPts.length} {t('re.points')}
                 </span>
                 <button
                   onClick={() => { setPlacingLighting(null); setLightingPathPts([]); }}
@@ -501,7 +503,7 @@ const RoomEditor: React.FC = () => {
                     color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
                   }}
                 >
-                  Готово
+                  {t('re.done')}
                 </button>
               </div>
             )}
@@ -513,7 +515,7 @@ const RoomEditor: React.FC = () => {
                 color: 'rgba(255,255,255,0.35)',
                 textTransform: 'uppercase', letterSpacing: 0.9, flexShrink: 0,
               }}>
-                Масштаб
+                {t('re.scale')}
               </span>
               <div style={{ flex: 1 }}>
                 <IonRange
@@ -541,9 +543,9 @@ const RoomEditor: React.FC = () => {
             {/* Summary stats */}
             {room.areaSqm > 0 && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <StatBadge label="Площадь" value={`${room.areaSqm.toFixed(2)} м²`} />
-                <StatBadge label="Периметр" value={`${room.perimeterM.toFixed(2)} м`} />
-                <StatBadge label="Углов" value={String(room.points.length)} />
+                <StatBadge label={t('re.area')} value={`${room.areaSqm.toFixed(2)} м²`} />
+                <StatBadge label={t('re.perimeter')} value={`${room.perimeterM.toFixed(2)} м`} />
+                <StatBadge label={t('re.corners')} value={String(room.points.length)} />
               </div>
             )}
           </div>
@@ -567,20 +569,20 @@ const RoomEditor: React.FC = () => {
               <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
             </div>
             <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Готовые шаблоны</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('tpl.title')}</div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                Выберите форму — она заполнит холст
+                {t('tpl.subtitle')}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, padding: '16px 20px' }}>
-              {TEMPLATES.map(t => {
+              {TEMPLATES.map(tpl => {
                 const pad = 1.5;
-                const vw = t.w + pad * 2;
-                const vh = t.h + pad * 2;
+                const vw = tpl.w + pad * 2;
+                const vh = tpl.h + pad * 2;
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => applyTemplate(t.shape, t.w, t.h)}
+                    key={tpl.id}
+                    onClick={() => applyTemplate(tpl.shape, tpl.w, tpl.h)}
                     style={{
                       background: 'rgba(255,255,255,0.06)',
                       border: '1px solid rgba(255,255,255,0.1)',
@@ -591,7 +593,7 @@ const RoomEditor: React.FC = () => {
                   >
                     <svg width={56} height={44} viewBox={`0 0 ${vw} ${vh}`} style={{ overflow: 'visible' }}>
                       <polygon
-                        points={t.shape.map(([gx, gy]) => `${gx + pad},${gy + pad}`).join(' ')}
+                        points={tpl.shape.map(([gx, gy]) => `${gx + pad},${gy + pad}`).join(' ')}
                         fill="rgba(30,136,229,0.25)"
                         stroke="#1E88E5"
                         strokeWidth={0.6}
@@ -599,7 +601,7 @@ const RoomEditor: React.FC = () => {
                       />
                     </svg>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 1.3 }}>
-                      {t.label}
+                      {t(tpl.labelKey)}
                     </span>
                   </button>
                 );
@@ -630,23 +632,23 @@ const RoomEditor: React.FC = () => {
             </div>
             <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                Помещение
+                {t('pd.room')}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 4 }}>{room.name}</div>
             </div>
             <div style={{ paddingTop: 8 }}>
               <MenuAction
-                label="Редактировать название"
+                label={t('re.editName')}
                 color="#1E88E5"
                 onClick={() => { setMenuOpen(false); setRenameOpen(true); }}
               />
               <MenuAction
-                label="Очистить чертёж"
+                label={t('re.clearDraft')}
                 color="#F9A825"
                 onClick={() => { setMenuOpen(false); clearDrawing(); }}
               />
               <MenuAction
-                label="Удалить помещение"
+                label={t('re.deleteRoom')}
                 color="#E53935"
                 onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }}
               />
@@ -658,12 +660,12 @@ const RoomEditor: React.FC = () => {
       {/* ── Rename alert ── */}
       <IonAlert
         isOpen={renameOpen}
-        header="Название помещения"
-        inputs={[{ name: 'name', type: 'text', value: room.name, placeholder: 'Введите название' }]}
+        header={t('re.renameTitle')}
+        inputs={[{ name: 'name', type: 'text', value: room.name, placeholder: t('re.namePH') }]}
         buttons={[
-          { text: 'Отмена', role: 'cancel' },
+          { text: t('common.cancel'), role: 'cancel' },
           {
-            text: 'Сохранить',
+            text: t('common.save'),
             handler: (data: { name: string }) => {
               const name = data.name?.trim();
               if (name) updateRoom({ name });
@@ -676,24 +678,24 @@ const RoomEditor: React.FC = () => {
       {/* ── Delete confirmation ── */}
       <IonAlert
         isOpen={deleteConfirmOpen}
-        header="Удалить помещение?"
-        message={`Помещение «${room.name}» и все его данные будут удалены.`}
+        header={t('re.deleteRoomTitle')}
+        message={t('re.deleteRoomMsg', { name: room.name })}
         buttons={[
-          { text: 'Отмена', role: 'cancel' },
-          { text: 'Удалить', role: 'destructive', handler: deleteRoom },
+          { text: t('common.cancel'), role: 'cancel' },
+          { text: t('common.delete'), role: 'destructive', handler: deleteRoom },
         ]}
         onDidDismiss={() => setDeleteConfirmOpen(false)}
       />
 
       <IonActionSheet
         isOpen={lightingPickerOpen}
-        header="Выберите элемент освещения"
+        header={t('re.pickLighting')}
         buttons={[
           ...lightings.map(l => ({
-            text: `${l.symbol}  ${l.title} — ${l.price.toLocaleString('ru')} ₽/${l.placement === 'path' ? 'м' : 'шт'}`,
+            text: `${l.symbol}  ${l.title} — ${l.price.toLocaleString('ru')} ₽/${l.placement === 'path' ? 'м' : t('mc.pcs')}`,
             handler: () => { setPlacingLighting(l); setLightingPickerOpen(false); },
           })),
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setLightingPickerOpen(false)}
       />

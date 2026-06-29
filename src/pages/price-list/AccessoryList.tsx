@@ -8,9 +8,11 @@ import { addOutline, chevronBackOutline, settingsOutline, trashOutline, buildOut
 import ActionButton from '../../components/ActionButton';
 import { Accessory } from '../../types';
 import { loadAccessories, deleteAccessory } from '../../lib/storage';
+import { useT } from '../../lib/i18n';
 import './ItemCard.css';
 
 const AccessoryList: React.FC = () => {
+  const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<Accessory[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -32,7 +34,7 @@ const AccessoryList: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
           </IonButtons>
-          <IonTitle>Комплектующие</IonTitle>
+          <IonTitle>{t('sec.accessories')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -43,9 +45,9 @@ const AccessoryList: React.FC = () => {
               <div className="empty-state__icon-wrap" style={{ background: '#E8F5E9' }}>
                 <IonIcon icon={buildOutline} style={{ color: '#2E7D32' }} />
               </div>
-              <p className="empty-state__title">Нет позиций</p>
-              <p className="empty-state__subtitle">Добавьте комплектующие, чтобы включать их в расчёты</p>
-              <ActionButton solid onClick={() => router.push('/price-list/accessories/new')}>Добавить</ActionButton>
+              <p className="empty-state__title">{t('pl.noItems')}</p>
+              <p className="empty-state__subtitle">{t('af.subtitle')}</p>
+              <ActionButton solid onClick={() => router.push('/price-list/accessories/new')}>{t('common.add')}</ActionButton>
             </div>
           </div>
         ) : (
@@ -68,11 +70,11 @@ const AccessoryList: React.FC = () => {
                 <div className="price-item-card__prices">
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.price} ₽</span>
-                    <span className="price-item-card__price-label">клиенту / {item.unit}</span>
+                    <span className="price-item-card__price-label">{t('ma.clientPer')} {item.unit}</span>
                   </div>
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
-                    <span className="price-item-card__price-label">монтаж / {item.unit}</span>
+                    <span className="price-item-card__price-label">{t('ma.installPer')} {item.unit}</span>
                   </div>
                 </div>
               </div>
@@ -88,11 +90,11 @@ const AccessoryList: React.FC = () => {
 
         <IonAlert
           isOpen={!!deleteId}
-          header="Удалить позицию?"
-          message="Это действие нельзя отменить."
+          header={t('pl.deleteTitle')}
+          message={t('pl.deleteMsg')}
           buttons={[
-            { text: 'Отмена', role: 'cancel', handler: () => setDeleteId(null) },
-            { text: 'Удалить', role: 'destructive', handler: confirmDelete },
+            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
+            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
           ]}
           onDidDismiss={() => setDeleteId(null)}
         />

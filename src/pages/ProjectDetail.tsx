@@ -16,6 +16,7 @@ import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
 import { Project, Room } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useT } from '../lib/i18n';
 import './ProjectDetail.css';
 
 const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
@@ -67,6 +68,7 @@ const calcRoomClientPrice = (room: Room) => {
 };
 
 const ProjectDetail: React.FC = () => {
+  const { t } = useT();
   const { id } = useParams<{ id: string }>();
   const router = useIonRouter();
   const [project, setProject] = useState<Project | null>(null);
@@ -91,9 +93,9 @@ const ProjectDetail: React.FC = () => {
   if (!project) return null;
 
   const handleAddRoom = () => {
-    const roomName = newRoomName.trim() || `Помещение ${project.rooms.length + 1}`;
+    const roomName = newRoomName.trim() || `${t('pd.room')} ${project.rooms.length + 1}`;
     if (project.rooms.some(r => r.name.toLowerCase() === roomName.toLowerCase())) {
-      setNewRoomError('Помещение с таким названием уже существует');
+      setNewRoomError(t('pd.roomExists'));
       return;
     }
     const room = createRoom(roomName);
@@ -129,7 +131,7 @@ const ProjectDetail: React.FC = () => {
   };
 
   const handleSaveEdit = () => {
-    if (!editName.trim()) { setEditError('Укажите имя клиента'); return; }
+    if (!editName.trim()) { setEditError(t('np.errorClient')); return; }
     const updated = { ...project, clientName: editName.trim(), phone: editPhone, address: editAddress, notes: editNotes, updatedAt: new Date().toISOString() };
     upsertProject(updated);
     setProject(updated);
@@ -157,7 +159,7 @@ const ProjectDetail: React.FC = () => {
           <IonButtons slot="end">
             <IonButton fill="clear" color="primary" onClick={() => router.push(`/project/${id}/summary`, 'forward', 'push')}>
               <IonIcon icon={documentTextOutline} style={{ marginRight: 4 }} />
-              Смета
+              {t('pd.estimate')}
             </IonButton>
             <IonButton fill="clear" onClick={() => setShowMenu(true)}>
               <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
@@ -175,7 +177,7 @@ const ProjectDetail: React.FC = () => {
                 {initials}
               </div>
               <div className="project-detail-client-info">
-                <div className="project-detail-client-name">{project.clientName || 'Проект'}</div>
+                <div className="project-detail-client-name">{project.clientName || t('pd.project')}</div>
                 {project.phone && (
                   <div className="project-detail-client-meta">
                     <IonIcon icon={callOutline} />
@@ -202,13 +204,13 @@ const ProjectDetail: React.FC = () => {
 
         {/* ── Rooms header ── */}
         <div className="project-detail-section-header">
-          <div className="project-detail-section-title">Помещения</div>
+          <div className="project-detail-section-title">{t('pd.rooms')}</div>
         </div>
 
         {/* ── Room cards ── */}
         {project.rooms.length === 0 ? (
           <div className="project-detail-no-rooms">
-            Нет помещений — добавьте нажимая на кнопку +
+            {t('pd.noRooms')}
           </div>
         ) : (
           <div className="card-list" style={{ paddingTop: 0, paddingBottom: 8 }}>
@@ -238,7 +240,7 @@ const ProjectDetail: React.FC = () => {
                             {room.fabric && <span className="chip">{room.fabric.title}</span>}
                           </div>
                         ) : (
-                          <span className="room-card__undrawned">Чертёж не начерчен</span>
+                          <span className="room-card__undrawned">{t('pd.notDrawn')}</span>
                         )}
                       </div>
 
@@ -284,11 +286,11 @@ const ProjectDetail: React.FC = () => {
           <div className="new-room-modal__content">
             <div className="new-room-modal__handle" />
             <div className="new-room-modal__header">
-              <div className="new-room-modal__title">Новое помещение</div>
+              <div className="new-room-modal__title">{t('pd.newRoom')}</div>
             </div>
             <div className="new-room-modal__body">
               <div className="new-room-modal__suggestions">
-                {['Зал', 'Гостиная', 'Кухня', 'Спальня', 'Детская', 'Прихожая', 'Ванная', 'Кабинет', 'Балкон'].map(s => (
+                {[t('rs.0'), t('rs.1'), t('rs.2'), t('rs.3'), t('rs.4'), t('rs.5'), t('rs.6'), t('rs.7'), t('rs.8')].map(s => (
                   <button
                     key={s}
                     className={`new-room-modal__suggestion${newRoomName === s ? ' new-room-modal__suggestion--active' : ''}`}
@@ -302,7 +304,7 @@ const ProjectDetail: React.FC = () => {
                 ref={inputRef}
                 className="new-room-modal__input"
                 type="text"
-                placeholder="Название"
+                placeholder={t('pd.roomName')}
                 value={newRoomName}
                 onChange={e => { setNewRoomName(e.target.value); setNewRoomError(''); }}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddRoom(); }}
@@ -314,10 +316,10 @@ const ProjectDetail: React.FC = () => {
                 className="new-room-modal__btn new-room-modal__btn--cancel"
                 onClick={() => { setShowNewRoom(false); setNewRoomName(''); }}
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <ActionButton expand={false} solid onClick={handleAddRoom} className="new-room-modal__action-btn">
-                Добавить
+                {t('common.add')}
               </ActionButton>
             </div>
           </div>
@@ -326,7 +328,7 @@ const ProjectDetail: React.FC = () => {
 
       {totalSqm > 0 && (
         <div className="project-detail-totals">
-          <div className="project-detail-totals__heading">Итого</div>
+          <div className="project-detail-totals__heading">{t('sum.total')}</div>
           <div className="project-detail-totals__stat">
             <span className="project-detail-totals__value">{totalSqm.toFixed(1)}</span>
             <span className="project-detail-totals__label">м²</span>
@@ -334,13 +336,13 @@ const ProjectDetail: React.FC = () => {
           {totalPerimeterM > 0 && (
             <div className="project-detail-totals__stat">
               <span className="project-detail-totals__value">{totalPerimeterM.toFixed(1)}</span>
-              <span className="project-detail-totals__label">пог. м</span>
+              <span className="project-detail-totals__label">{t('pd.linM')}</span>
             </div>
           )}
           {totalPrice > 0 && (
             <div className="project-detail-totals__stat project-detail-totals__stat--price">
               <span className="project-detail-totals__value">{Math.round(totalPrice).toLocaleString('ru')} ₽</span>
-              <span className="project-detail-totals__label">ориентировочно</span>
+              <span className="project-detail-totals__label">{t('pd.approx')}</span>
             </div>
           )}
         </div>
@@ -349,20 +351,20 @@ const ProjectDetail: React.FC = () => {
         isOpen={showMenu}
         onDidDismiss={() => setShowMenu(false)}
         buttons={[
-          { text: 'Редактировать', handler: () => handleOpenEdit() },
-          { text: 'Удалить', role: 'destructive', handler: () => setShowDeleteConfirm(true) },
-          { text: 'Отмена', role: 'cancel' },
+          { text: t('common.edit'), handler: () => handleOpenEdit() },
+          { text: t('common.delete'), role: 'destructive', handler: () => setShowDeleteConfirm(true) },
+          { text: t('common.cancel'), role: 'cancel' },
         ]}
       />
 
       <IonAlert
         isOpen={showDeleteConfirm}
         onDidDismiss={() => setShowDeleteConfirm(false)}
-        header="Удалить проект?"
-        message="Все помещения и данные будут удалены без возможности восстановления."
+        header={t('pd.deleteTitle')}
+        message={t('pd.deleteMsg')}
         buttons={[
-          { text: 'Отмена', role: 'cancel' },
-          { text: 'Удалить', role: 'destructive', handler: handleDeleteProject },
+          { text: t('common.cancel'), role: 'cancel' },
+          { text: t('common.delete'), role: 'destructive', handler: handleDeleteProject },
         ]}
       />
 
@@ -376,35 +378,35 @@ const ProjectDetail: React.FC = () => {
         <div className="new-room-modal__content">
           <div className="new-room-modal__handle" />
           <div className="new-room-modal__header">
-            <div className="new-room-modal__title">Редактировать проект</div>
+            <div className="new-room-modal__title">{t('pd.editProject')}</div>
           </div>
           <div className="new-room-modal__body" style={{ paddingBottom: 8 }}>
             <IonList inset style={{ margin: '0 0 12px' }}>
               <IonItem>
-                <IonLabel position="stacked">Клиент *</IonLabel>
-                <IonInput value={editName} onIonInput={e => { setEditName(e.detail.value ?? ''); setEditError(''); }} placeholder="Иванов Иван" clearInput />
+                <IonLabel position="stacked">{t('np.client')}</IonLabel>
+                <IonInput value={editName} onIonInput={e => { setEditName(e.detail.value ?? ''); setEditError(''); }} placeholder={t('np.clientPH')} clearInput />
               </IonItem>
               <IonItem>
-                <IonLabel position="stacked">Телефон</IonLabel>
-                <IonInput value={editPhone} onIonInput={e => setEditPhone(e.detail.value ?? '')} type="tel" placeholder="+7 (999) 000-00-00" />
+                <IonLabel position="stacked">{t('np.phone')}</IonLabel>
+                <IonInput value={editPhone} onIonInput={e => setEditPhone(e.detail.value ?? '')} type="tel" placeholder={t('np.phonePH')} />
               </IonItem>
               <IonItem>
-                <IonLabel position="stacked">Адрес объекта</IonLabel>
-                <IonInput value={editAddress} onIonInput={e => setEditAddress(e.detail.value ?? '')} placeholder="ул. Ленина 1, кв. 5" />
+                <IonLabel position="stacked">{t('np.address')}</IonLabel>
+                <IonInput value={editAddress} onIonInput={e => setEditAddress(e.detail.value ?? '')} placeholder={t('np.addressPH')} />
               </IonItem>
               <IonItem lines="none">
-                <IonLabel position="stacked">Заметки</IonLabel>
-                <IonTextarea value={editNotes} onIonInput={e => setEditNotes(e.detail.value ?? '')} placeholder="Дополнительная информация..." rows={3} />
+                <IonLabel position="stacked">{t('np.notes')}</IonLabel>
+                <IonTextarea value={editNotes} onIonInput={e => setEditNotes(e.detail.value ?? '')} placeholder={t('np.notesPH')} rows={3} />
               </IonItem>
             </IonList>
             {editError && <div className="new-room-modal__error">{editError}</div>}
           </div>
           <div className="new-room-modal__footer">
             <button className="new-room-modal__btn new-room-modal__btn--cancel" onClick={() => setShowEditModal(false)}>
-              Отмена
+              {t('common.cancel')}
             </button>
             <ActionButton expand={false} solid onClick={handleSaveEdit} className="new-room-modal__action-btn">
-              Сохранить
+              {t('common.save')}
             </ActionButton>
           </div>
         </div>
@@ -412,11 +414,5 @@ const ProjectDetail: React.FC = () => {
     </IonPage>
   );
 };
-
-function roomWord(n: number): string {
-  if (n % 10 === 1 && n % 100 !== 11) return 'помещение';
-  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'помещения';
-  return 'помещений';
-}
 
 export default ProjectDetail;

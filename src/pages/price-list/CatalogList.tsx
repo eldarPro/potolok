@@ -8,19 +8,20 @@ import { addOutline, chevronBackOutline, settingsOutline, trashOutline, layersOu
 import ActionButton from '../../components/ActionButton';
 import { CatalogItem } from '../../types';
 import { loadFabrics, deleteFabric, loadProfiles, deleteProfile } from '../../lib/storage';
+import { useT } from '../../lib/i18n';
 import './ItemCard.css';
 
 interface Props {
   category: 'fabrics' | 'profiles';
-  title: string;
 }
 
 const CATALOG_META = {
-  fabrics:  { icon: layersOutline,       bg: '#E3F2FD', iconColor: '#1E88E5', subtitle: 'Добавьте полотна, чтобы использовать их в расчётах' },
-  profiles: { icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', subtitle: 'Добавьте профили, чтобы использовать их в расчётах' },
+  fabrics:  { icon: layersOutline,       bg: '#E3F2FD', iconColor: '#1E88E5', titleKey: 'sec.fabric',  subtitleKey: 'cf.subtitleFabric' },
+  profiles: { icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', titleKey: 'sec.profile', subtitleKey: 'cf.subtitleProfile' },
 } as const;
 
-const CatalogList: React.FC<Props> = ({ category, title }) => {
+const CatalogList: React.FC<Props> = ({ category }) => {
+  const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -46,7 +47,7 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
           </IonButtons>
-          <IonTitle>{title}</IonTitle>
+          <IonTitle>{t(meta.titleKey)}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -57,9 +58,9 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
               <div className="empty-state__icon-wrap" style={{ background: meta.bg }}>
                 <IonIcon icon={meta.icon} style={{ color: meta.iconColor }} />
               </div>
-              <p className="empty-state__title">Нет позиций</p>
-              <p className="empty-state__subtitle">{meta.subtitle}</p>
-              <ActionButton solid onClick={() => router.push(`${basePath}/new`)}>Добавить</ActionButton>
+              <p className="empty-state__title">{t('pl.noItems')}</p>
+              <p className="empty-state__subtitle">{t(meta.subtitleKey)}</p>
+              <ActionButton solid onClick={() => router.push(`${basePath}/new`)}>{t('common.add')}</ActionButton>
             </div>
           </div>
         ) : (
@@ -69,7 +70,7 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
                 <div className="price-item-card__header">
                   <div className="price-item-card__dot" style={{ background: item.color }} />
                   <span className="price-item-card__title">{item.title}</span>
-                  {item.isDefault && <span className="price-item-card__badge">по умолч.</span>}
+                  {item.isDefault && <span className="price-item-card__badge">{t('cf.default')}</span>}
                   <div className="price-item-card__actions">
                     <button className="price-item-card__action-btn" onClick={() => router.push(`${basePath}/${item.id}/edit`)}>
                       <IonIcon icon={settingsOutline} />
@@ -83,19 +84,19 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
                 <div className="price-item-card__prices">
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.price} ₽</span>
-                    <span className="price-item-card__price-label">клиент / м²</span>
+                    <span className="price-item-card__price-label">{t('mf.clientPerSqm')}</span>
                   </div>
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.priceCorner} ₽</span>
-                    <span className="price-item-card__price-label">клиент / угол</span>
+                    <span className="price-item-card__price-label">{t('mf.clientPerCorner')}</span>
                   </div>
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
-                    <span className="price-item-card__price-label">монтаж / м²</span>
+                    <span className="price-item-card__price-label">{t('mf.installPerSqm')}</span>
                   </div>
                   <div className="price-item-card__price-cell">
                     <span className="price-item-card__price-val">{item.priceInstallCorner} ₽</span>
-                    <span className="price-item-card__price-label">монтаж / угол</span>
+                    <span className="price-item-card__price-label">{t('mf.installPerCorner')}</span>
                   </div>
                 </div>
               </div>
@@ -111,11 +112,11 @@ const CatalogList: React.FC<Props> = ({ category, title }) => {
 
         <IonAlert
           isOpen={!!deleteId}
-          header="Удалить позицию?"
-          message="Это действие нельзя отменить."
+          header={t('pl.deleteTitle')}
+          message={t('pl.deleteMsg')}
           buttons={[
-            { text: 'Отмена', role: 'cancel', handler: () => setDeleteId(null) },
-            { text: 'Удалить', role: 'destructive', handler: confirmDelete },
+            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
+            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
           ]}
           onDidDismiss={() => setDeleteId(null)}
         />

@@ -14,20 +14,22 @@ import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
 import { edgeLengthM, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE } from '../lib/geometry';
+import { useT } from '../lib/i18n';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
 type Section = 'fabric' | 'profile' | 'lighting' | 'accessories' | 'services';
 
-const SECTION_META: Record<Section, { title: string; icon: string }> = {
-  fabric:      { title: 'Полотна',        icon: layersOutline },
-  profile:     { title: 'Профили',         icon: reorderThreeOutline },
-  lighting:    { title: 'Освещение',       icon: bulbOutline },
-  accessories: { title: 'Комплектующие',   icon: buildOutline },
-  services:    { title: 'Доп. услуги',     icon: briefcaseOutline },
+const SECTION_META: Record<Section, { titleKey: string; icon: string }> = {
+  fabric:      { titleKey: 'sec.fabric',       icon: layersOutline },
+  profile:     { titleKey: 'sec.profile',      icon: reorderThreeOutline },
+  lighting:    { titleKey: 'sec.lighting',     icon: bulbOutline },
+  accessories: { titleKey: 'sec.accessories',  icon: buildOutline },
+  services:    { titleKey: 'sec.services',     icon: briefcaseOutline },
 };
 
 const RoomMaterials: React.FC = () => {
+  const { t } = useT();
   const { projectId, roomId, section } = useParams<{ projectId: string; roomId: string; section: string }>();
   const router = useIonRouter();
 
@@ -310,7 +312,7 @@ const RoomMaterials: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={backHref} />
           </IonButtons>
-          <IonTitle>{meta.title}</IonTitle>
+          <IonTitle>{t(meta.titleKey)}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -321,7 +323,7 @@ const RoomMaterials: React.FC = () => {
           <div style={{ padding: '12px 0 100px' }}>
             {fabrics.length === 0 ? (
               <div style={{ padding: '20px 16px' }}>
-                <HintText text="Нет позиций — добавьте в Ценники → Полотна" />
+                <HintText text={t('mat.noFabrics')} />
               </div>
             ) : (
               <div style={{ padding: '0 16px' }}>
@@ -382,14 +384,14 @@ const RoomMaterials: React.FC = () => {
                     background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0',
                   }}
                 >
-                  Применить ко всем
+                  {t('mat.applyAll')}
                 </button>
               </div>
             )}
 
             {room.points.length < 3 ? (
               <div style={{ padding: '20px 16px' }}>
-                <HintText text="Сначала нарисуйте чертёж помещения" />
+                <HintText text={t('mat.drawFirst')} />
                 <button
                   onClick={() => router.push(backHref, 'back')}
                   style={{
@@ -398,12 +400,12 @@ const RoomMaterials: React.FC = () => {
                     color: '#1E88E5', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                   }}
                 >
-                  Открыть чертёж →
+                  {t('mat.openDraft')}
                 </button>
               </div>
             ) : profiles.length === 0 ? (
               <div style={{ padding: '20px 16px' }}>
-                <HintText text="Нет позиций — добавьте в Ценники → Профили" />
+                <HintText text={t('mat.noProfiles')} />
               </div>
             ) : (
               <div style={{ padding: '0 16px' }}>
@@ -424,7 +426,7 @@ const RoomMaterials: React.FC = () => {
                           <IonLabel>
                             <div>
                               <span style={{ fontWeight: 700, fontSize: 14 }}>
-                                Стена {edgeLabel(i, room.points.length)}
+                                {t('mat.wall')} {edgeLabel(i, room.points.length)}
                               </span>
                               <span style={{ fontWeight: 400, fontSize: 13, color: '#888', marginLeft: 8 }}>
                                 {lenM.toFixed(2)} м
@@ -443,7 +445,7 @@ const RoomMaterials: React.FC = () => {
                               </div>
                             ) : (
                               <p style={{ fontSize: 12, color: '#FB8C00', fontWeight: 500, margin: '2px 0 0' }}>
-                                Профиль не выбран
+                                {t('mat.noProfile')}
                               </p>
                             )}
                           </IonLabel>
@@ -465,9 +467,9 @@ const RoomMaterials: React.FC = () => {
               icon={bulbOutline}
               iconColor="#F9A825"
               iconBg="#FFFDE7"
-              text="Нет освещения в ценнике"
-              sub="Добавьте позиции в Ценники → Освещение"
-              buttonLabel="Открыть ценники"
+              text={t('mat.noLightCatalog')}
+              sub={t('mat.noLightCatalogSub')}
+              buttonLabel={t('mat.openPrices')}
               buttonColor="#1E88E5"
               onButton={() => router.push('/price-list/lightings')}
             />
@@ -476,8 +478,8 @@ const RoomMaterials: React.FC = () => {
               icon={bulbOutline}
               iconColor="#F9A825"
               iconBg="#FFFDE7"
-              text="Нет добавленных позиций"
-              sub="Нажмите кнопку + чтобы разместить элементы освещения на чертеже"
+              text={t('mat.noItems')}
+              sub={t('mat.addLightSub')}
             />
           ) : (
             <div style={{ padding: '12px 16px 100px' }}>
@@ -512,7 +514,7 @@ const RoomMaterials: React.FC = () => {
                         <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
                           {isPath
                             ? `${totalLen.toFixed(2)} м · ${item.price} ₽ = ${Math.round(total).toLocaleString('ru')} ₽`
-                            : `${elements.length} шт · ${item.price} ₽ = ${Math.round(total).toLocaleString('ru')} ₽`
+                            : `${elements.length} ${t('mc.pcs')} · ${item.price} ₽ = ${Math.round(total).toLocaleString('ru')} ₽`
                           }
                         </div>
                       </div>
@@ -526,8 +528,8 @@ const RoomMaterials: React.FC = () => {
                       }}>
                         <span style={{ fontSize: 13, color: '#aaa' }}>
                           {isPath
-                            ? `Линия ${idx + 1} · ${(el as RoomLightingPath).lengthM.toFixed(2)} м`
-                            : `Точка ${idx + 1}`
+                            ? `${t('mat.line')} ${idx + 1} · ${(el as RoomLightingPath).lengthM.toFixed(2)} м`
+                            : `${t('mat.point')} ${idx + 1}`
                           }
                         </span>
                         <button
@@ -556,9 +558,9 @@ const RoomMaterials: React.FC = () => {
               icon={buildOutline}
               iconColor="#2E7D32"
               iconBg="#E8F5E9"
-              text="Нет комплектующих в ценнике"
-              sub="Добавьте позиции в Ценники → Комплектующие"
-              buttonLabel="Открыть ценники"
+              text={t('mat.noAccessoryCatalog')}
+              sub={t('mat.noAccessoryCatalogSub')}
+              buttonLabel={t('mat.openPrices')}
               buttonColor="#1E88E5"
               onButton={() => router.push('/price-list/accessories')}
             />
@@ -567,8 +569,8 @@ const RoomMaterials: React.FC = () => {
               icon={buildOutline}
               iconColor="#2E7D32"
               iconBg="#E8F5E9"
-              text="Нет добавленных позиций"
-              sub="Нажмите кнопку + чтобы добавить позиции к помещению"
+              text={t('mat.noItems')}
+              sub={t('mat.addItemSub')}
             />
           ) : (
             <div style={{ padding: '12px 16px 100px' }}>
@@ -635,9 +637,9 @@ const RoomMaterials: React.FC = () => {
               icon={briefcaseOutline}
               iconColor="#C62828"
               iconBg="#FFF0F0"
-              text="Нет услуг в ценнике"
-              sub="Добавьте позиции в Ценники → Доп. услуги"
-              buttonLabel="Открыть ценники"
+              text={t('mat.noServiceCatalog')}
+              sub={t('mat.noServiceCatalogSub')}
+              buttonLabel={t('mat.openPrices')}
               buttonColor="#1E88E5"
               onButton={() => router.push('/price-list/services')}
             />
@@ -646,8 +648,8 @@ const RoomMaterials: React.FC = () => {
               icon={briefcaseOutline}
               iconColor="#C62828"
               iconBg="#FFF0F0"
-              text="Нет добавленных позиций"
-              sub="Нажмите кнопку + чтобы добавить услуги к помещению"
+              text={t('mat.noItems')}
+              sub={t('mat.addServiceSub')}
             />
           ) : (
             <div style={{ padding: '12px 16px 100px' }}>
@@ -665,7 +667,7 @@ const RoomMaterials: React.FC = () => {
                           <p style={{ fontSize: 11, color: '#bbb', margin: '2px 0 0' }}>{item.service.description}</p>
                         )}
                         <p style={{ fontSize: 12, color: '#999', margin: '2px 0 0' }}>
-                          {item.quantity} шт · {item.service.price.toLocaleString('ru')} ₽ = {(item.service.price * item.quantity).toLocaleString('ru')} ₽
+                          {item.quantity} {t('mc.pcs')} · {item.service.price.toLocaleString('ru')} ₽ = {(item.service.price * item.quantity).toLocaleString('ru')} ₽
                         </p>
                       </IonLabel>
                       <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -732,7 +734,7 @@ const RoomMaterials: React.FC = () => {
             alignSelf: 'stretch',
             display: 'flex', alignItems: 'center',
           }}>
-            Итого
+            {t('sum.total')}
           </div>
           <div style={{
             flex: 1, display: 'flex', flexDirection: 'column',
@@ -742,7 +744,7 @@ const RoomMaterials: React.FC = () => {
               {Math.round(sectionTotal).toLocaleString('ru')} ₽
             </span>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-              {meta.title.toLowerCase()}
+              {t(meta.titleKey).toLowerCase()}
             </span>
           </div>
           {sectionWorker > 0 && (
@@ -754,7 +756,7 @@ const RoomMaterials: React.FC = () => {
               <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1 }}>
                 {Math.round(sectionWorker).toLocaleString('ru')} ₽
               </span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>монтаж</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t('mat.install')}</span>
             </div>
           )}
         </div>
@@ -785,7 +787,7 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={editingEdge !== null}
         header={editingEdge !== null
-          ? `Стена ${edgeLabel(editingEdge, room.points.length)} · ${edgeLengthM(room.points, editingEdge, room.scale).toFixed(2)} м`
+          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${edgeLengthM(room.points, editingEdge, room.scale).toFixed(2)} м`
           : undefined}
         buttons={[
           ...profiles.map(p => ({
@@ -795,10 +797,10 @@ const RoomMaterials: React.FC = () => {
             },
           })),
           {
-            text: 'Без профиля', role: 'destructive' as const,
+            text: t('mat.noProfileBtn'), role: 'destructive' as const,
             handler: () => { if (editingEdge !== null) { clearProfile(editingEdge); setEditingEdge(null); } },
           },
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setEditingEdge(null)}
       />
@@ -807,21 +809,21 @@ const RoomMaterials: React.FC = () => {
       <IonAlert
         isOpen={editingSizeEdge !== null}
         header={editingSizeEdge !== null
-          ? `Размер стены ${edgeLabel(editingSizeEdge, room.points.length)}`
+          ? `${t('mat.wallSize')} ${edgeLabel(editingSizeEdge, room.points.length)}`
           : undefined}
         inputs={[{
           name: 'length',
           type: 'number',
-          placeholder: 'Длина в метрах',
+          placeholder: t('mat.lengthM'),
           value: editingSizeEdge !== null
             ? edgeLengthM(room.points, editingSizeEdge, room.scale).toFixed(2)
             : '',
           min: 0.01,
         }]}
         buttons={[
-          { text: 'Отмена', role: 'cancel' },
+          { text: t('common.cancel'), role: 'cancel' },
           {
-            text: 'Применить',
+            text: t('common.apply'),
             handler: (data: { length: string }) => {
               const val = parseFloat(data.length);
               if (editingSizeEdge !== null && !isNaN(val) && val > 0) {
@@ -837,21 +839,21 @@ const RoomMaterials: React.FC = () => {
       <IonAlert
         isOpen={splitEdgeIdx !== null}
         header={splitEdgeIdx !== null
-          ? `Разделить стену ${edgeLabel(splitEdgeIdx, room.points.length)}`
+          ? `${t('mat.splitWall')} ${edgeLabel(splitEdgeIdx, room.points.length)}`
           : undefined}
         message={splitEdgeIdx !== null
-          ? `Длина: ${edgeLengthM(room.points, splitEdgeIdx, room.scale).toFixed(2)} м. Укажите расстояние от начала стены.`
+          ? `${t('mat.splitMsg', { len: edgeLengthM(room.points, splitEdgeIdx, room.scale).toFixed(2) })}`
           : undefined}
         inputs={[{
           name: 'dist',
           type: 'number',
-          placeholder: 'Расстояние в метрах',
+          placeholder: t('mat.distM'),
           min: 0.01,
         }]}
         buttons={[
-          { text: 'Отмена', role: 'cancel' },
+          { text: t('common.cancel'), role: 'cancel' },
           {
-            text: 'Разделить',
+            text: t('mat.split'),
             handler: (data: { dist: string }) => {
               const val = parseFloat(data.dist);
               if (splitEdgeIdx !== null && !isNaN(val) && val > 0) {
@@ -867,22 +869,22 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={edgeMenuOpen !== null}
         header={edgeMenuOpen !== null
-          ? `Стена ${edgeLabel(edgeMenuOpen, room.points.length)} · ${edgeLengthM(room.points, edgeMenuOpen, room.scale).toFixed(2)} м`
+          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${edgeLengthM(room.points, edgeMenuOpen, room.scale).toFixed(2)} м`
           : undefined}
         buttons={[
           {
-            text: 'Изменить профиль',
+            text: t('mat.changeProfile'),
             handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingEdge(e); },
           },
           {
-            text: 'Изменить размер',
+            text: t('mat.changeSize'),
             handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingSizeEdge(e); },
           },
           {
-            text: 'Разделить',
+            text: t('mat.split'),
             handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setSplitEdgeIdx(e); },
           },
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setEdgeMenuOpen(null)}
       />
@@ -890,13 +892,13 @@ const RoomMaterials: React.FC = () => {
       {/* Profile — apply all */}
       <IonActionSheet
         isOpen={applyAllOpen}
-        header="Применить ко всем стенам профиль:"
+        header={t('mat.applyAllHeader')}
         buttons={[
           ...profiles.map(p => ({
             text: p.title,
             handler: () => { applyToAll(p); setApplyAllOpen(false); },
           })),
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setApplyAllOpen(false)}
       />
@@ -904,13 +906,13 @@ const RoomMaterials: React.FC = () => {
       {/* Accessory picker */}
       <IonActionSheet
         isOpen={addAccessoryOpen}
-        header="Добавить комплектующее"
+        header={t('mat.addAccessory')}
         buttons={[
           ...accessories.map(acc => ({
             text: `${acc.title} — ${acc.price.toLocaleString('ru')} ₽/${acc.unit}`,
             handler: () => { addAccessory(acc); setAddAccessoryOpen(false); },
           })),
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setAddAccessoryOpen(false)}
       />
@@ -918,13 +920,13 @@ const RoomMaterials: React.FC = () => {
       {/* Service picker */}
       <IonActionSheet
         isOpen={addServiceOpen}
-        header="Добавить услугу"
+        header={t('mat.addService')}
         buttons={[
           ...services.map(svc => ({
             text: `${svc.title} — ${svc.price.toLocaleString('ru')} ₽`,
             handler: () => { addService(svc); setAddServiceOpen(false); },
           })),
-          { text: 'Отмена', role: 'cancel' as const },
+          { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setAddServiceOpen(false)}
       />

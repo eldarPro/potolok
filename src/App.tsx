@@ -2,6 +2,7 @@ import React from 'react';
 import { Redirect, Route } from 'react-router-dom';
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
+import { LanguageProvider } from './lib/i18n';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -32,6 +33,7 @@ import AccessoryForm from './pages/price-list/AccessoryForm';
 setupIonicReact();
 
 const App: React.FC = () => (
+  <LanguageProvider>
   <IonApp>
     <IonReactRouter basename={import.meta.env.BASE_URL}>
       <IonRouterOutlet>
@@ -43,11 +45,11 @@ const App: React.FC = () => (
         <Route exact path="/project/:id/summary" component={Summary} />
         <Route exact path="/project/:id" component={ProjectDetail} />
 
-        <Route exact path="/price-list/fabrics" render={p => <CatalogList {...p} category="fabrics" title="Полотна" />} />
+        <Route exact path="/price-list/fabrics" render={p => <CatalogList {...p} category="fabrics" />} />
         <Route exact path="/price-list/fabrics/new" render={p => <CatalogForm {...p} category="fabrics" />} />
         <Route exact path="/price-list/fabrics/:id/edit" render={p => <CatalogForm {...p} category="fabrics" />} />
 
-        <Route exact path="/price-list/profiles" render={p => <CatalogList {...p} category="profiles" title="Профили" />} />
+        <Route exact path="/price-list/profiles" render={p => <CatalogList {...p} category="profiles" />} />
         <Route exact path="/price-list/profiles/new" render={p => <CatalogForm {...p} category="profiles" />} />
         <Route exact path="/price-list/profiles/:id/edit" render={p => <CatalogForm {...p} category="profiles" />} />
 
@@ -65,6 +67,7 @@ const App: React.FC = () => (
       </IonRouterOutlet>
     </IonReactRouter>
   </IonApp>
+  </LanguageProvider>
 );
 
 export default App;

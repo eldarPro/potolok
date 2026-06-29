@@ -2,19 +2,21 @@ import React from 'react';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonIcon, useIonViewWillEnter, useIonRouter } from '@ionic/react';
 import { layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline } from 'ionicons/icons';
 import { loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
+import { useT } from '../lib/i18n';
 import './PriceList.css';
 
-const CATEGORIES = [
-  { key: 'fabrics',     label: 'Полотна',        icon: layersOutline,       bg: '#E3F2FD', iconColor: '#1E88E5', href: '/price-list/fabrics' },
-  { key: 'profiles',    label: 'Профили',         icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', href: '/price-list/profiles' },
-  { key: 'lightings',   label: 'Освещение',       icon: bulbOutline,         bg: '#FFF8E1', iconColor: '#F9A825', href: '/price-list/lightings' },
-  { key: 'accessories', label: 'Комплектующие',   icon: buildOutline,        bg: '#E8F5E9', iconColor: '#2E7D32', href: '/price-list/accessories' },
-  { key: 'services',    label: 'Доп. услуги',     icon: briefcaseOutline,    bg: '#FCE4EC', iconColor: '#C62828', href: '/price-list/services' },
-] as const;
-
 const PriceList: React.FC = () => {
+  const { t } = useT();
   const router = useIonRouter();
   const [counts, setCounts] = React.useState<Record<string, number>>({});
+
+  const CATEGORIES = [
+    { key: 'fabrics',     labelKey: 'sec.fabric',      icon: layersOutline,       bg: '#E3F2FD', iconColor: '#1E88E5', href: '/price-list/fabrics' },
+    { key: 'profiles',    labelKey: 'sec.profile',     icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', href: '/price-list/profiles' },
+    { key: 'lightings',   labelKey: 'sec.lighting',    icon: bulbOutline,         bg: '#FFF8E1', iconColor: '#F9A825', href: '/price-list/lightings' },
+    { key: 'accessories', labelKey: 'sec.accessories', icon: buildOutline,        bg: '#E8F5E9', iconColor: '#2E7D32', href: '/price-list/accessories' },
+    { key: 'services',    labelKey: 'sec.services',    icon: briefcaseOutline,    bg: '#FCE4EC', iconColor: '#C62828', href: '/price-list/services' },
+  ];
 
   useIonViewWillEnter(() => {
     setCounts({
@@ -30,7 +32,7 @@ const PriceList: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>Ценники</IonTitle>
+          <IonTitle>{t('tab.prices')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -42,8 +44,8 @@ const PriceList: React.FC = () => {
                 <IonIcon icon={cat.icon} style={{ color: cat.iconColor }} />
               </div>
               <div className="price-cat-info">
-                <p className="price-cat-name">{cat.label}</p>
-                <p className="price-cat-count">{counts[cat.key] ?? 0} позиц.</p>
+                <p className="price-cat-name">{t(cat.labelKey)}</p>
+                <p className="price-cat-count">{counts[cat.key] ?? 0} {t('pl.positions')}</p>
               </div>
             </button>
           ))}

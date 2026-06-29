@@ -10,6 +10,7 @@ import { LightingCatalogItem, LightingType } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadLightings, upsertLighting } from '../../lib/storage';
 import { LIGHTING_TYPES, LIGHTING_META, POINT_SYMBOLS, UNIT_LABEL } from '../../lib/lighting';
+import { useT } from '../../lib/i18n';
 
 type FormState = Omit<LightingCatalogItem, 'id'>;
 
@@ -19,6 +20,7 @@ const empty = (): FormState => ({
 });
 
 const LightingForm: React.FC = () => {
+  const { t } = useT();
   const { id } = useParams<{ id?: string }>();
   const router = useIonRouter();
   const isNew = !id;
@@ -50,12 +52,12 @@ const LightingForm: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!form.title.trim()) { setError('Укажите название'); return; }
+    if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
     upsertLighting({ id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() });
     router.goBack();
   };
 
-  const unitLabel = UNIT_LABEL[form.unit];
+  const unitLabel = t(UNIT_LABEL[form.unit]);
 
   return (
     <IonPage>
@@ -64,50 +66,50 @@ const LightingForm: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/price-list/lightings" />
           </IonButtons>
-          <IonTitle>{isNew ? 'Новый' : 'Редактирование'}</IonTitle>
+          <IonTitle>{isNew ? t('cf.newTitle') : t('cf.editTitle')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
       <IonContent>
         <IonList inset>
           <IonItem>
-            <IonLabel position="stacked">Название *</IonLabel>
+            <IonLabel position="stacked">{t('cf.name')}</IonLabel>
             <IonInput value={form.title} onIonInput={e => set('title', e.detail.value ?? '')} clearInput />
           </IonItem>
 
           <IonItem>
-            <IonLabel position="stacked">Тип</IonLabel>
+            <IonLabel position="stacked">{t('lf.type')}</IonLabel>
             <IonSelect value={form.type} onIonChange={e => handleTypeChange(e.detail.value)}>
               {LIGHTING_TYPES.map(([type, meta]) => (
-                <IonSelectOption key={type} value={type}>{meta.label}</IonSelectOption>
+                <IonSelectOption key={type} value={type}>{t(meta.label)}</IonSelectOption>
               ))}
             </IonSelect>
           </IonItem>
 
           <IonItem>
-            <IonLabel color="medium">Размещение</IonLabel>
+            <IonLabel color="medium">{t('lf.placement')}</IonLabel>
             <IonText slot="end" color="medium">
-              {form.placement === 'point' ? 'Точка на чертеже' : 'Линия на чертеже'}
+              {form.placement === 'point' ? t('lf.placementPoint') : t('lf.placementPath')}
             </IonText>
           </IonItem>
 
           <IonItem>
-            <IonLabel color="medium">Единица измерения</IonLabel>
+            <IonLabel color="medium">{t('lf.unit')}</IonLabel>
             <IonText slot="end" color="medium">{unitLabel}</IonText>
           </IonItem>
 
           <IonItem>
-            <IonLabel position="stacked">Цена клиенту (₽ / {unitLabel})</IonLabel>
+            <IonLabel position="stacked">{t('lf.clientPrice', { unit: unitLabel })}</IonLabel>
             <IonInput type="number" value={form.price} onIonInput={e => set('price', Number(e.detail.value) || 0)} />
           </IonItem>
 
           <IonItem>
-            <IonLabel position="stacked">Зарплата за установку (₽ / {unitLabel})</IonLabel>
+            <IonLabel position="stacked">{t('lf.installPrice', { unit: unitLabel })}</IonLabel>
             <IonInput type="number" value={form.priceInstall} onIonInput={e => set('priceInstall', Number(e.detail.value) || 0)} />
           </IonItem>
 
           <IonItem>
-            <IonLabel>Цвет на чертеже</IonLabel>
+            <IonLabel>{t('lf.chartColor')}</IonLabel>
             <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13, color: 'var(--ion-color-medium)' }}>{form.color}</span>
               <input
@@ -124,7 +126,7 @@ const LightingForm: React.FC = () => {
         {form.placement === 'point' && (
           <div style={{ padding: '0 16px 8px' }}>
             <IonText color="medium">
-              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>Символ на чертеже</p>
+              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>{t('lf.chartSymbol')}</p>
             </IonText>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {POINT_SYMBOLS.map(sym => (
@@ -153,7 +155,7 @@ const LightingForm: React.FC = () => {
 
         <div style={{ padding: 16 }}>
           <ActionButton solid onClick={handleSave}>
-            {isNew ? 'Добавить' : 'Сохранить'}
+            {isNew ? t('common.add') : t('common.save')}
           </ActionButton>
         </div>
       </IonContent>

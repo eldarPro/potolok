@@ -10,6 +10,7 @@ import { add, trashOutline, folderOpenOutline, locationOutline, searchOutline, c
 import { loadProjects, deleteProject } from '../lib/storage';
 import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useT } from '../lib/i18n';
 import './ProjectList.css';
 
 const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
@@ -29,6 +30,7 @@ const getAvatarColor = (name: string) => {
 };
 
 const ProjectList: React.FC = () => {
+  const { t, nRooms } = useT();
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -73,7 +75,7 @@ const ProjectList: React.FC = () => {
                 ref={searchbarRef}
                 value={query}
                 onIonInput={e => setQuery(e.detail.value ?? '')}
-                placeholder="Поиск"
+                placeholder={t('proj.search')}
                 debounce={100}
                 className="project-searchbar-inline"
               />
@@ -85,7 +87,7 @@ const ProjectList: React.FC = () => {
             </>
           ) : (
             <>
-              <IonTitle>Проекты</IonTitle>
+              <IonTitle>{t('proj.title')}</IonTitle>
               {projects.length > 0 && (
                 <IonButtons slot="end">
                   <IonButton onClick={openSearch}>
@@ -105,12 +107,12 @@ const ProjectList: React.FC = () => {
               <div className="empty-state__icon-wrap">
                 <IonIcon icon={folderOpenOutline} />
               </div>
-              <p className="empty-state__title">Проектов пока нет</p>
+              <p className="empty-state__title">{t('proj.emptyTitle')}</p>
               <p className="empty-state__subtitle">
-                Создайте первый проект, чтобы начать замер и расчёт натяжных потолков
+                {t('proj.emptySubtitle')}
               </p>
               <ActionButton solid routerLink="/new-project">
-                Создать проект
+                {t('proj.create')}
               </ActionButton>
             </div>
           </div>
@@ -119,7 +121,7 @@ const ProjectList: React.FC = () => {
             {filtered.length === 0 && searchOpen ? (
               <div className="project-list-no-results">
                 <IonIcon icon={searchOutline} />
-                <p>Ничего не найдено</p>
+                <p>{t('proj.noResults')}</p>
               </div>
             ) : filtered.map(p => {
               const sqm = totalSqm(p);
@@ -140,16 +142,16 @@ const ProjectList: React.FC = () => {
                       </div>
 
                       <div className="project-card__body">
-                        <div className="project-card__name">{p.clientName || 'Без имени'}</div>
+                        <div className="project-card__name">{p.clientName || t('proj.noName')}</div>
                         <div className="project-card__address">
                           <IonIcon icon={locationOutline} className="project-card__address-icon" />
-                          {p.address || 'Адрес не указан'}
+                          {p.address || t('proj.noAddress')}
                         </div>
                       </div>
 
                       <div className="project-card__meta">
                         <span className="chip">
-                          {p.rooms.length} {roomWord(p.rooms.length)}
+                          {p.rooms.length} {nRooms(p.rooms.length)}
                         </span>
                         {sqm > 0 && (
                           <span className="project-card__sqm">{sqm.toFixed(1)} м²</span>
@@ -178,11 +180,5 @@ const ProjectList: React.FC = () => {
     </IonPage>
   );
 };
-
-function roomWord(n: number): string {
-  if (n % 10 === 1 && n % 100 !== 11) return 'помещение';
-  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'помещения';
-  return 'помещений';
-}
 
 export default ProjectList;

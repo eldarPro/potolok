@@ -8,9 +8,11 @@ import { chevronBackOutline, addOutline } from 'ionicons/icons';
 import { useIonRouter } from '@ionic/react';
 import { createProject, upsertProject } from '../lib/storage';
 import ActionButton from '../components/ActionButton';
+import { useT } from '../lib/i18n';
 import './NewProject.css';
 
 const NewProject: React.FC = () => {
+  const { t } = useT();
   const router = useIonRouter();
   const [clientName, setClientName] = useState('');
   const [address, setAddress] = useState('');
@@ -20,7 +22,7 @@ const NewProject: React.FC = () => {
 
   const handleCreate = () => {
     if (!clientName.trim()) {
-      setError('Укажите имя клиента');
+      setError(t('np.errorClient'));
       return;
     }
     const project = createProject({ clientName: clientName.trim(), address, phone, notes });
@@ -35,44 +37,44 @@ const NewProject: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/" />
           </IonButtons>
-          <IonTitle>Новый проект</IonTitle>
+          <IonTitle>{t('np.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
       <IonContent className="new-project-content">
         <IonList inset className="new-project-form">
           <IonItem>
-            <IonLabel position="stacked">Клиент *</IonLabel>
+            <IonLabel position="stacked">{t('np.client')}</IonLabel>
             <IonInput
               value={clientName}
               onIonInput={e => { setClientName(e.detail.value ?? ''); setError(''); }}
-              placeholder="Иванов Иван"
+              placeholder={t('np.clientPH')}
               clearInput
             />
           </IonItem>
           <IonItem>
-            <IonLabel position="stacked">Телефон</IonLabel>
+            <IonLabel position="stacked">{t('np.phone')}</IonLabel>
             <IonInput
               value={phone}
               onIonInput={e => setPhone(e.detail.value ?? '')}
               type="tel"
-              placeholder="+7 (999) 000-00-00"
+              placeholder={t('np.phonePH')}
             />
           </IonItem>
           <IonItem>
-            <IonLabel position="stacked">Адрес объекта</IonLabel>
+            <IonLabel position="stacked">{t('np.address')}</IonLabel>
             <IonInput
               value={address}
               onIonInput={e => setAddress(e.detail.value ?? '')}
-              placeholder="ул. Ленина 1, кв. 5"
+              placeholder={t('np.addressPH')}
             />
           </IonItem>
           <IonItem lines="none">
-            <IonLabel position="stacked">Заметки</IonLabel>
+            <IonLabel position="stacked">{t('np.notes')}</IonLabel>
             <IonTextarea
               value={notes}
               onIonInput={e => setNotes(e.detail.value ?? '')}
-              placeholder="Дополнительная информация..."
+              placeholder={t('np.notesPH')}
               rows={3}
             />
           </IonItem>
@@ -84,7 +86,7 @@ const NewProject: React.FC = () => {
 
         <div className="new-project-footer">
           <ActionButton solid onClick={handleCreate}>
-            Создать проект
+            {t('proj.create')}
           </ActionButton>
         </div>
       </IonContent>

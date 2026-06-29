@@ -7,12 +7,12 @@ export interface LightingMeta {
 }
 
 export const LIGHTING_META: Record<LightingType, LightingMeta> = {
-  spot:       { label: 'Спот',            placement: 'point', unit: 'pcs'   },
-  chandelier: { label: 'Люстра',          placement: 'point', unit: 'pcs'   },
-  track_spot: { label: 'Трек-спот',       placement: 'point', unit: 'pcs'   },
-  strip:      { label: 'LED-лента',       placement: 'path',  unit: 'meter' },
-  line:       { label: 'Световая линия',  placement: 'path',  unit: 'meter' },
-  track:      { label: 'Трек',            placement: 'path',  unit: 'meter' },
+  spot:       { label: 'lt.spot',       placement: 'point', unit: 'pcs'   },
+  chandelier: { label: 'lt.chandelier', placement: 'point', unit: 'pcs'   },
+  track_spot: { label: 'lt.trackSpot',  placement: 'point', unit: 'pcs'   },
+  strip:      { label: 'lt.strip',      placement: 'path',  unit: 'meter' },
+  line:       { label: 'lt.line',       placement: 'path',  unit: 'meter' },
+  track:      { label: 'lt.track',      placement: 'path',  unit: 'meter' },
 };
 
 export const LIGHTING_TYPES = Object.entries(LIGHTING_META) as [LightingType, LightingMeta][];
@@ -20,6 +20,6 @@ export const LIGHTING_TYPES = Object.entries(LIGHTING_META) as [LightingType, Li
 export const POINT_SYMBOLS = ['⊙', '◎', '●', '◉', '✦', '★', '✶', '❋', '⬤', '✤', '✺', '✻', '⊕', '○', '✷', '❂'];
 
 export const UNIT_LABEL: Record<LightingUnit, string> = {
-  pcs: 'шт',
-  meter: 'м',
+  pcs: 'unit.pcs',
+  meter: 'unit.m',
 };

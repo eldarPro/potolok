@@ -9,9 +9,11 @@ import ActionButton from '../../components/ActionButton';
 import { LightingCatalogItem } from '../../types';
 import { loadLightings, deleteLighting } from '../../lib/storage';
 import { LIGHTING_META, UNIT_LABEL } from '../../lib/lighting';
+import { useT } from '../../lib/i18n';
 import './ItemCard.css';
 
 const LightingList: React.FC = () => {
+  const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<LightingCatalogItem[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -31,7 +33,7 @@ const LightingList: React.FC = () => {
 
   const renderItem = (item: LightingCatalogItem) => {
     const meta = LIGHTING_META[item.type];
-    const unitLabel = UNIT_LABEL[item.unit];
+    const unitLabel = t(UNIT_LABEL[item.unit]);
     return (
       <div className="price-item-card" key={item.id}>
         <div className="price-item-card__header">
@@ -43,7 +45,7 @@ const LightingList: React.FC = () => {
             <div className="price-item-card__line" style={{ background: item.color, border: '1px solid rgba(0,0,0,0.12)' }} />
           )}
           <span className="price-item-card__title">{item.title}</span>
-          <span className="price-item-card__chip">{meta.label}</span>
+          <span className="price-item-card__chip">{t(meta.label)}</span>
           <div className="price-item-card__actions">
             <button className="price-item-card__action-btn" onClick={() => router.push(`/price-list/lightings/${item.id}/edit`)}>
               <IonIcon icon={settingsOutline} />
@@ -57,11 +59,11 @@ const LightingList: React.FC = () => {
         <div className="price-item-card__prices">
           <div className="price-item-card__price-cell">
             <span className="price-item-card__price-val">{item.price} ₽</span>
-            <span className="price-item-card__price-label">клиент / {unitLabel}</span>
+            <span className="price-item-card__price-label">{t('ml.clientPer')} {unitLabel}</span>
           </div>
           <div className="price-item-card__price-cell">
             <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
-            <span className="price-item-card__price-label">монтаж / {unitLabel}</span>
+            <span className="price-item-card__price-label">{t('ml.installPer')} {unitLabel}</span>
           </div>
         </div>
       </div>
@@ -75,7 +77,7 @@ const LightingList: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
           </IonButtons>
-          <IonTitle>Освещение</IonTitle>
+          <IonTitle>{t('sec.lighting')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -86,22 +88,22 @@ const LightingList: React.FC = () => {
               <div className="empty-state__icon-wrap" style={{ background: '#FFF8E1' }}>
                 <IonIcon icon={bulbOutline} style={{ color: '#F9A825' }} />
               </div>
-              <p className="empty-state__title">Нет позиций</p>
-              <p className="empty-state__subtitle">Добавьте осветительные приборы, чтобы включать их в проекты</p>
-              <ActionButton solid onClick={() => router.push('/price-list/lightings/new')}>Добавить</ActionButton>
+              <p className="empty-state__title">{t('pl.noItems')}</p>
+              <p className="empty-state__subtitle">{t('lf.subtitle')}</p>
+              <ActionButton solid onClick={() => router.push('/price-list/lightings/new')}>{t('common.add')}</ActionButton>
             </div>
           </div>
         ) : (
           <div className="price-items-list">
             {point.length > 0 && (
               <>
-                <p className="price-items-section-label">Точечные</p>
+                <p className="price-items-section-label">{t('lf.point')}</p>
                 {point.map(renderItem)}
               </>
             )}
             {path.length > 0 && (
               <>
-                <p className="price-items-section-label">Линейные</p>
+                <p className="price-items-section-label">{t('lf.path')}</p>
                 {path.map(renderItem)}
               </>
             )}
@@ -116,11 +118,11 @@ const LightingList: React.FC = () => {
 
         <IonAlert
           isOpen={!!deleteId}
-          header="Удалить позицию?"
-          message="Это действие нельзя отменить."
+          header={t('pl.deleteTitle')}
+          message={t('pl.deleteMsg')}
           buttons={[
-            { text: 'Отмена', role: 'cancel', handler: () => setDeleteId(null) },
-            { text: 'Удалить', role: 'destructive', handler: confirmDelete },
+            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
+            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
           ]}
           onDidDismiss={() => setDeleteId(null)}
         />

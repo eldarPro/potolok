@@ -11,9 +11,11 @@ import {
 import { useHistory } from 'react-router-dom';
 import { MasterProfile } from '../types';
 import { loadMasterProfile, saveMasterProfile } from '../lib/storage';
+import { useT } from '../lib/i18n';
 import './Cabinet.css';
 
 const Profile: React.FC = () => {
+  const { t } = useT();
   const history = useHistory();
   const [form, setForm] = useState<MasterProfile>(loadMasterProfile());
   const [toastMsg, setToastMsg] = useState('');
@@ -34,7 +36,7 @@ const Profile: React.FC = () => {
       email: form.email.trim(),
     };
     saveMasterProfile(saved);
-    setToastMsg('Данные сохранены');
+    setToastMsg(t('prof.saved'));
     setTimeout(() => history.goBack(), 1200);
   };
 
@@ -45,7 +47,7 @@ const Profile: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton defaultHref="/tabs/cabinet" text="" />
           </IonButtons>
-          <IonTitle>Личный профиль</IonTitle>
+          <IonTitle>{t('prof.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -59,59 +61,59 @@ const Profile: React.FC = () => {
         <IonList inset>
           <IonItem>
             <IonIcon icon={personOutline} slot="start" color="medium" />
-            <IonLabel position="stacked">ФИО</IonLabel>
+            <IonLabel position="stacked">{t('prof.fullName')}</IonLabel>
             <IonInput
               value={form.name}
               onIonInput={e => set('name', e.detail.value ?? '')}
-              placeholder="Иванов Иван Иванович"
+              placeholder={t('prof.namePH')}
               clearInput
             />
           </IonItem>
           <IonItem>
             <IonIcon icon={businessOutline} slot="start" color="medium" />
-            <IonLabel position="stacked">Компания</IonLabel>
+            <IonLabel position="stacked">{t('prof.company')}</IonLabel>
             <IonInput
               value={form.company}
               onIonInput={e => set('company', e.detail.value ?? '')}
-              placeholder="ООО «Потолки» или ИП"
+              placeholder={t('prof.companyPH')}
               clearInput
             />
           </IonItem>
           <IonItem>
             <IonIcon icon={callOutline} slot="start" color="medium" />
-            <IonLabel position="stacked">Телефон</IonLabel>
+            <IonLabel position="stacked">{t('prof.phone')}</IonLabel>
             <IonInput
               value={form.phone}
               onIonInput={e => set('phone', e.detail.value ?? '')}
               type="tel"
-              placeholder="+7 (999) 000-00-00"
+              placeholder={t('np.phonePH')}
             />
           </IonItem>
           <IonItem>
             <IonIcon icon={locationOutline} slot="start" color="medium" />
-            <IonLabel position="stacked">Город</IonLabel>
+            <IonLabel position="stacked">{t('prof.city')}</IonLabel>
             <IonInput
               value={form.city}
               onIonInput={e => set('city', e.detail.value ?? '')}
-              placeholder="Москва"
+              placeholder={t('prof.cityPH')}
               clearInput
             />
           </IonItem>
           <IonItem lines="none">
             <IonIcon icon={mailOutline} slot="start" color="medium" />
-            <IonLabel position="stacked">Email</IonLabel>
+            <IonLabel position="stacked">{t('prof.email')}</IonLabel>
             <IonInput
               value={form.email}
               onIonInput={e => set('email', e.detail.value ?? '')}
               type="email"
-              placeholder="master@example.com"
+              placeholder={t('prof.emailPH')}
             />
           </IonItem>
         </IonList>
 
         <div className="cabinet-actions" style={{ padding: '0 16px 16px' }}>
-          <IonButton expand="block" onClick={handleSave}>Сохранить</IonButton>
-          <IonButton expand="block" fill="outline" onClick={() => history.goBack()}>Отмена</IonButton>
+          <IonButton expand="block" onClick={handleSave}>{t('common.save')}</IonButton>
+          <IonButton expand="block" fill="outline" onClick={() => history.goBack()}>{t('common.cancel')}</IonButton>
         </div>
 
         <IonToast

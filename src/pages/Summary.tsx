@@ -8,6 +8,7 @@ import { useParams } from 'react-router-dom';
 import { getProject } from '../lib/storage';
 import { Room } from '../types';
 import jsPDF from 'jspdf';
+import { useT } from '../lib/i18n';
 import './Summary.css';
 
 const corners = (room: Room) => room.points.length;
@@ -43,6 +44,7 @@ const getInitials = (name: string) => {
 const fmt = (n: number) => Math.round(n).toLocaleString('ru');
 
 const Summary: React.FC = () => {
+  const { t, nRooms } = useT();
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<ReturnType<typeof getProject>>(null);
 
@@ -63,14 +65,14 @@ const Summary: React.FC = () => {
 
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('Смета на натяжные потолки', margin, y); y += 10;
+    doc.text(t('pdf.title'), margin, y); y += 10;
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Клиент: ${project.clientName}`, margin, y); y += 6;
-    if (project.phone) { doc.text(`Телефон: ${project.phone}`, margin, y); y += 6; }
-    if (project.address) { doc.text(`Адрес: ${project.address}`, margin, y); y += 6; }
-    doc.text(`Дата: ${new Date().toLocaleDateString('ru')}`, margin, y); y += 10;
+    doc.text(`${t('pdf.client')}: ${project.clientName}`, margin, y); y += 6;
+    if (project.phone) { doc.text(`${t('pdf.phone')}: ${project.phone}`, margin, y); y += 6; }
+    if (project.address) { doc.text(`${t('pdf.address')}: ${project.address}`, margin, y); y += 6; }
+    doc.text(`${t('pdf.date')}: ${new Date().toLocaleDateString()}`, margin, y); y += 10;
 
     doc.setDrawColor(200, 200, 200);
     doc.line(margin, y, W - margin, y); y += 6;
@@ -82,10 +84,10 @@ const Summary: React.FC = () => {
       doc.setFont('helvetica', 'bold');
       doc.text(`${i + 1}. ${room.name}`, margin, y); y += 6;
       doc.setFont('helvetica', 'normal');
-      doc.text(`   Площадь: ${room.areaSqm.toFixed(2)} м²  Периметр: ${room.perimeterM.toFixed(2)} м  Углов: ${c}`, margin, y); y += 5;
+      doc.text(`   ${t('pdf.area')}: ${room.areaSqm.toFixed(2)} м²  ${t('pdf.perimeter')}: ${room.perimeterM.toFixed(2)} м  ${t('pdf.corners')}: ${c}`, margin, y); y += 5;
 
       if (room.fabric) {
-        doc.text(`   Полотно "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} угл. = ${fmt(cl.fabric)} ₽`, margin, y); y += 5;
+        doc.text(`   ${t('sec.fabric')} "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} = ${fmt(cl.fabric)} ₽`, margin, y); y += 5;
       }
       const segs = room.profileSegments ?? [];
       const pGroups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
@@ -95,21 +97,21 @@ const Summary: React.FC = () => {
         pGroups[seg.profileId].count += 1;
       });
       Object.values(pGroups).forEach(g => {
-        doc.text(`   Профиль "${g.title}": ${g.price} × ${g.totalLengthM.toFixed(2)} м + ${g.priceCorner} × ${g.count} угл. = ${fmt(g.price * g.totalLengthM + g.priceCorner * g.count)} ₽`, margin, y); y += 5;
+        doc.text(`   ${t('sec.profile')} "${g.title}": ${g.price} × ${g.totalLengthM.toFixed(2)} м + ${g.priceCorner} × ${g.count} = ${fmt(g.price * g.totalLengthM + g.priceCorner * g.count)} ₽`, margin, y); y += 5;
       });
       doc.setFont('helvetica', 'bold');
-      doc.text(`   Итого по помещению: ${fmt(cl.total)} ₽`, margin, y); y += 8;
+      doc.text(`   ${t('pdf.roomTotal')}: ${fmt(cl.total)} ₽`, margin, y); y += 8;
       doc.setFont('helvetica', 'normal');
     });
 
     doc.line(margin, y, W - margin, y); y += 8;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`ИТОГО: ${fmt(totalClient)} ₽`, margin, y);
+    doc.text(`${t('sum.total')}: ${fmt(totalClient)} ₽`, margin, y);
     y += 6;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`(${totalSqm.toFixed(2)} м² общей площади)`, margin, y);
+    doc.text(`(${totalSqm.toFixed(2)} м² ${t('pdf.totalArea')})`, margin, y);
 
     return doc;
   };
@@ -121,7 +123,7 @@ const Summary: React.FC = () => {
     const blob = buildPDF().output('blob');
     const file = new File([blob], pdfFileName, { type: 'application/pdf' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Смета' });
+      await navigator.share({ files: [file], title: t('pd.estimate') });
     } else {
       buildPDF().save(pdfFileName);
     }
@@ -134,7 +136,7 @@ const Summary: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}`} />
           </IonButtons>
-          <IonTitle>Смета</IonTitle>
+          <IonTitle>{t('pd.estimate')}</IonTitle>
           <IonButtons slot="end">
             <IonButton onClick={handleShare}>
               <IonIcon slot="icon-only" icon={shareSocialOutline} style={{ color: 'var(--color-primary)' }} />
@@ -221,19 +223,19 @@ const Summary: React.FC = () => {
                   <div className="summary-dim-sep" />
                   <div className="summary-dim">
                     <span className="summary-dim__value">{room.perimeterM.toFixed(2)}</span>
-                    <span className="summary-dim__label">м периметр</span>
+                    <span className="summary-dim__label">{t('sum.mPerimeter')}</span>
                   </div>
                   <div className="summary-dim-sep" />
                   <div className="summary-dim">
                     <span className="summary-dim__value">{c}</span>
-                    <span className="summary-dim__label">углов</span>
+                    <span className="summary-dim__label">{t('sum.corners')}</span>
                   </div>
                 </div>
 
                 {/* Materials */}
                 {hasMaterials && (
                   <>
-                    <div className="summary-section-label">Материалы</div>
+                    <div className="summary-section-label">{t('sum.materials')}</div>
                     <div className="summary-line-items">
                       {room.fabric && (
                         <div className="summary-line-item">
@@ -262,13 +264,13 @@ const Summary: React.FC = () => {
                 {/* Lighting */}
                 {lightList.length > 0 && (
                   <>
-                    <div className="summary-section-label">Освещение</div>
+                    <div className="summary-section-label">{t('sum.lighting')}</div>
                     <div className="summary-line-items">
                       {lightList.map(g => (
                         <div key={g.title} className="summary-line-item">
                           <div className="summary-line-item__name">{g.title}</div>
                           <div className="summary-line-item__calc">
-                            {g.isPath ? `${g.totalLen.toFixed(2)} м` : `${g.count} шт`}
+                            {g.isPath ? `${g.totalLen.toFixed(2)} м` : `${g.count} ${t('mc.pcs')}`}
                           </div>
                           <div className="summary-line-item__total">{fmt(g.isPath ? g.price * g.totalLen : g.price * g.count)} ₽</div>
                         </div>
@@ -280,7 +282,7 @@ const Summary: React.FC = () => {
                 {/* Accessories */}
                 {accessories.length > 0 && (
                   <>
-                    <div className="summary-section-label">Аксессуары</div>
+                    <div className="summary-section-label">{t('sum.accessories')}</div>
                     <div className="summary-line-items">
                       {accessories.map(a => (
                         <div key={a.id} className="summary-line-item">
@@ -296,12 +298,12 @@ const Summary: React.FC = () => {
                 {/* Services */}
                 {services.length > 0 && (
                   <>
-                    <div className="summary-section-label">Услуги</div>
+                    <div className="summary-section-label">{t('sum.services')}</div>
                     <div className="summary-line-items">
                       {services.map(s => (
                         <div key={s.id} className="summary-line-item">
                           <div className="summary-line-item__name">{s.service.title}</div>
-                          <div className="summary-line-item__calc">{s.quantity} ед.</div>
+                          <div className="summary-line-item__calc">{s.quantity} {t('unit.pcs')}</div>
                           <div className="summary-line-item__total">{fmt(s.service.price * s.quantity)} ₽</div>
                         </div>
                       ))}
@@ -312,7 +314,7 @@ const Summary: React.FC = () => {
                 {/* Worker salary */}
                 {wk > 0 && (
                   <div className="summary-worker-row">
-                    <span>Зарплата бригаде</span>
+                    <span>{t('sum.workerPay')}</span>
                     <span>{fmt(wk)} ₽</span>
                   </div>
                 )}
@@ -322,14 +324,14 @@ const Summary: React.FC = () => {
 
           {/* ── Total card ── */}
           <div className="summary-total-card">
-            <div className="summary-total-label">Итого к оплате</div>
+            <div className="summary-total-label">{t('sum.totalLabel')}</div>
             <div className="summary-total-price">{fmt(totalClient)} ₽</div>
             <div className="summary-total-meta">
-              {totalSqm.toFixed(2)} м² · {activeRooms.length} {activeRooms.length === 1 ? 'помещение' : activeRooms.length < 5 ? 'помещения' : 'помещений'}
+              {totalSqm.toFixed(2)} м² · {activeRooms.length} {nRooms(activeRooms.length)}
             </div>
             {totalWorker > 0 && (
               <div className="summary-total-worker">
-                Зарплата бригаде: {fmt(totalWorker)} ₽
+                {t('sum.workerPay')}: {fmt(totalWorker)} ₽
               </div>
             )}
           </div>

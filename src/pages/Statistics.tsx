@@ -6,6 +6,7 @@ import {
 import { chevronBackOutline } from 'ionicons/icons';
 import { loadProjects } from '../lib/storage';
 import { Room } from '../types/index';
+import { useT } from '../lib/i18n';
 import './Statistics.css';
 
 const corners = (room: Room) => room.points.length;
@@ -33,9 +34,8 @@ const calcWorker = (room: Room) => {
 const fmt = (n: number) => Math.round(n).toLocaleString('ru');
 const fmtDec = (n: number) => n.toFixed(1);
 
-const MONTH_NAMES = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-
 const Statistics: React.FC = () => {
+  const { t } = useT();
   const projects = loadProjects();
   const allRooms = projects.flatMap(p => p.rooms.filter(r => r.areaSqm > 0));
 
@@ -77,7 +77,7 @@ const Statistics: React.FC = () => {
   const months: { label: string; count: number }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: MONTH_NAMES[d.getMonth()], count: 0 });
+    months.push({ label: t(`mon.${d.getMonth()}`), count: 0 });
   }
   projects.forEach(p => {
     const d = new Date(p.createdAt);
@@ -105,7 +105,7 @@ const Statistics: React.FC = () => {
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/cabinet" />
           </IonButtons>
-          <IonTitle>Статистика</IonTitle>
+          <IonTitle>{t('stat.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
@@ -113,8 +113,8 @@ const Statistics: React.FC = () => {
         {totalProjects === 0 ? (
           <div className="stats-empty">
             <div className="stats-empty-icon">📊</div>
-            <div className="stats-empty-title">Нет данных</div>
-            <div className="stats-empty-sub">Создайте первый проект — здесь появится статистика</div>
+            <div className="stats-empty-title">{t('stat.emptyTitle')}</div>
+            <div className="stats-empty-sub">{t('stat.emptySub')}</div>
           </div>
         ) : (
           <div className="card-list" style={{ paddingBottom: 32 }}>
@@ -123,12 +123,12 @@ const Statistics: React.FC = () => {
             <div className="stats-hero">
               <div className="stats-hero-item">
                 <div className="stats-hero-value">{totalProjects}</div>
-                <div className="stats-hero-label">проектов</div>
+                <div className="stats-hero-label">{t('stat.projects')}</div>
               </div>
               <div className="stats-hero-sep" />
               <div className="stats-hero-item">
                 <div className="stats-hero-value">{totalRooms}</div>
-                <div className="stats-hero-label">помещений</div>
+                <div className="stats-hero-label">{t('stat.rooms')}</div>
               </div>
               <div className="stats-hero-sep" />
               <div className="stats-hero-item">
@@ -140,23 +140,23 @@ const Statistics: React.FC = () => {
             {/* Volume */}
             {totalRooms > 0 && (
               <div className="card stats-card">
-                <div className="stats-card-title">Объём работ</div>
+                <div className="stats-card-title">{t('stat.volume')}</div>
                 <div className="stats-rows">
                   <div className="stats-row">
-                    <span className="stats-row-label">Площадь полотна</span>
+                    <span className="stats-row-label">{t('stat.fabricArea')}</span>
                     <span className="stats-row-value">{fmtDec(totalArea)} м²</span>
                   </div>
                   <div className="stats-row">
-                    <span className="stats-row-label">Периметр профиля</span>
+                    <span className="stats-row-label">{t('stat.profilePerimeter')}</span>
                     <span className="stats-row-value">{fmtDec(totalPerimeter)} м</span>
                   </div>
                   <div className="stats-row">
-                    <span className="stats-row-label">Средняя площадь помещения</span>
+                    <span className="stats-row-label">{t('stat.avgArea')}</span>
                     <span className="stats-row-value">{fmtDec(avgArea)} м²</span>
                   </div>
                   {totalProfileM > 0 && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Профиль суммарно</span>
+                      <span className="stats-row-label">{t('stat.totalProfile')}</span>
                       <span className="stats-row-value">{fmtDec(totalProfileM)} м</span>
                     </div>
                   )}
@@ -167,21 +167,21 @@ const Statistics: React.FC = () => {
             {/* Finance */}
             {hasFinance && (
               <div className="card stats-card">
-                <div className="stats-card-title">Финансы</div>
+                <div className="stats-card-title">{t('stat.finance')}</div>
                 <div className="stats-rows">
                   <div className="stats-row">
-                    <span className="stats-row-label">Итого по сметам</span>
+                    <span className="stats-row-label">{t('stat.totalBudget')}</span>
                     <span className="stats-row-value stats-row-value--primary">{fmt(totalClient)} ₽</span>
                   </div>
                   {totalWorker > 0 && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Зарплата бригаде</span>
+                      <span className="stats-row-label">{t('stat.workerPay')}</span>
                       <span className="stats-row-value">{fmt(totalWorker)} ₽</span>
                     </div>
                   )}
                   {totalWorker > 0 && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Наценка</span>
+                      <span className="stats-row-label">{t('stat.markup')}</span>
                       <span className="stats-row-value">{fmt(totalClient - totalWorker)} ₽</span>
                     </div>
                   )}
@@ -192,17 +192,17 @@ const Statistics: React.FC = () => {
             {/* Materials */}
             {(topFabric || totalProfileM > 0) && (
               <div className="card stats-card">
-                <div className="stats-card-title">Материалы</div>
+                <div className="stats-card-title">{t('stat.materials')}</div>
                 <div className="stats-rows">
                   {topFabric && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Популярное полотно</span>
+                      <span className="stats-row-label">{t('stat.topFabric')}</span>
                       <span className="stats-row-value">{topFabric.title}</span>
                     </div>
                   )}
                   {topFabric && Object.keys(fabricCounts).length > 1 && (
                     <div className="stats-row">
-                      <span className="stats-row-label" style={{ paddingLeft: 12 }}>использовано раз</span>
+                      <span className="stats-row-label" style={{ paddingLeft: 12 }}>{t('stat.usedTimes')}</span>
                       <span className="stats-row-value stats-row-value--muted">{topFabric.count}</span>
                     </div>
                   )}
@@ -213,17 +213,17 @@ const Statistics: React.FC = () => {
             {/* Lighting */}
             {hasLighting && (
               <div className="card stats-card">
-                <div className="stats-card-title">Освещение</div>
+                <div className="stats-card-title">{t('stat.light')}</div>
                 <div className="stats-rows">
                   {totalSpots > 0 && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Светильников (точки)</span>
-                      <span className="stats-row-value">{totalSpots} шт</span>
+                      <span className="stats-row-label">{t('stat.spots')}</span>
+                      <span className="stats-row-value">{totalSpots} {t('mc.pcs')}</span>
                     </div>
                   )}
                   {totalPathM > 0 && (
                     <div className="stats-row">
-                      <span className="stats-row-label">Лент и треков</span>
+                      <span className="stats-row-label">{t('stat.tracks')}</span>
                       <span className="stats-row-value">{fmtDec(totalPathM)} м</span>
                     </div>
                   )}
@@ -234,7 +234,7 @@ const Statistics: React.FC = () => {
             {/* Monthly activity */}
             {hasActivity && (
               <div className="card stats-card">
-                <div className="stats-card-title">Активность за 6 месяцев</div>
+                <div className="stats-card-title">{t('stat.activity')}</div>
                 <div className="stats-chart">
                   {months.map((m, i) => (
                     <div key={i} className="stats-chart-col">
