@@ -60,11 +60,13 @@ const RoomEditor: React.FC = () => {
     setRoom(p.rooms.find(r => r.id === roomId) ?? null);
     setProfiles(loadProfiles());
     setLightings(loadLightings());
-    setUndoStack([]);
-    setRedoStack([]);
   };
 
-  useEffect(() => { load(); }, [projectId, roomId]);
+  useEffect(() => {
+    load();
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [projectId, roomId]);
   useIonViewWillEnter(() => {
     load();
     if (new URLSearchParams(window.location.search).get('pickLighting') === '1') {
