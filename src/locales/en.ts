@@ -88,6 +88,8 @@ const s: Record<string, string> = {
   'tpl.ushape': 'U-shape',
   'tpl.tshape': 'T-shape',
   'tpl.trap': 'Trapezoid',
+  'tpl.hexagon': 'Hexagon',
+  'tpl.hexagon2': 'Hexagon 2',
 
   'mat.fabric': 'Fabrics',
   'mat.profile': 'Profiles',
@@ -100,6 +102,7 @@ const s: Record<string, string> = {
   'sec.lighting': 'Lighting',
   'sec.accessories': 'Accessories',
   'sec.services': 'Add. services',
+  'sec.niches': 'Niches',
 
   'mf.noItems': 'No items — add them in Price list → Fabrics',
   'mp.noDrawing': 'Draw the room plan first',
@@ -336,10 +339,10 @@ const s: Record<string, string> = {
   'mat.applyAllHeader': 'Apply profile to all walls:',
   'mat.noProfileBtn': 'No profile',
   'mat.wallSize': 'Wall',
-  'mat.lengthM': 'Length in meters',
+  'mat.lengthCm': 'Length in centimeters',
   'mat.splitWall': 'Split wall',
-  'mat.splitMsg': 'Length: {len} m. Enter distance from wall start.',
-  'mat.distM': 'Distance in meters',
+  'mat.splitMsg': 'Length: {len} cm. Enter distance from wall start.',
+  'mat.distCm': 'Distance in centimeters',
   'mat.split': 'Split',
   'mat.changeProfile': 'Change profile',
   'mat.changeSize': 'Change size',
@@ -384,6 +387,9 @@ const s: Record<string, string> = {
 
   // ServiceList extras
   'sf.subtitle': 'Add additional services to include in calculations',
+  'nf.subtitle': 'Add niches to include in calculations',
+  'nf.unitPerimeter': 'Per perimeter (m)',
+  'nf.unitPcs': 'Per piece (pcs)',
   'ms.client': 'client',
   'ms.install': 'install',
 

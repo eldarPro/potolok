@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput,
+  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput, IonTextarea,
   IonToggle, IonText, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
@@ -19,7 +19,7 @@ type FormState = Omit<CatalogItem, 'id'>;
 
 const empty = (): FormState => ({
   title: '', price: 0, priceCorner: 0, priceInstall: 0, priceInstallCorner: 0,
-  isDefault: false, color: '#ffffff',
+  isDefault: false, color: '#ffffff', description: '',
 });
 
 const CatalogForm: React.FC<Props> = ({ category }) => {
@@ -36,7 +36,7 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
       const found = all.find(i => i.id === id);
       if (found) {
         const { id: _id, ...rest } = found;
-        setForm(rest);
+        setForm({ ...empty(), ...rest });
       }
     }
   }, [id, category]);
@@ -103,6 +103,15 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
               type="number"
               value={form.priceInstallCorner}
               onIonInput={e => set('priceInstallCorner', Number(e.detail.value) || 0)}
+            />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">{t('sf.description')}</IonLabel>
+            <IonTextarea
+              value={form.description}
+              onIonInput={e => set('description', e.detail.value ?? '')}
+              rows={3}
+              placeholder={t('sf.optional')}
             />
           </IonItem>
           <IonItem>

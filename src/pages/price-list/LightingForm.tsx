@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput,
+  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput, IonTextarea,
   IonSelect, IonSelectOption, IonText, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
@@ -16,7 +16,7 @@ type FormState = Omit<LightingCatalogItem, 'id'>;
 
 const empty = (): FormState => ({
   title: '', type: 'spot', placement: 'point', unit: 'pcs',
-  symbol: '⊙', price: 0, priceInstall: 0, color: '#ffffff',
+  symbol: '⊙', price: 0, priceInstall: 0, color: '#ffffff', description: '',
 });
 
 const LightingForm: React.FC = () => {
@@ -32,7 +32,7 @@ const LightingForm: React.FC = () => {
       const found = loadLightings().find(i => i.id === id);
       if (found) {
         const { id: _id, ...rest } = found;
-        setForm(rest);
+        setForm({ ...empty(), ...rest });
       }
     }
   }, [id]);
@@ -106,6 +106,16 @@ const LightingForm: React.FC = () => {
           <IonItem>
             <IonLabel position="stacked">{t('lf.installPrice', { unit: unitLabel })}</IonLabel>
             <IonInput type="number" value={form.priceInstall} onIonInput={e => set('priceInstall', Number(e.detail.value) || 0)} />
+          </IonItem>
+
+          <IonItem>
+            <IonLabel position="stacked">{t('sf.description')}</IonLabel>
+            <IonTextarea
+              value={form.description}
+              onIonInput={e => set('description', e.detail.value ?? '')}
+              rows={3}
+              placeholder={t('sf.optional')}
+            />
           </IonItem>
 
           <IonItem>

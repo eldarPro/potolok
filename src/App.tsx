@@ -29,6 +29,8 @@ import ServiceList from './pages/price-list/ServiceList';
 import ServiceForm from './pages/price-list/ServiceForm';
 import AccessoryList from './pages/price-list/AccessoryList';
 import AccessoryForm from './pages/price-list/AccessoryForm';
+import NicheList from './pages/price-list/NicheList';
+import NicheForm from './pages/price-list/NicheForm';
 
 setupIonicReact();
 
@@ -64,6 +66,10 @@ const App: React.FC = () => (
         <Route exact path="/price-list/accessories" component={AccessoryList} />
         <Route exact path="/price-list/accessories/new" component={AccessoryForm} />
         <Route exact path="/price-list/accessories/:id/edit" component={AccessoryForm} />
+
+        <Route exact path="/price-list/niches" component={NicheList} />
+        <Route exact path="/price-list/niches/new" component={NicheForm} />
+        <Route exact path="/price-list/niches/:id/edit" component={NicheForm} />
       </IonRouterOutlet>
     </IonReactRouter>
   </IonApp>

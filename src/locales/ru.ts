@@ -97,6 +97,8 @@ const s: Record<string, string> = {
   'tpl.ushape': 'П-образная',
   'tpl.tshape': 'Т-образная',
   'tpl.trap': 'Трапеция',
+  'tpl.hexagon': 'Шестигранник',
+  'tpl.hexagon2': 'Шестигранник 2',
 
   // Materials tabs
   'mat.fabric': 'Полотна',
@@ -111,6 +113,7 @@ const s: Record<string, string> = {
   'sec.lighting': 'Освещение',
   'sec.accessories': 'Комплектующие',
   'sec.services': 'Доп. услуги',
+  'sec.niches': 'Ниши',
 
   // Fabric
   'mf.noItems': 'Нет позиций — добавьте в Ценники → Полотна',
@@ -368,10 +371,10 @@ const s: Record<string, string> = {
   'mat.applyAllHeader': 'Применить ко всем стенам профиль:',
   'mat.noProfileBtn': 'Без профиля',
   'mat.wallSize': 'Стена',
-  'mat.lengthM': 'Длина в метрах',
+  'mat.lengthCm': 'Длина в сантиметрах',
   'mat.splitWall': 'Разделить стену',
-  'mat.splitMsg': 'Длина: {len} м. Укажите расстояние от начала стены.',
-  'mat.distM': 'Расстояние в метрах',
+  'mat.splitMsg': 'Длина: {len} см. Укажите расстояние от начала стены.',
+  'mat.distCm': 'Расстояние в сантиметрах',
   'mat.split': 'Разделить',
   'mat.changeProfile': 'Изменить профиль',
   'mat.changeSize': 'Изменить размер',
@@ -416,6 +419,9 @@ const s: Record<string, string> = {
 
   // ServiceList extras
   'sf.subtitle': 'Добавьте дополнительные услуги, чтобы включать их в расчёты',
+  'nf.subtitle': 'Добавьте ниши, чтобы включать их в расчёты',
+  'nf.unitPerimeter': 'По периметру (м)',
+  'nf.unitPcs': 'Поштучно (шт)',
   'ms.client': 'клиенту',
   'ms.install': 'монтаж',
 

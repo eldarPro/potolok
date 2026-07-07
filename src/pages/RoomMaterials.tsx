@@ -13,7 +13,7 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
-import { edgeLengthM, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE } from '../lib/geometry';
+import { edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE } from '../lib/geometry';
 import { useT } from '../lib/i18n';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
@@ -108,8 +108,8 @@ const RoomMaterials: React.FC = () => {
       })),
     });
 
-  const resizeEdge = (edgeIndex: number, newLenM: number) => {
-    if (newLenM <= 0) return;
+  const resizeEdge = (edgeIndex: number, newLenCm: number) => {
+    if (newLenCm <= 0) return;
     const n = room.points.length;
     const pts = room.points;
     const a = pts[edgeIndex % n];
@@ -118,7 +118,7 @@ const RoomMaterials: React.FC = () => {
     const dy = b.y - a.y;
     const currentPx = Math.sqrt(dx * dx + dy * dy);
     if (currentPx === 0) return;
-    const newPx = (newLenM * GRID_SIZE * 100) / room.scale;
+    const newPx = (newLenCm * GRID_SIZE) / room.scale;
     const ratio = newPx / currentPx;
     const newPts = [...pts];
     newPts[(edgeIndex + 1) % n] = { x: a.x + dx * ratio, y: a.y + dy * ratio };
@@ -132,7 +132,7 @@ const RoomMaterials: React.FC = () => {
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
   };
 
-  const splitEdgeAt = (edgeIndex: number, distM: number) => {
+  const splitEdgeAt = (edgeIndex: number, distCm: number) => {
     const n = room.points.length;
     const pts = room.points;
     const a = pts[edgeIndex % n];
@@ -141,9 +141,9 @@ const RoomMaterials: React.FC = () => {
     const dy = b.y - a.y;
     const edgePx = Math.sqrt(dx * dx + dy * dy);
     if (edgePx === 0) return;
-    const edgeTotalM = edgeLengthM(pts, edgeIndex, room.scale);
-    if (distM <= 0 || distM >= edgeTotalM) return;
-    const splitPx = (distM * GRID_SIZE * 100) / room.scale;
+    const edgeTotalCm = edgeLengthCm(pts, edgeIndex, room.scale);
+    if (distCm <= 0 || distCm >= edgeTotalCm) return;
+    const splitPx = (distCm * GRID_SIZE) / room.scale;
     const ratio = splitPx / edgePx;
     const splitPt = { x: a.x + dx * ratio, y: a.y + dy * ratio };
     const newPts = [...pts.slice(0, edgeIndex + 1), splitPt, ...pts.slice(edgeIndex + 1)];
@@ -413,7 +413,7 @@ const RoomMaterials: React.FC = () => {
                   <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
                     {room.points.map((_, i) => {
                       const seg = segments.find(s => s.edgeIndex === i);
-                      const lenM = edgeLengthM(room.points, i, room.scale);
+                      const lenCm = edgeLengthCm(room.points, i, room.scale);
                       return (
                         <IonItem
                           key={i}
@@ -429,7 +429,7 @@ const RoomMaterials: React.FC = () => {
                                 {t('mat.wall')} {edgeLabel(i, room.points.length)}
                               </span>
                               <span style={{ fontWeight: 400, fontSize: 13, color: '#888', marginLeft: 8 }}>
-                                {lenM.toFixed(2)} м
+                                {Math.round(lenCm)} см
                               </span>
                             </div>
                             {seg ? (
@@ -787,7 +787,7 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={editingEdge !== null}
         header={editingEdge !== null
-          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${edgeLengthM(room.points, editingEdge, room.scale).toFixed(2)} м`
+          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${Math.round(edgeLengthCm(room.points, editingEdge, room.scale))} см`
           : undefined}
         buttons={[
           ...profiles.map(p => ({
@@ -814,11 +814,11 @@ const RoomMaterials: React.FC = () => {
         inputs={[{
           name: 'length',
           type: 'number',
-          placeholder: t('mat.lengthM'),
+          placeholder: t('mat.lengthCm'),
           value: editingSizeEdge !== null
-            ? edgeLengthM(room.points, editingSizeEdge, room.scale).toFixed(2)
+            ? String(Math.round(edgeLengthCm(room.points, editingSizeEdge, room.scale)))
             : '',
-          min: 0.01,
+          min: 1,
         }]}
         buttons={[
           { text: t('common.cancel'), role: 'cancel' },
@@ -842,13 +842,13 @@ const RoomMaterials: React.FC = () => {
           ? `${t('mat.splitWall')} ${edgeLabel(splitEdgeIdx, room.points.length)}`
           : undefined}
         message={splitEdgeIdx !== null
-          ? `${t('mat.splitMsg', { len: edgeLengthM(room.points, splitEdgeIdx, room.scale).toFixed(2) })}`
+          ? `${t('mat.splitMsg', { len: Math.round(edgeLengthCm(room.points, splitEdgeIdx, room.scale)) })}`
           : undefined}
         inputs={[{
           name: 'dist',
           type: 'number',
-          placeholder: t('mat.distM'),
-          min: 0.01,
+          placeholder: t('mat.distCm'),
+          min: 1,
         }]}
         buttons={[
           { text: t('common.cancel'), role: 'cancel' },
@@ -869,7 +869,7 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={edgeMenuOpen !== null}
         header={edgeMenuOpen !== null
-          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${edgeLengthM(room.points, edgeMenuOpen, room.scale).toFixed(2)} м`
+          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${Math.round(edgeLengthCm(room.points, edgeMenuOpen, room.scale))} см`
           : undefined}
         buttons={[
           {

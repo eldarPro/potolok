@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput,
+  IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput, IonTextarea,
   IonText, IonSelect, IonSelectOption, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
@@ -13,7 +13,7 @@ import { useT } from '../../lib/i18n';
 
 type FormState = Omit<Accessory, 'id'>;
 
-const empty = (): FormState => ({ title: '', price: 0, priceInstall: 0, unit: 'шт' });
+const empty = (): FormState => ({ title: '', price: 0, priceInstall: 0, unit: 'шт', description: '' });
 
 const UNITS = ['шт', 'м', 'м²', 'компл'];
 
@@ -30,7 +30,7 @@ const AccessoryForm: React.FC = () => {
       const found = loadAccessories().find(i => i.id === id);
       if (found) {
         const { id: _id, ...rest } = found;
-        setForm(rest);
+        setForm({ ...empty(), ...rest });
       }
     }
   }, [id]);
@@ -74,6 +74,15 @@ const AccessoryForm: React.FC = () => {
           <IonItem>
             <IonLabel position="stacked">{t('af.installPrice', { unit: form.unit })}</IonLabel>
             <IonInput type="number" value={form.priceInstall} onIonInput={e => set('priceInstall', Number(e.detail.value) || 0)} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">{t('sf.description')}</IonLabel>
+            <IonTextarea
+              value={form.description}
+              onIonInput={e => set('description', e.detail.value ?? '')}
+              rows={3}
+              placeholder={t('sf.optional')}
+            />
           </IonItem>
         </IonList>
 

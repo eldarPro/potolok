@@ -14,6 +14,7 @@ export interface CatalogItem {
   priceInstallCorner: number;
   isDefault: boolean;
   color: string;
+  description: string;
 }
 
 export interface AdditionalService {
@@ -31,12 +32,25 @@ export interface RoomServiceItem {
   quantity: number;
 }
 
+// 'perimeter' — priced per running meter, 'pcs' — per piece
+export type NicheUnit = 'perimeter' | 'pcs';
+
+export interface NicheItem {
+  id: string;
+  title: string;
+  unit: NicheUnit;
+  price: number;
+  priceInstall: number;
+  description: string;
+}
+
 export interface Accessory {
   id: string;
   title: string;
   price: number;
   priceInstall: number;
   unit: string;
+  description: string;
 }
 
 export interface RoomAccessoryItem {
@@ -62,6 +76,7 @@ export interface LightingCatalogItem {
   price: number;
   priceInstall: number;
   color: string;
+  description: string;
 }
 
 // --- Room lighting elements ---

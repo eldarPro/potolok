@@ -77,6 +77,9 @@ const AccessoryList: React.FC = () => {
                     <span className="price-item-card__price-label">{t('ma.installPer')} {item.unit}</span>
                   </div>
                 </div>
+                {item.description ? (
+                  <p className="price-item-card__desc">{item.description}</p>
+                ) : null}
               </div>
             ))}
           </div>

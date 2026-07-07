@@ -66,6 +66,9 @@ const LightingList: React.FC = () => {
             <span className="price-item-card__price-label">{t('ml.installPer')} {unitLabel}</span>
           </div>
         </div>
+        {item.description ? (
+          <p className="price-item-card__desc">{item.description}</p>
+        ) : null}
       </div>
     );
   };

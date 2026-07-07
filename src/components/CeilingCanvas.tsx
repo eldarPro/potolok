@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, trashOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, trashOutline, resizeOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, fmtM, pointLabel, pointInPolygon, edgeLengthM, GRID_SIZE } from '../lib/geometry';
+import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, pointInPolygon, edgeLengthM, polygonDiagonals, GRID_SIZE } from '../lib/geometry';
 import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
@@ -29,6 +29,8 @@ interface Props {
   onVertexDragEnd?: () => void;
   onOutOfBounds?: () => void;
   onOpenTemplates?: () => void;
+  onOpenBluetooth?: () => void;
+  onOpenManualMeasure?: () => void;
 }
 
 type Tool = 'draw' | 'move';
@@ -62,9 +64,12 @@ const CeilingCanvas: React.FC<Props> = ({
   onVertexDragEnd,
   onOutOfBounds,
   onOpenTemplates,
+  onOpenBluetooth,
+  onOpenManualMeasure,
 }) => {
   const [points, setPoints] = useState<Point[]>(room.points);
   const [closed, setClosed] = useState(room.points.length >= MIN_POINTS);
+  const [manualStarted, setManualStarted] = useState(false);
   const [cursor, setCursor] = useState<Point | null>(null);
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
@@ -72,6 +77,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
+  const [showDiagonals, setShowDiagonals] = useState(false);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
@@ -103,6 +109,7 @@ const CeilingCanvas: React.FC<Props> = ({
     setPoints(pts);
     setClosed(pts.length >= MIN_POINTS && room.areaSqm > 0);
     setTool(pts.length >= MIN_POINTS && room.areaSqm > 0 ? 'move' : 'draw');
+    if (pts.length === 0) setManualStarted(false);
     if (pts.length >= MIN_POINTS) {
       fitView(pts);
     } else {
@@ -431,9 +438,13 @@ const CeilingCanvas: React.FC<Props> = ({
     const mx = (p.x + prev.x) / 2;
     const my = (p.y + prev.y) / 2;
     const d = dist(p, prev);
-    const m = pxToMeters(d, room.scale);
-    return { mx, my, label: fmtM(m), key: i };
+    const cm = pxToCm(d, room.scale);
+    return { mx, my, label: fmtCm(cm), key: i };
   }).filter(Boolean);
+
+  const diagonals = showDiagonals && closed && points.length >= 4
+    ? polygonDiagonals(points)
+    : [];
 
   const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
     ? dist(cursor, points[0]) * viewport.scale < CLOSE_THRESHOLD
@@ -520,7 +531,7 @@ const CeilingCanvas: React.FC<Props> = ({
               <Text
                 x={(previewLine[0].x + previewLine[1].x) / 2}
                 y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
-                text={fmtM(pxToMeters(dist(previewLine[0], previewLine[1]), room.scale))}
+                text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1]), room.scale))}
                 fontSize={12}
                 fontStyle="bold"
                 fill={nearStart ? '#2dd36f' : '#fff'}
@@ -532,6 +543,33 @@ const CeilingCanvas: React.FC<Props> = ({
               />
             </>
           )}
+
+          {/* Diagonals with lengths */}
+          {diagonals.map(([i, j], k) => {
+            const a = points[i], b = points[j];
+            // Stagger labels along the line so they don't collide at a quad's centre
+            // or crowd together on diagonals fanning out of one vertex
+            const t = 0.28 + (k % 3) * 0.14;
+            const lx = a.x + (b.x - a.x) * t;
+            const ly = a.y + (b.y - a.y) * t;
+            return (
+              <Group key={`diag-${k}`} listening={false}>
+                <Line
+                  points={[a.x, a.y, b.x, b.y]}
+                  stroke="#F9A825"
+                  strokeWidth={1.5}
+                  dash={[8, 6]}
+                  opacity={0.85}
+                />
+                <Text
+                  x={lx} y={ly - 15}
+                  text={`${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b), room.scale))}`}
+                  fontSize={11} fontStyle="bold" fill="#F9A825"
+                  shadowColor="rgba(0,0,0,0.9)" shadowBlur={4} shadowOffsetX={1} shadowOffsetY={1}
+                />
+              </Group>
+            );
+          })}
 
           {/* Segment dimension labels */}
           {segmentLabels.map(seg => seg && (
@@ -713,6 +751,25 @@ const CeilingCanvas: React.FC<Props> = ({
         )}
       </div>
 
+      {/* Diagonals toggle */}
+      {closed && points.length >= 4 && !placingLighting && (
+        <button
+          onClick={() => setShowDiagonals(s => !s)}
+          title="Диагонали"
+          style={{
+            position: 'absolute', top: 10, right: 10,
+            width: 44, height: 44, borderRadius: 14, border: 'none',
+            cursor: 'pointer',
+            background: showDiagonals ? 'rgba(249,168,37,0.92)' : 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(8px)',
+            color: showDiagonals ? '#000' : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <IonIcon icon={resizeOutline} style={{ fontSize: 22 }} />
+        </button>
+      )}
+
       {/* Delete point button */}
       {selectedPoint !== null && points.length > 3 && (() => {
         const p = points[selectedPoint];
@@ -784,47 +841,97 @@ const CeilingCanvas: React.FC<Props> = ({
         );
       })()}
 
-      {/* Empty state overlay */}
-      {points.length === 0 && (
+      {/* Empty state overlay — choose how to create the outline */}
+      {points.length === 0 && !manualStarted && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: 'none',
+          pointerEvents: 'none', padding: 20,
         }}>
           <div style={{
-            background: 'rgba(0,0,0,0.45)',
-            backdropFilter: 'blur(6px)',
-            borderRadius: 18, padding: '20px 28px', textAlign: 'center',
+            width: '100%', maxWidth: 320,
+            background: 'rgba(12,14,24,0.92)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+            borderRadius: 20, padding: '22px 16px 16px',
             pointerEvents: 'auto',
           }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>📐</div>
-            <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
-              Нажмите на холст
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
-              чтобы добавить точки контура
-            </div>
-            {onOpenTemplates && (
-              <div style={{ marginTop: 12, fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-                или выберите{' '}
-                <button
-                  onClick={onOpenTemplates}
-                  style={{
-                    background: 'none', border: 'none', padding: 0,
-                    color: '#1E88E5', fontWeight: 600, fontSize: 13,
-                    cursor: 'pointer', textDecoration: 'underline',
-                    textUnderlineOffset: 3,
-                  }}
-                >
-                  готовые шаблоны
-                </button>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 30, marginBottom: 8 }}>📐</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 3 }}>
+                Выберите способ построения помещения
               </div>
-            )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <StartOption
+                icon={createOutline}
+                color="#1E88E5"
+                title="Начертить самому"
+                subtitle="Ставьте точки на холсте вручную"
+                onClick={() => setManualStarted(true)}
+              />
+              {onOpenTemplates && (
+                <StartOption
+                  icon={appsOutline}
+                  color="#8E24AA"
+                  title="Готовый шаблон"
+                  subtitle="Прямоугольник, буквой Г, П и другие"
+                  onClick={onOpenTemplates}
+                />
+              )}
+              {onOpenBluetooth && (
+                <StartOption
+                  icon={bluetoothOutline}
+                  color="#2E7D32"
+                  title="Через дальномер"
+                  subtitle="Обмерить стены лазерным дальномером"
+                  onClick={onOpenBluetooth}
+                />
+              )}
+              {onOpenManualMeasure && (
+                <StartOption
+                  icon={keypadOutline}
+                  color="#00ACC1"
+                  title="Ввести размеры"
+                  subtitle="Углы и длины стен вручную"
+                  onClick={onOpenManualMeasure}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
+
+const StartOption: React.FC<{
+  icon: string; color: string; title: string; subtitle: string; onClick: () => void;
+}> = ({ icon, color, title, subtitle, onClick }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      width: '100%', padding: '10px 12px',
+      background: 'rgba(255,255,255,0.06)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+    }}
+  >
+    <div style={{
+      width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+      background: `${color}26`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <IonIcon icon={icon} style={{ fontSize: 20, color }} />
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{title}</div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11.5, marginTop: 1 }}>{subtitle}</div>
+    </div>
+    <IonIcon icon={chevronForwardOutline} style={{ fontSize: 16, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+  </button>
+);
 
 export default CeilingCanvas;

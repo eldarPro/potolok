@@ -13,6 +13,8 @@ import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
+import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
+import ManualMeasureModal from '../components/ManualMeasureModal';
 import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
 import { useT } from '../lib/i18n';
 
@@ -50,6 +52,8 @@ const RoomEditor: React.FC = () => {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [bluetoothOpen, setBluetoothOpen] = useState(false);
+  const [manualMeasureOpen, setManualMeasureOpen] = useState(false);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -113,6 +117,8 @@ const RoomEditor: React.FC = () => {
     { id: 'ushape', labelKey: 'tpl.ushape', w: 8, h: 8, shape: [[0,0],[3,0],[3,5],[5,5],[5,0],[8,0],[8,8],[0,8]] },
     { id: 'tshape', labelKey: 'tpl.tshape', w: 8, h: 8, shape: [[0,0],[8,0],[8,3],[5,3],[5,8],[3,8],[3,3],[0,3]] },
     { id: 'trap',   labelKey: 'tpl.trap',   w: 8, h: 6, shape: [[1,0],[7,0],[8,6],[0,6]] },
+    { id: 'hexagon', labelKey: 'tpl.hexagon', w: 8, h: 6, shape: [[2,0],[6,0],[8,3],[6,6],[2,6],[0,3]] },
+    { id: 'hexagon2', labelKey: 'tpl.hexagon2', w: 8, h: 6, shape: [[0,0],[6,0],[8,2],[8,4],[6,6],[0,6]] },
   ];
 
   const applyTemplate = (shape: [number, number][], tw: number, th: number) => {
@@ -424,6 +430,8 @@ const RoomEditor: React.FC = () => {
                   duration: 1500, position: 'bottom', color: 'danger',
                 })}
                 onOpenTemplates={() => setTemplatesOpen(true)}
+                onOpenBluetooth={() => setBluetoothOpen(true)}
+                onOpenManualMeasure={() => setManualMeasureOpen(true)}
               />
             )}
 
@@ -699,6 +707,26 @@ const RoomEditor: React.FC = () => {
         ]}
         onDidDismiss={() => setLightingPickerOpen(false)}
       />
+
+      {bluetoothOpen && room && canvasSize.width > 0 && (
+        <BluetoothMeasureModal
+          room={room}
+          canvasW={canvasSize.width}
+          canvasH={canvasSize.height}
+          onApply={(partial) => { updateRoom(partial); setCanvasKey(k => k + 1); }}
+          onClose={() => setBluetoothOpen(false)}
+        />
+      )}
+
+      {manualMeasureOpen && room && canvasSize.width > 0 && (
+        <ManualMeasureModal
+          room={room}
+          canvasW={canvasSize.width}
+          canvasH={canvasSize.height}
+          onApply={(partial) => { updateRoom(partial); setCanvasKey(k => k + 1); }}
+          onClose={() => setManualMeasureOpen(false)}
+        />
+      )}
     </IonPage>
   );
 };

@@ -1,7 +1,7 @@
 import React from 'react';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonIcon, useIonViewWillEnter, useIonRouter } from '@ionic/react';
-import { layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline } from 'ionicons/icons';
-import { loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
+import { layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline } from 'ionicons/icons';
+import { loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
 import { useT } from '../lib/i18n';
 import './PriceList.css';
 
@@ -15,6 +15,7 @@ const PriceList: React.FC = () => {
     { key: 'profiles',    labelKey: 'sec.profile',     icon: reorderThreeOutline, bg: '#F3E5F5', iconColor: '#8E24AA', href: '/price-list/profiles' },
     { key: 'lightings',   labelKey: 'sec.lighting',    icon: bulbOutline,         bg: '#FFF8E1', iconColor: '#F9A825', href: '/price-list/lightings' },
     { key: 'accessories', labelKey: 'sec.accessories', icon: buildOutline,        bg: '#E8F5E9', iconColor: '#2E7D32', href: '/price-list/accessories' },
+    { key: 'niches',      labelKey: 'sec.niches',      icon: albumsOutline,       bg: '#E0F7FA', iconColor: '#00838F', href: '/price-list/niches' },
     { key: 'services',    labelKey: 'sec.services',    icon: briefcaseOutline,    bg: '#FCE4EC', iconColor: '#C62828', href: '/price-list/services' },
   ];
 
@@ -25,6 +26,7 @@ const PriceList: React.FC = () => {
       lightings:   loadLightings().length,
       services:    loadServices().length,
       accessories: loadAccessories().length,
+      niches:      loadNiches().length,
     });
   });
 

@@ -99,6 +99,9 @@ const CatalogList: React.FC<Props> = ({ category }) => {
                     <span className="price-item-card__price-label">{t('mf.installPerCorner')}</span>
                   </div>
                 </div>
+                {item.description ? (
+                  <p className="price-item-card__desc">{item.description}</p>
+                ) : null}
               </div>
             ))}
           </div>
