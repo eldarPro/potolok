@@ -335,6 +335,8 @@ const s: Record<string, string> = {
   'mat.splitMsg': 'Uzunluk: {len} cm. Duvarın başından mesafeyi girin.',
   'mat.distCm': 'Santimetre cinsinden mesafe',
   'mat.split': 'Böl',
+  'mat.straighten': 'Duvarı düzleştir',
+  'mat.curved': 'Kavisli duvar',
   'mat.changeProfile': 'Profili değiştir',
   'mat.changeSize': 'Boyutu değiştir',
   'mat.addAccessory': 'Aksesuar ekle',

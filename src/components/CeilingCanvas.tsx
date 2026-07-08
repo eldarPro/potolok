@@ -3,7 +3,11 @@ import { IonIcon } from '@ionic/react';
 import { arrowUndoOutline, arrowRedoOutline, trashOutline, resizeOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
-import { Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, pointInPolygon, edgeLengthM, polygonDiagonals, GRID_SIZE } from '../lib/geometry';
+import {
+  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel,
+  pointInPolygon, edgeLengthM, polygonDiagonals, GRID_SIZE,
+  edgeLen, arcHandlePoint, bulgeFromThreePoints, sampleArc, tessellateRoom,
+} from '../lib/geometry';
 import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
@@ -84,6 +88,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const lastMouse = useRef<Point | null>(null);
   const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null);
   const isTouching = useRef(false);
+  const wallDragOrigin = useRef<Point | null>(null);
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
@@ -147,6 +152,10 @@ const CeilingCanvas: React.FC<Props> = ({
     const n = points.length;
     const newPts = [...points.slice(0, i), ...points.slice(i + 1)];
     const prevEdgeIdx = (i - 1 + n) % n;
+    // Deleting a vertex merges its two adjacent edges into one straight edge —
+    // a single arc can't represent the combined shape, so drop any curvature.
+    const mergedIdx = i === 0 ? n - 2 : i - 1;
+    if (newPts[mergedIdx]?.bulge) newPts[mergedIdx] = { ...newPts[mergedIdx], bulge: 0 };
     const existingSegs = room.profileSegments ?? [];
     const updatedSegs = existingSegs
       .filter(s => s.edgeIndex !== i)
@@ -182,7 +191,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const handleTap = (pt: Point) => {
     // Lighting placement mode — only accept taps inside the room polygon
     if (placingLighting && isClosed) {
-      if (pointInPolygon(pt, points)) onLightingTap?.(pt);
+      if (pointInPolygon(pt, tessellateRoom(points, true))) onLightingTap?.(pt);
       else onOutOfBounds?.();
       return;
     }
@@ -425,6 +434,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const canRedoBtn = !closed ? drawRedoStack.length > 0 || canRedo : canRedo;
 
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
+  const outlinePoints = (pts: Point[]) => tessellateRoom(pts, true).flatMap(p => [p.x, p.y]);
 
   const previewLine = !placingLighting && cursor && points.length > 0 ? [
     points[points.length - 1],
@@ -435,12 +445,18 @@ const CeilingCanvas: React.FC<Props> = ({
     if (i === 0 && !closed) return null;
     const prev = closed && i === 0 ? points[points.length - 1] : points[i - 1];
     if (!prev) return null;
-    const mx = (p.x + prev.x) / 2;
-    const my = (p.y + prev.y) / 2;
-    const d = dist(p, prev);
+    const mid = arcHandlePoint(prev, p, prev.bulge);
+    const d = edgeLen(prev, p, prev.bulge);
     const cm = pxToCm(d, room.scale);
-    return { mx, my, label: fmtCm(cm), key: i };
+    return { mx: mid.x, my: mid.y, label: fmtCm(cm), key: i };
   }).filter(Boolean);
+
+  // Invisible wide hit-lines along each wall of the closed room — grab and drag
+  // anywhere on a wall to bow it into an arc (no visible curvature handle).
+  const wallHitLines = isClosed && !placingLighting ? points.map((a, i) => {
+    const b = points[(i + 1) % points.length];
+    return { i, a, b, points: [a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(p => [p.x, p.y])] };
+  }) : [];
 
   const diagonals = showDiagonals && closed && points.length >= 4
     ? polygonDiagonals(points)
@@ -506,7 +522,7 @@ const CeilingCanvas: React.FC<Props> = ({
           {/* Filled polygon */}
           {closed && points.length > 2 && (
             <Line
-              points={flatPoints(points)}
+              points={outlinePoints(points)}
               closed
               fill="rgba(56,128,255,0.18)"
               stroke="#3880ff"
@@ -578,6 +594,46 @@ const CeilingCanvas: React.FC<Props> = ({
             </Group>
           ))}
 
+          {/* Wall drag-to-curve — invisible wide hit band along each wall, laid
+              down before the vertices so a corner still wins the hit-test over
+              the wall band right next to it. Grab anywhere on a wall and drag to
+              bow it into an arc; the arc is fit through both ends plus wherever
+              you dropped the point, so it always passes exactly under your
+              finger — no visible handle needed. */}
+          {wallHitLines.map(w => (
+            <Line
+              key={`wall-hit-${w.i}`}
+              points={w.points}
+              stroke="transparent"
+              strokeWidth={1}
+              hitStrokeWidth={28}
+              draggable
+              x={0} y={0}
+              onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
+              onDragStart={e => {
+                onVertexDragStart?.();
+                setSelectedPoint(null);
+                lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
+                wallDragOrigin.current = getPointerPos(e);
+              }}
+              onDragMove={e => {
+                if (!wallDragOrigin.current) return;
+                const dragPt = { x: wallDragOrigin.current.x + e.target.x(), y: wallDragOrigin.current.y + e.target.y() };
+                const bulge = bulgeFromThreePoints(w.a, w.b, dragPt, 1.5);
+                const newPts = points.map((p, idx) => idx === w.i ? { ...p, bulge } : p);
+                setPoints(newPts);
+                const m = computeMetrics(newPts);
+                onChange({ points: newPts, ...m });
+              }}
+              onDragEnd={e => {
+                isDraggingPoint.current = false;
+                onVertexDragEnd?.();
+                wallDragOrigin.current = null;
+                e.target.position({ x: 0, y: 0 }); // reset so the next drag's delta starts fresh
+              }}
+            />
+          ))}
+
           {/* Vertices */}
           {points.map((p, i) => {
             const isSelected = selectedPoint === i;
@@ -606,7 +662,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
-                    newPts[i] = { x: e.target.x(), y: e.target.y() };
+                    newPts[i] = { ...points[i], x: e.target.x(), y: e.target.y() };
                     setPoints(newPts);
                     const m = computeMetrics(newPts);
                     onChange({ points: newPts, ...m });

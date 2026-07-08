@@ -15,16 +15,18 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
 import { Project, Room } from '../types';
+import { tessellateRoom } from '../lib/geometry';
 import ActionButton from '../components/ActionButton';
 import { useT } from '../lib/i18n';
 import './ProjectDetail.css';
 
 const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
 
-const RoomThumbnail: React.FC<{ points: { x: number; y: number }[] }> = ({ points }) => {
+const RoomThumbnail: React.FC<{ points: { x: number; y: number; bulge?: number }[] }> = ({ points }) => {
   if (points.length < 3) return null;
-  const xs = points.map(p => p.x);
-  const ys = points.map(p => p.y);
+  const outline = tessellateRoom(points, true);
+  const xs = outline.map(p => p.x);
+  const ys = outline.map(p => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const w = maxX - minX || 1;
@@ -34,7 +36,7 @@ const RoomThumbnail: React.FC<{ points: { x: number; y: number }[] }> = ({ point
   const sc = Math.min(INNER / w, INNER / h);
   const ox = PAD + (INNER - w * sc) / 2;
   const oy = PAD + (INNER - h * sc) / 2;
-  const poly = points.map(p => `${(p.x - minX) * sc + ox},${(p.y - minY) * sc + oy}`).join(' ');
+  const poly = outline.map(p => `${(p.x - minX) * sc + ox},${(p.y - minY) * sc + oy}`).join(' ');
   const size = INNER + PAD * 2;
   return (
     <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ display: 'block' }}>

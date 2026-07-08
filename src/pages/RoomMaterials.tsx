@@ -13,7 +13,10 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
-import { edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE } from '../lib/geometry';
+import {
+  edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE,
+  edgeLen, pointOnArc, splitBulge,
+} from '../lib/geometry';
 import { useT } from '../lib/i18n';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
@@ -116,12 +119,15 @@ const RoomMaterials: React.FC = () => {
     const b = pts[(edgeIndex + 1) % n];
     const dx = b.x - a.x;
     const dy = b.y - a.y;
-    const currentPx = Math.sqrt(dx * dx + dy * dy);
+    // Arc length scales linearly with chord length for a fixed bulge (the arc's
+    // included angle stays the same), so scaling the chord by the same ratio
+    // as a straight edge keeps a curved wall's shape and reaches the new length.
+    const currentPx = edgeLen(a, b, a.bulge);
     if (currentPx === 0) return;
     const newPx = (newLenCm * GRID_SIZE) / room.scale;
     const ratio = newPx / currentPx;
     const newPts = [...pts];
-    newPts[(edgeIndex + 1) % n] = { x: a.x + dx * ratio, y: a.y + dy * ratio };
+    newPts[(edgeIndex + 1) % n] = { ...b, x: a.x + dx * ratio, y: a.y + dy * ratio };
     const areaPx = polygonArea(newPts);
     const perimPx = polygonPerimeter(newPts);
     const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
@@ -137,16 +143,19 @@ const RoomMaterials: React.FC = () => {
     const pts = room.points;
     const a = pts[edgeIndex % n];
     const b = pts[(edgeIndex + 1) % n];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const edgePx = Math.sqrt(dx * dx + dy * dy);
-    if (edgePx === 0) return;
     const edgeTotalCm = edgeLengthCm(pts, edgeIndex, room.scale);
+    if (edgeTotalCm === 0) return;
     if (distCm <= 0 || distCm >= edgeTotalCm) return;
-    const splitPx = (distCm * GRID_SIZE) / room.scale;
-    const ratio = splitPx / edgePx;
-    const splitPt = { x: a.x + dx * ratio, y: a.y + dy * ratio };
-    const newPts = [...pts.slice(0, edgeIndex + 1), splitPt, ...pts.slice(edgeIndex + 1)];
+    // Split fraction along the edge's length (arc-length fraction for a curved wall).
+    const t = distCm / edgeTotalCm;
+    const splitPt = pointOnArc(a, b, a.bulge, t);
+    const [bulgeBefore, bulgeAfter] = splitBulge(a.bulge ?? 0, t);
+    const newPts = [
+      ...pts.slice(0, edgeIndex),
+      { ...a, bulge: bulgeBefore },
+      { ...splitPt, bulge: bulgeAfter },
+      ...pts.slice(edgeIndex + 1),
+    ];
     const existingSegs = room.profileSegments ?? [];
     const profileAtEdge = existingSegs.find(s => s.edgeIndex === edgeIndex);
     const updatedSegs = existingSegs.map(s => {
@@ -167,6 +176,21 @@ const RoomMaterials: React.FC = () => {
     const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
     const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegs });
+  };
+
+  const straightenEdge = (edgeIndex: number) => {
+    const n = room.points.length;
+    const pts = room.points;
+    if (!pts[edgeIndex % n]?.bulge) return;
+    const newPts = pts.map((p, i) => i === edgeIndex % n ? { ...p, bulge: 0 } : p);
+    const areaPx = polygonArea(newPts);
+    const perimPx = polygonPerimeter(newPts);
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const updatedSegments = (room.profileSegments ?? []).map(s => ({
+      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex, room.scale),
+    }));
+    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
   };
 
   // ── Lighting delete ──
@@ -431,6 +455,11 @@ const RoomMaterials: React.FC = () => {
                               <span style={{ fontWeight: 400, fontSize: 13, color: '#888', marginLeft: 8 }}>
                                 {Math.round(lenCm)} см
                               </span>
+                              {room.points[i]?.bulge ? (
+                                <span title={t('mat.curved')} style={{ fontSize: 13, color: '#F9A825', marginLeft: 6 }}>
+                                  ⌒
+                                </span>
+                              ) : null}
                             </div>
                             {seg ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -884,6 +913,10 @@ const RoomMaterials: React.FC = () => {
             text: t('mat.split'),
             handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setSplitEdgeIdx(e); },
           },
+          ...(edgeMenuOpen !== null && room.points[edgeMenuOpen]?.bulge ? [{
+            text: t('mat.straighten'),
+            handler: () => { straightenEdge(edgeMenuOpen); setEdgeMenuOpen(null); },
+          }] : []),
           { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setEdgeMenuOpen(null)}

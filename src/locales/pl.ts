@@ -335,6 +335,8 @@ const s: Record<string, string> = {
   'mat.splitMsg': 'Długość: {len} cm. Podaj odległość od początku ściany.',
   'mat.distCm': 'Odległość w centymetrach',
   'mat.split': 'Podziel',
+  'mat.straighten': 'Wyprostuj ścianę',
+  'mat.curved': 'Zakrzywiona ściana',
   'mat.changeProfile': 'Zmień profil',
   'mat.changeSize': 'Zmień rozmiar',
   'mat.addAccessory': 'Dodaj akcesorium',

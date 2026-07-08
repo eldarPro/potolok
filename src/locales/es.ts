@@ -335,6 +335,8 @@ const s: Record<string, string> = {
   'mat.splitMsg': 'Longitud: {len} cm. Ingresa la distancia desde el inicio de la pared.',
   'mat.distCm': 'Distancia en centímetros',
   'mat.split': 'Dividir',
+  'mat.straighten': 'Enderezar pared',
+  'mat.curved': 'Pared curva',
   'mat.changeProfile': 'Cambiar perfil',
   'mat.changeSize': 'Cambiar tamaño',
   'mat.addAccessory': 'Agregar accesorio',

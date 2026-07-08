@@ -376,6 +376,8 @@ const s: Record<string, string> = {
   'mat.splitMsg': 'Длина: {len} см. Укажите расстояние от начала стены.',
   'mat.distCm': 'Расстояние в сантиметрах',
   'mat.split': 'Разделить',
+  'mat.straighten': 'Выпрямить стену',
+  'mat.curved': 'Изогнутая стена',
   'mat.changeProfile': 'Изменить профиль',
   'mat.changeSize': 'Изменить размер',
   'mat.addAccessory': 'Добавить комплектующее',

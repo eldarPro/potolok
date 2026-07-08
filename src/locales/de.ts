@@ -335,6 +335,8 @@ const s: Record<string, string> = {
   'mat.splitMsg': 'Länge: {len} cm. Abstand vom Wandanfang eingeben.',
   'mat.distCm': 'Abstand in Zentimetern',
   'mat.split': 'Teilen',
+  'mat.straighten': 'Wand begradigen',
+  'mat.curved': 'Gebogene Wand',
   'mat.changeProfile': 'Profil ändern',
   'mat.changeSize': 'Größe ändern',
   'mat.addAccessory': 'Zubehör hinzufügen',
