@@ -122,6 +122,42 @@ export function tessellateRoom(pts: Point[], closed = true, segments = 24): Poin
   return out;
 }
 
+/** True if segments p1–p2 and p3–p4 properly cross (touching only at a shared endpoint doesn't count). */
+function segmentsIntersect(p1: Point, p2: Point, p3: Point, p4: Point): boolean {
+  const d1 = crossZ(p3, p4, p1);
+  const d2 = crossZ(p3, p4, p2);
+  const d3 = crossZ(p1, p2, p3);
+  const d4 = crossZ(p1, p2, p4);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/**
+ * Would bowing edge `editIndex` to `candidateBulge` make that wall cross any
+ * other wall of the room (its neighbours included, further along their
+ * length)? Used to stop a curvature drag right where the wall would start
+ * overlapping the rest of the outline, instead of letting it pass through.
+ * Segments that only touch at a shared corner don't count as crossing.
+ */
+export function edgeWouldCrossRoom(pts: Point[], editIndex: number, candidateBulge: number, segments = 16): boolean {
+  const n = pts.length;
+  if (n < 3) return false;
+  const a = pts[editIndex % n];
+  const b = pts[(editIndex + 1) % n];
+  const candidate = [a, ...sampleArc(a, b, candidateBulge, segments)];
+
+  for (let j = 0; j < n; j++) {
+    if (j === editIndex) continue;
+    const c = pts[j], d = pts[(j + 1) % n];
+    const other = [c, ...sampleArc(c, d, c.bulge, segments)];
+    for (let k = 0; k < candidate.length - 1; k++) {
+      for (let l = 0; l < other.length - 1; l++) {
+        if (segmentsIntersect(candidate[k], candidate[k + 1], other[l], other[l + 1])) return true;
+      }
+    }
+  }
+  return false;
+}
+
 const RU_LETTERS = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ'.split('');
 
 export function pointLabel(index: number): string {
@@ -130,6 +166,33 @@ export function pointLabel(index: number): string {
 
 export function edgeLabel(fromIndex: number, n: number): string {
   return `${pointLabel(fromIndex)} – ${pointLabel((fromIndex + 1) % n)}`;
+}
+
+/**
+ * Number of *geometric* corners in a room outline — vertices where the wall
+ * actually turns. Splitting a wall (e.g. to assign a different profile to
+ * part of it) or a measuring tool dropping an extra checkpoint adds a vertex
+ * to `points` without adding a real corner, so plain `points.length`
+ * overcounts for anything priced per corner (the fabric's free-first-4 rule
+ * in particular). This walks the outline and drops straight-through points —
+ * a curved edge on either side always counts as a genuine corner.
+ */
+export function countRealCorners(pts: Point[]): number {
+  const n = pts.length;
+  if (n < 3) return n;
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    if (prev.bulge || curr.bulge) { count++; continue; }
+    const ax = curr.x - prev.x, ay = curr.y - prev.y;
+    const bx = next.x - curr.x, by = next.y - curr.y;
+    const cross = ax * by - ay * bx;
+    const collinear = Math.abs(cross) < 1e-6 && (ax * bx + ay * by) > 0;
+    if (!collinear) count++;
+  }
+  return count;
 }
 
 /** Polygon area in canvas px², using shoelace formula (arc-aware via per-point bulge) */
@@ -291,6 +354,119 @@ export function polygonDiagonals(pts: Point[]): [number, number][] {
     if (!clipped) break; // self-intersecting/degenerate polygon — keep what we have
   }
   return diags;
+}
+
+/** Closest point on segment a–b to p, plus the squared distance to it. */
+function closestOnSegment(p: Point, a: Point, b: Point): { point: Point; distSq: number } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const point = { x: a.x + dx * t, y: a.y + dy * t };
+  const distSq = (p.x - point.x) ** 2 + (p.y - point.y) ** 2;
+  return { point, distSq };
+}
+
+/**
+ * Closest point on a closed outline (consecutive segments, wrapping from the
+ * last point back to the first) to `p`, with the distance to it. Used to snap
+ * niche-line taps onto the room's walls regardless of the drawing grid.
+ */
+export function nearestPointOnOutline(p: Point, outline: Point[]): { point: Point; distance: number } {
+  const n = outline.length;
+  let best = { point: outline[0], distSq: Infinity };
+  for (let i = 0; i < n; i++) {
+    const a = outline[i], b = outline[(i + 1) % n];
+    const cand = closestOnSegment(p, a, b);
+    if (cand.distSq < best.distSq) best = cand;
+  }
+  return { point: best.point, distance: Math.sqrt(best.distSq) };
+}
+
+/** Index of the room edge (i.e. edge i runs from pts[i] to pts[(i+1)%n]) closest to `p`. */
+function nearestEdgeIndex(p: Point, pts: Point[]): number {
+  const n = pts.length;
+  let best = 0, bestDistSq = Infinity;
+  for (let i = 0; i < n; i++) {
+    const { distSq } = closestOnSegment(p, pts[i], pts[(i + 1) % n]);
+    if (distSq < bestDistSq) { bestDistSq = distSq; best = i; }
+  }
+  return best;
+}
+
+/**
+ * Splices a niche's own path into the room outline in place of whichever
+ * side lies between its two wall touch-points, so a niche that wraps one
+ * corner or several is spliced the same way regardless of how many it
+ * spans. Picks the shorter side to replace — a niche shortcuts a local
+ * detour, not most of the room.
+ */
+function spliceNicheIntoOutline(roomPoints: Point[], path: Point[]): Point[] {
+  const n = roomPoints.length;
+  const startEdge = nearestEdgeIndex(path[0], roomPoints);
+  const endEdge = nearestEdgeIndex(path[path.length - 1], roomPoints);
+
+  if (startEdge === endEdge) {
+    // Same wall: insert the niche's own points as new vertices right there.
+    return [
+      ...roomPoints.slice(0, startEdge + 1),
+      ...path,
+      ...roomPoints.slice(startEdge + 1),
+    ];
+  }
+
+  // Rotate so startEdge becomes index 0, making the replaced range a plain
+  // (non-wrapping) slice.
+  const rotated = [...roomPoints.slice(startEdge), ...roomPoints.slice(0, startEdge)];
+  const end = (endEdge - startEdge + n) % n;
+  const forwardLen = end; // vertices rotated[1..end] would be replaced
+  const backwardLen = n - end;
+
+  if (forwardLen <= backwardLen) {
+    return [rotated[0], ...path, ...rotated.slice(end + 1)];
+  }
+  // Replace the other side instead: keep rotated[end+1..n-1] then rotated[0],
+  // with the path reversed so it still runs in the kept winding direction.
+  return [...rotated.slice(end + 1), rotated[0], ...[...path].reverse()];
+}
+
+/**
+ * Merges consecutive (and wrap-around) points that are practically the same
+ * point, so a niche anchored right at an existing room corner doesn't leave
+ * a near-zero-length edge that fools the collinearity check into treating
+ * it as an extra corner.
+ */
+function mergeCoincidentPoints(pts: Point[]): Point[] {
+  const EPS_SQ = 1e-6; // floating-point noise only — real gaps are always far bigger
+  const out: Point[] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (!last || (p.x - last.x) ** 2 + (p.y - last.y) ** 2 > EPS_SQ) out.push(p);
+  }
+  while (out.length > 1) {
+    const first = out[0], last = out[out.length - 1];
+    if ((first.x - last.x) ** 2 + (first.y - last.y) ** 2 > EPS_SQ) break;
+    out.pop();
+  }
+  return out;
+}
+
+/**
+ * Total corners billable for fabric pricing. Each niche's own drawn path is
+ * spliced into the room outline in place of the wall section it runs
+ * against, then the combined shape's real corners are counted as one —
+ * so a niche that wraps one existing corner, several, or none (a plain
+ * wall-to-wall line, or a box against a single wall) all fall out of the
+ * same rule instead of needing special-cased overlap bookkeeping.
+ */
+export function totalFabricCorners(roomPoints: Point[], nichePaths: Point[][]): number {
+  if (roomPoints.length < 3) return 0;
+  let combined = roomPoints;
+  for (const path of nichePaths) {
+    if (path.length < 2) continue;
+    combined = spliceNicheIntoOutline(combined, path);
+  }
+  return countRealCorners(mergeCoincidentPoints(combined));
 }
 
 /** Ray-casting point-in-polygon test */

@@ -6,9 +6,16 @@ import Konva from 'konva';
 import {
   Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel,
   pointInPolygon, edgeLengthM, polygonDiagonals, GRID_SIZE,
-  edgeLen, arcHandlePoint, bulgeFromThreePoints, sampleArc, tessellateRoom,
+  edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom,
+  nearestPointOnOutline,
 } from '../lib/geometry';
-import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
+
+// A wall can bow at most into a full semicircle. Capping here (rather than
+// higher) keeps the arc's projection onto its own chord monotonic, so the
+// edgeWouldCrossRoom check below can't be fooled by a reflex arc looping
+// around a shared corner without technically crossing a wall segment.
+const MAX_WALL_BULGE = 1;
+import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
 
 const CLOSE_THRESHOLD = 24;
 const MIN_POINTS = 3;
@@ -25,6 +32,13 @@ interface Props {
   onRedoLightingPoint?: () => void;
   canUndoLighting?: boolean;
   canRedoLighting?: boolean;
+  placingNiche?: NicheItem | null;
+  inProgressNichePath?: { x: number; y: number }[];
+  onNicheTap?: (pt: { x: number; y: number }, finish: boolean) => void;
+  onUndoNichePoint?: () => void;
+  onRedoNichePoint?: () => void;
+  canUndoNiche?: boolean;
+  canRedoNiche?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -60,6 +74,13 @@ const CeilingCanvas: React.FC<Props> = ({
   onRedoLightingPoint,
   canUndoLighting = false,
   canRedoLighting = false,
+  placingNiche = null,
+  inProgressNichePath = [],
+  onNicheTap,
+  onUndoNichePoint,
+  onRedoNichePoint,
+  canUndoNiche = false,
+  canRedoNiche = false,
   onUndo,
   onRedo,
   canUndo = false,
@@ -81,6 +102,8 @@ const CeilingCanvas: React.FC<Props> = ({
   const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
+  const [selectedNicheEl, setSelectedNicheEl] = useState<string | null>(null);
+  const [nicheHoverOnWall, setNicheHoverOnWall] = useState(false);
   const [showDiagonals, setShowDiagonals] = useState(false);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
@@ -124,6 +147,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   // Clear cursor when switching lighting item
   useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedLighting(null); }, [placingLighting?.id]);
+  useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedNicheEl(null); }, [placingNiche?.id]);
   useEffect(() => { if (!closed) setSelectedPoint(null); }, [closed]);
 
   const toCanvas = useCallback((clientX: number, clientY: number, stageEl: HTMLDivElement): Point => {
@@ -188,7 +212,44 @@ const CeilingCanvas: React.FC<Props> = ({
     onChange({ points: pts, ...metrics });
   };
 
+  // Snaps a raw tap/cursor point onto the nearest wall when it's close enough
+  // to one (within the same threshold used to close the room polygon) — used
+  // both to start/finish a niche line on a wall and to preview it on hover.
+  const snapToWall = (raw: Point): { point: Point; onWall: boolean } => {
+    const outline = tessellateRoom(points, true);
+    const { point, distance } = nearestPointOnOutline(raw, outline);
+    return { point, onWall: distance * viewport.scale <= CLOSE_THRESHOLD };
+  };
+
+  const handleNicheTap = (raw: Point) => {
+    const { point: wallPt, onWall } = snapToWall(raw);
+    if (inProgressNichePath.length === 0) {
+      if (!onWall) { onOutOfBounds?.(); return; }
+      onNicheTap?.(wallPt, false);
+      return;
+    }
+    if (onWall) {
+      onNicheTap?.(wallPt, true);
+      return;
+    }
+    // Unlike room-wall points, a niche line's anchor (the wall-projected
+    // start/previous point) is generally off-grid — rounding the next point
+    // to the grid first would measure the snapped angle from an off-grid
+    // point to an on-grid one, throwing the direction off by however far the
+    // rounding moved it. That error is negligible over a long run but swamps
+    // a short one, drawing a visibly crooked line. So snap the angle only,
+    // straight off the raw tap, and keep its exact distance from `last`.
+    const last = inProgressNichePath[inProgressNichePath.length - 1];
+    onNicheTap?.(snapAngle(last, raw), false);
+  };
+
   const handleTap = (pt: Point) => {
+    // Niche line placement — start/continue/finish on the room's walls
+    if (placingNiche && isClosed) {
+      handleNicheTap(pt);
+      return;
+    }
+
     // Lighting placement mode — only accept taps inside the room polygon
     if (placingLighting && isClosed) {
       if (pointInPolygon(pt, tessellateRoom(points, true))) onLightingTap?.(pt);
@@ -238,7 +299,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isTouching.current) return;
-    if (placingLighting) {
+    if (placingNiche || placingLighting) {
       const pos = getPointerPos(e);
       if (pos) handleTap(pos);
       return;
@@ -265,6 +326,20 @@ const CeilingCanvas: React.FC<Props> = ({
 
     const pos = getPointerPos(e);
     if (!pos) return;
+
+    if (placingNiche) {
+      if (inProgressNichePath.length > 0) {
+        const { point, onWall } = snapToWall(pos);
+        const last = inProgressNichePath[inProgressNichePath.length - 1];
+        setNicheHoverOnWall(onWall);
+        setCursor(onWall ? point : snapAngle(last, pos));
+      } else {
+        const { point, onWall } = snapToWall(pos);
+        setNicheHoverOnWall(onWall);
+        setCursor(onWall ? point : null);
+      }
+      return;
+    }
 
     if (placingLighting?.placement === 'path' && inProgressLightingPath.length > 0) {
       setCursor(pos);
@@ -314,7 +389,7 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (tool === 'draw' || placingLighting) {
+    if (tool === 'draw' || placingLighting || placingNiche) {
       e.evt.preventDefault();
       const stage = stageRef.current;
       if (!stage) return;
@@ -365,6 +440,21 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (placingLighting?.placement === 'path' && inProgressLightingPath.length > 0 && touches.length === 1 && pos) {
       setCursor({ x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale });
+      return;
+    }
+
+    if (placingNiche && touches.length === 1 && pos) {
+      const raw = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+      if (inProgressNichePath.length > 0) {
+        const { point, onWall } = snapToWall(raw);
+        const last = inProgressNichePath[inProgressNichePath.length - 1];
+        setNicheHoverOnWall(onWall);
+        setCursor(onWall ? point : snapAngle(last, raw));
+      } else {
+        const { point, onWall } = snapToWall(raw);
+        setNicheHoverOnWall(onWall);
+        setCursor(onWall ? point : null);
+      }
       return;
     }
 
@@ -436,7 +526,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const flatPoints = (pts: Point[]) => pts.flatMap(p => [p.x, p.y]);
   const outlinePoints = (pts: Point[]) => tessellateRoom(pts, true).flatMap(p => [p.x, p.y]);
 
-  const previewLine = !placingLighting && cursor && points.length > 0 ? [
+  const previewLine = !placingLighting && !placingNiche && cursor && points.length > 0 ? [
     points[points.length - 1],
     cursor,
   ] : null;
@@ -453,7 +543,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   // Invisible wide hit-lines along each wall of the closed room — grab and drag
   // anywhere on a wall to bow it into an arc (no visible curvature handle).
-  const wallHitLines = isClosed && !placingLighting ? points.map((a, i) => {
+  const wallHitLines = isClosed && !placingLighting && !placingNiche ? points.map((a, i) => {
     const b = points[(i + 1) % points.length];
     return { i, a, b, points: [a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(p => [p.x, p.y])] };
   }) : [];
@@ -472,6 +562,15 @@ const CeilingCanvas: React.FC<Props> = ({
   const lastPathPt = inProgressLightingPath[inProgressLightingPath.length - 1];
   const lightPathPreview = placingLighting?.placement === 'path' && lastPathPt && cursor
     ? [lastPathPt, cursor]
+    : null;
+
+  // Niche line preview — dashed segment from the last placed point to the
+  // (possibly wall-snapped) cursor; the start marker shows where a tap on an
+  // empty in-progress path would begin the line.
+  const lastNichePt = inProgressNichePath[inProgressNichePath.length - 1];
+  const nichePathPreview = placingNiche && lastNichePt && cursor ? [lastNichePt, cursor] : null;
+  const nicheStartMarker = placingNiche && inProgressNichePath.length === 0 && cursor && nicheHoverOnWall
+    ? cursor
     : null;
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -506,9 +605,9 @@ const CeilingCanvas: React.FC<Props> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={() => { setSelectedPoint(null); setSelectedLighting(null); }}
-        onTap={() => { setSelectedPoint(null); setSelectedLighting(null); }}
-        style={{ cursor: placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
+        onClick={() => { setSelectedPoint(null); setSelectedLighting(null); setSelectedNicheEl(null); }}
+        onTap={() => { setSelectedPoint(null); setSelectedLighting(null); setSelectedNicheEl(null); }}
+        style={{ cursor: placingNiche ? 'crosshair' : placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
       >
         <Layer>
           {/* Grid */}
@@ -619,7 +718,11 @@ const CeilingCanvas: React.FC<Props> = ({
               onDragMove={e => {
                 if (!wallDragOrigin.current) return;
                 const dragPt = { x: wallDragOrigin.current.x + e.target.x(), y: wallDragOrigin.current.y + e.target.y() };
-                const bulge = bulgeFromThreePoints(w.a, w.b, dragPt, 1.5);
+                const bulge = bulgeFromThreePoints(w.a, w.b, dragPt, MAX_WALL_BULGE);
+                // Stop the wall right where it would start overlapping another
+                // wall, instead of letting it pass through — just skip this
+                // update and hold at the last valid curvature.
+                if (edgeWouldCrossRoom(points, w.i, bulge)) return;
                 const newPts = points.map((p, idx) => idx === w.i ? { ...p, bulge } : p);
                 setPoints(newPts);
                 const m = computeMetrics(newPts);
@@ -656,8 +759,8 @@ const CeilingCanvas: React.FC<Props> = ({
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 3 : 2}
-                  listening={closed && !placingLighting}
-                  draggable={closed && !placingLighting}
+                  listening={closed && !placingLighting && !placingNiche}
+                  draggable={closed && !placingLighting && !placingNiche}
                   onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
                   onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
@@ -711,7 +814,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 <Circle
                   x={el.x} y={el.y} radius={16}
                   fill="transparent"
-                  listening={!placingLighting}
+                  listening={!placingLighting && !placingNiche}
                   onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
                   onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
                 />
@@ -741,7 +844,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 lineJoin="round"
                 shadowColor={isSel ? '#E53935' : undefined}
                 shadowBlur={isSel ? 12 : 0}
-                listening={!placingLighting}
+                listening={!placingLighting && !placingNiche}
                 hitStrokeWidth={20}
                 onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
                 onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
@@ -777,6 +880,62 @@ const CeilingCanvas: React.FC<Props> = ({
               listening={false}
             />
           )}
+
+          {/* ── Placed niche lines ── */}
+          {(room.selectedNiches ?? []).filter((e): e is RoomNichePath => e.kind === 'path').map(el => {
+            const isSel = selectedNicheEl === el.id;
+            return (
+              <Line
+                key={el.id}
+                points={el.points.flatMap(p => [p.x, p.y])}
+                stroke="#00838F"
+                strokeWidth={isSel ? 8 : 4}
+                lineCap="round"
+                lineJoin="round"
+                dash={[14, 6]}
+                shadowColor={isSel ? '#E53935' : undefined}
+                shadowBlur={isSel ? 12 : 0}
+                listening={!placingNiche && !placingLighting}
+                hitStrokeWidth={20}
+                onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedNicheEl(isSel ? null : el.id); }}
+                onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedNicheEl(isSel ? null : el.id); }}
+              />
+            );
+          })}
+
+          {/* ── In-progress niche line ── */}
+          {placingNiche && inProgressNichePath.length > 0 && (
+            <>
+              <Line
+                points={inProgressNichePath.flatMap(p => [p.x, p.y])}
+                stroke="#00838F"
+                strokeWidth={4}
+                dash={[14, 6]}
+                lineCap="round"
+                listening={false}
+              />
+              {inProgressNichePath.map((p, i) => (
+                <Circle key={i} x={p.x} y={p.y} radius={5} fill="#00838F" listening={false} />
+              ))}
+            </>
+          )}
+
+          {/* ── Niche line preview (cursor) — green once it's over a wall and would finish the line ── */}
+          {nichePathPreview && (
+            <Line
+              points={nichePathPreview.flatMap(p => [p.x, p.y])}
+              stroke={nicheHoverOnWall ? '#2dd36f' : '#00838F'}
+              strokeWidth={3}
+              dash={[6, 4]}
+              opacity={0.7}
+              listening={false}
+            />
+          )}
+
+          {/* ── Niche start marker — highlights the wall point a tap would start from ── */}
+          {nicheStartMarker && (
+            <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9} fill="#2dd36f" listening={false} />
+          )}
         </Layer>
       </Stage>
 
@@ -786,7 +945,16 @@ const CeilingCanvas: React.FC<Props> = ({
         display: 'flex', gap: 8,
         pointerEvents: 'auto',
       }}>
-        {placingLighting ? (
+        {placingNiche ? (
+          <>
+            <button onClick={onUndoNichePoint} disabled={!canUndoNiche} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoNiche ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoNiche ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
+            </button>
+            <button onClick={onRedoNichePoint} disabled={!canRedoNiche} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoNiche ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoNiche ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
+            </button>
+          </>
+        ) : placingLighting ? (
           <>
             <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
@@ -875,6 +1043,41 @@ const CeilingCanvas: React.FC<Props> = ({
             onClick={() => {
               onChange({ lighting: (room.lighting ?? []).filter(e => e.id !== selectedLighting) });
               setSelectedLighting(null);
+            }}
+            style={{
+              position: 'absolute',
+              left: sx - 18,
+              top: sy - 58,
+              width: 36, height: 36,
+              borderRadius: '50%',
+              background: '#E53935',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
+              zIndex: 100,
+              pointerEvents: 'auto',
+            }}
+          >
+            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
+          </button>
+        );
+      })()}
+
+      {/* Delete niche button */}
+      {selectedNicheEl && !placingNiche && (() => {
+        const el = (room.selectedNiches ?? []).find(e => e.id === selectedNicheEl && e.kind === 'path') as RoomNichePath | undefined;
+        if (!el) return null;
+        const wx = el.points.reduce((s, p) => s + p.x, 0) / el.points.length;
+        const wy = el.points.reduce((s, p) => s + p.y, 0) / el.points.length;
+        const sx = wx * viewport.scale + viewport.x;
+        const sy = wy * viewport.scale + viewport.y;
+        return (
+          <button
+            onClick={() => {
+              onChange({ selectedNiches: (room.selectedNiches ?? []).filter(e => e.id !== selectedNicheEl) });
+              setSelectedNicheEl(null);
             }}
             style={{
               position: 'absolute',

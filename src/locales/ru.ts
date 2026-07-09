@@ -315,6 +315,7 @@ const s: Record<string, string> = {
   'mat.tabFabric': 'Полотна',
   'mat.tabProfile': 'Профили',
   'mat.tabLight': 'Свет',
+  'mat.tabNiche': 'Ниши',
   'mat.tabAccess': 'Компл.',
   'mat.tabServices': 'Доп. услуги',
   'tpl.title': 'Готовые шаблоны',
@@ -327,6 +328,8 @@ const s: Record<string, string> = {
   're.deleteRoomMsg': 'Помещение «{name}» и все его данные будут удалены.',
   're.pickLighting': 'Выберите элемент освещения',
   're.points': 'точек',
+  're.nicheDrawStart': 'Нажмите на стену, чтобы начать',
+  're.nicheDrawFinish': 'Начертите линию до другой точки стены, чтобы завершить',
   'pd.room': 'Помещение',
 
   // ProjectDetail extras
@@ -343,6 +346,7 @@ const s: Record<string, string> = {
   'sum.mPerimeter': 'м периметр',
   'sum.corners': 'углов',
   'sum.totalLabel': 'Итого к оплате',
+  'sum.niches': 'Ниши',
   'pdf.roomTotal': 'Итого по помещению',
   'pdf.totalArea': 'общей площади',
 
@@ -359,6 +363,8 @@ const s: Record<string, string> = {
   'mat.openPrices': 'Открыть ценники',
   'mat.noItems': 'Нет добавленных позиций',
   'mat.addLightSub': 'Нажмите кнопку + чтобы разместить элементы освещения на чертеже',
+  'mat.noNicheCatalog': 'Нет ниш в ценнике',
+  'mat.noNicheCatalogSub': 'Добавьте позиции в Ценники → Ниши',
   'mat.noAccessoryCatalog': 'Нет комплектующих в ценнике',
   'mat.noAccessoryCatalogSub': 'Добавьте позиции в Ценники → Комплектующие',
   'mat.addItemSub': 'Нажмите кнопку + чтобы добавить позиции к помещению',
@@ -382,6 +388,7 @@ const s: Record<string, string> = {
   'mat.changeSize': 'Изменить размер',
   'mat.addAccessory': 'Добавить комплектующее',
   'mat.addService': 'Добавить услугу',
+  'mat.addNiche': 'Добавить нишу',
 
   // CatalogList extras
   'cf.subtitleFabric': 'Добавьте полотна, чтобы использовать их в расчётах',
@@ -400,8 +407,10 @@ const s: Record<string, string> = {
   'cf.errorTitle': 'Укажите название',
   'mf.clientPrice': 'Цена клиенту (₽)',
   'mf.clientPriceCorner': 'Цена клиенту за угол (₽)',
+  'mf.clientPriceCornerExtra': 'Цена клиенту за доп. угол (свыше 4) (₽)',
   'mf.installPrice': 'Зарплата за установку (₽)',
   'mf.installPriceCorner': 'Зарплата за угол (₽)',
+  'mf.installPriceCornerExtra': 'Зарплата за доп. угол (свыше 4) (₽)',
 
   // LightingList extras
   'lf.subtitle': 'Добавьте осветительные приборы, чтобы включать их в проекты',

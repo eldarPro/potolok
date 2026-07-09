@@ -82,7 +82,9 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
             />
           </IonItem>
           <IonItem>
-            <IonLabel position="stacked">{t('mf.clientPriceCorner')}</IonLabel>
+            <IonLabel position="stacked">
+              {t(category === 'fabrics' ? 'mf.clientPriceCornerExtra' : 'mf.clientPriceCorner')}
+            </IonLabel>
             <IonInput
               type="number"
               value={form.priceCorner}
@@ -98,7 +100,9 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
             />
           </IonItem>
           <IonItem>
-            <IonLabel position="stacked">{t('mf.installPriceCorner')}</IonLabel>
+            <IonLabel position="stacked">
+              {t(category === 'fabrics' ? 'mf.installPriceCornerExtra' : 'mf.installPriceCorner')}
+            </IonLabel>
             <IonInput
               type="number"
               value={form.priceInstallCorner}

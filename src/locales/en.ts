@@ -283,6 +283,7 @@ const s: Record<string, string> = {
   'mat.tabFabric': 'Fabrics',
   'mat.tabProfile': 'Profiles',
   'mat.tabLight': 'Light',
+  'mat.tabNiche': 'Niches',
   'mat.tabAccess': 'Parts',
   'mat.tabServices': 'Add. services',
   'tpl.title': 'Ready templates',
@@ -295,6 +296,8 @@ const s: Record<string, string> = {
   're.deleteRoomMsg': 'Room "{name}" and all its data will be deleted.',
   're.pickLighting': 'Select lighting element',
   're.points': 'points',
+  're.nicheDrawStart': 'Tap a wall to start',
+  're.nicheDrawFinish': 'Tap another wall to finish',
   'pd.room': 'Room',
 
   // ProjectDetail extras
@@ -311,6 +314,7 @@ const s: Record<string, string> = {
   'sum.mPerimeter': 'm perimeter',
   'sum.corners': 'corners',
   'sum.totalLabel': 'Total to pay',
+  'sum.niches': 'Niches',
   'pdf.roomTotal': 'Room total',
   'pdf.totalArea': 'total area',
 
@@ -327,6 +331,8 @@ const s: Record<string, string> = {
   'mat.openPrices': 'Open price list',
   'mat.noItems': 'No items added',
   'mat.addLightSub': 'Press + to place lighting elements on the drawing',
+  'mat.noNicheCatalog': 'No niches in price list',
+  'mat.noNicheCatalogSub': 'Add items in Price list → Niches',
   'mat.noAccessoryCatalog': 'No accessories in price list',
   'mat.noAccessoryCatalogSub': 'Add items in Price list → Accessories',
   'mat.addItemSub': 'Press + to add items to the room',
@@ -350,6 +356,7 @@ const s: Record<string, string> = {
   'mat.changeSize': 'Change size',
   'mat.addAccessory': 'Add accessory',
   'mat.addService': 'Add service',
+  'mat.addNiche': 'Add niche',
 
   // CatalogList extras
   'cf.subtitleFabric': 'Add fabrics to use them in calculations',
@@ -368,8 +375,10 @@ const s: Record<string, string> = {
   'cf.errorTitle': 'Enter a name',
   'mf.clientPrice': 'Client price (₽)',
   'mf.clientPriceCorner': 'Client price per corner (₽)',
+  'mf.clientPriceCornerExtra': 'Client price per extra corner (beyond 4) (₽)',
   'mf.installPrice': 'Installation wage (₽)',
   'mf.installPriceCorner': 'Corner wage (₽)',
+  'mf.installPriceCornerExtra': 'Extra corner wage (beyond 4) (₽)',
 
   // LightingList extras
   'lf.subtitle': 'Add lighting fixtures to include in projects',

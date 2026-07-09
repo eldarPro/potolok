@@ -6,12 +6,12 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline,
-  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
+  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
   closeOutline, ellipsisVerticalOutline,
 } from 'ionicons/icons';
 import { useParams, useHistory } from 'react-router-dom';
-import { getProject, upsertProject, loadProfiles, loadLightings } from '../lib/storage';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath } from '../types';
+import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches } from '../lib/storage';
+import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
@@ -22,6 +22,7 @@ const MAT_TABS = [
   { section: 'fabric',      labelKey: 'mat.tabFabric',   icon: layersOutline,       color: '#1E88E5' },
   { section: 'profile',     labelKey: 'mat.tabProfile',  icon: reorderThreeOutline, color: '#8E24AA' },
   { section: 'lighting',    labelKey: 'mat.tabLight',    icon: bulbOutline,         color: '#F9A825' },
+  { section: 'niche',       labelKey: 'mat.tabNiche',    icon: albumsOutline,       color: '#00838F' },
   { section: 'accessories', labelKey: 'mat.tabAccess',   icon: buildOutline,        color: '#2E7D32' },
   { section: 'services',    labelKey: 'mat.tabServices', icon: briefcaseOutline,    color: '#C62828', noWrap: true },
 ];
@@ -47,6 +48,10 @@ const RoomEditor: React.FC = () => {
   // IDs of lights placed in the current session (for cancel to remove them)
   const [lightingSessionIds, setLightingSessionIds] = useState<Set<string>>(new Set());
   const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
+
+  const [placingNiche, setPlacingNiche] = useState<NicheItem | null>(null);
+  const [nichePathPts, setNichePathPts] = useState<{ x: number; y: number }[]>([]);
+  const [nichePathRedoStack, setNichePathRedoStack] = useState<{ x: number; y: number }[]>([]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -75,8 +80,15 @@ const RoomEditor: React.FC = () => {
   }, [projectId, roomId]);
   useIonViewWillEnter(() => {
     load();
-    if (new URLSearchParams(window.location.search).get('pickLighting') === '1') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('pickLighting') === '1') {
       setLightingPickerOpen(true);
+      history.replace(window.location.pathname);
+    }
+    const placeNicheId = params.get('placeNiche');
+    if (placeNicheId) {
+      const found = loadNiches().find(n => n.id === placeNicheId);
+      if (found) setPlacingNiche(found);
       history.replace(window.location.pathname);
     }
   });
@@ -97,11 +109,15 @@ const RoomEditor: React.FC = () => {
   }, [room?.id]);
 
   useEffect(() => { setLightingPathPts([]); setPathRedoStack([]); }, [placingLighting?.id]);
+  useEffect(() => { setNichePathPts([]); setNichePathRedoStack([]); }, [placingNiche?.id]);
   useIonViewWillLeave(() => {
     setPlacingLighting(null);
     setLightingPathPts([]);
     setPathRedoStack([]);
     setLightingSessionIds(new Set());
+    setPlacingNiche(null);
+    setNichePathPts([]);
+    setNichePathRedoStack([]);
   });
 
   if (!project || !room) return null;
@@ -238,10 +254,19 @@ const RoomEditor: React.FC = () => {
   };
 
   const clearDrawing = () => {
-    updateRoom({ points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [] });
+    // Drawn niche lines are anchored to the old room shape and become invalid
+    // once it's wiped — drop them, same as lighting. Manually-counted ('pcs')
+    // niches carry no geometry, so they survive the redraw like accessories do.
+    updateRoom({
+      points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [],
+      selectedNiches: (room.selectedNiches ?? []).filter(n => n.kind !== 'path'),
+    });
     setLightingPathPts([]);
     setPathRedoStack([]);
     setPlacingLighting(null);
+    setNichePathPts([]);
+    setNichePathRedoStack([]);
+    setPlacingNiche(null);
     setCanvasKey(k => k + 1);
   };
 
@@ -332,6 +357,51 @@ const RoomEditor: React.FC = () => {
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
   const isPlacingPath = placingLighting?.placement === 'path';
 
+  // A niche line is a single wall-to-wall gesture: the tap that lands back on
+  // a wall (finish=true) both adds the final point and commits the path in
+  // one go, then placement mode exits automatically.
+  const handleNicheTap = (pt: { x: number; y: number }, finish: boolean) => {
+    setNichePathRedoStack([]);
+    setNichePathPts(prev => {
+      const next = [...prev, pt];
+      if (finish && placingNiche) {
+        let totalPx = 0;
+        for (let i = 0; i < next.length - 1; i++) totalPx += dist(next[i], next[i + 1]);
+        const newEl: RoomNichePath = {
+          id: crypto.randomUUID(), kind: 'path',
+          nicheId: placingNiche.id, niche: { ...placingNiche },
+          points: next, lengthM: pxToMeters(totalPx, room.scale),
+        };
+        updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
+        setPlacingNiche(null);
+        return [];
+      }
+      return next;
+    });
+  };
+
+  const handleUndoNichePoint = () => {
+    if (nichePathPts.length > 0) {
+      const last = nichePathPts[nichePathPts.length - 1];
+      setNichePathRedoStack(prev => [...prev, last]);
+      setNichePathPts(prev => prev.slice(0, -1));
+    }
+  };
+
+  const handleRedoNichePoint = () => {
+    if (nichePathRedoStack.length > 0) {
+      const pt = nichePathRedoStack[nichePathRedoStack.length - 1];
+      setNichePathRedoStack(prev => prev.slice(0, -1));
+      setNichePathPts(prev => [...prev, pt]);
+    }
+  };
+
+  const handleCancelPlacingNiche = () => {
+    setPlacingNiche(null);
+    setNichePathPts([]);
+    setNichePathRedoStack([]);
+  };
+
   return (
     <IonPage style={{ display: 'flex', flexDirection: 'column' }}>
       <IonHeader>
@@ -419,6 +489,13 @@ const RoomEditor: React.FC = () => {
                 onRedoLightingPoint={handleRedoLightingPoint}
                 canUndoLighting={lightingPathPts.length > 0 || (undoStack.length > 0 && (undoStack[undoStack.length - 1]?.areaSqm ?? 0) > 0)}
                 canRedoLighting={pathRedoStack.length > 0 || (redoStack.length > 0 && (redoStack[redoStack.length - 1]?.areaSqm ?? 0) > 0)}
+                placingNiche={placingNiche}
+                inProgressNichePath={nichePathPts}
+                onNicheTap={handleNicheTap}
+                onUndoNichePoint={handleUndoNichePoint}
+                onRedoNichePoint={handleRedoNichePoint}
+                canUndoNiche={nichePathPts.length > 0}
+                canRedoNiche={nichePathRedoStack.length > 0}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 canUndo={undoStack.length > 0}
@@ -512,6 +589,30 @@ const RoomEditor: React.FC = () => {
                   }}
                 >
                   {t('re.done')}
+                </button>
+              </div>
+            )}
+
+            {/* Niche line drawing bar */}
+            {placingNiche && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                marginBottom: 12, padding: '10px 14px',
+                background: 'rgba(0,131,143,0.12)',
+                borderRadius: 14,
+                border: '1px solid rgba(0,131,143,0.35)',
+              }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                  {placingNiche.title} · {nichePathPts.length === 0 ? t('re.nicheDrawStart') : t('re.nicheDrawFinish')}
+                </span>
+                <button
+                  onClick={handleCancelPlacingNiche}
+                  style={{
+                    background: 'none', border: 'none', padding: 4,
+                    cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
+                  }}
+                >
+                  <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
                 </button>
               </div>
             )}

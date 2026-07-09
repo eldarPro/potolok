@@ -172,6 +172,7 @@ export function createRoom(name: string): Room {
     lighting: [],
     selectedAccessories: [],
     selectedServices: [],
+    selectedNiches: [],
     areaSqm: 0,
     perimeterM: 0,
   };

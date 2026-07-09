@@ -8,25 +8,30 @@ import {
 import {
   chevronBackOutline, checkmarkOutline,
   trashOutline, pencilOutline, addOutline, settingsOutline, ellipsisVerticalOutline,
-  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline,
+  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
-import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories } from '../lib/storage';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem } from '../types';
+import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
+import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
   edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE,
-  edgeLen, pointOnArc, splitBulge,
+  edgeLen, pointOnArc, splitBulge, totalFabricCorners,
 } from '../lib/geometry';
 import { useT } from '../lib/i18n';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
-type Section = 'fabric' | 'profile' | 'lighting' | 'accessories' | 'services';
+// A room's first 4 corners (a plain rectangle) are free; the fabric's
+// per-corner price only applies past that.
+const FREE_FABRIC_CORNERS = 4;
+
+type Section = 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
 
 const SECTION_META: Record<Section, { titleKey: string; icon: string }> = {
   fabric:      { titleKey: 'sec.fabric',       icon: layersOutline },
   profile:     { titleKey: 'sec.profile',      icon: reorderThreeOutline },
   lighting:    { titleKey: 'sec.lighting',     icon: bulbOutline },
+  niche:       { titleKey: 'sec.niches',       icon: albumsOutline },
   accessories: { titleKey: 'sec.accessories',  icon: buildOutline },
   services:    { titleKey: 'sec.services',     icon: briefcaseOutline },
 };
@@ -41,6 +46,7 @@ const RoomMaterials: React.FC = () => {
   const [fabrics, setFabrics] = useState<CatalogItem[]>([]);
   const [profiles, setProfiles] = useState<CatalogItem[]>([]);
   const [lightings, setLightings] = useState<LightingCatalogItem[]>([]);
+  const [niches, setNiches] = useState<NicheItem[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [services, setServices] = useState<AdditionalService[]>([]);
 
@@ -49,6 +55,7 @@ const RoomMaterials: React.FC = () => {
   const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
   const [edgeMenuOpen, setEdgeMenuOpen] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
+  const [addNicheOpen, setAddNicheOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
 
@@ -60,6 +67,7 @@ const RoomMaterials: React.FC = () => {
     setFabrics(loadFabrics());
     setProfiles(loadProfiles());
     setLightings(loadLightings());
+    setNiches(loadNiches());
     setAccessories(loadAccessories());
     setServices(loadServices());
   };
@@ -232,6 +240,42 @@ const RoomMaterials: React.FC = () => {
   const accessoryTotal = roomAccessories.reduce((s, a) => s + a.accessory.price * a.quantity, 0);
   const accessoryInstallTotal = roomAccessories.reduce((s, a) => s + a.accessory.priceInstall * a.quantity, 0);
 
+  // ── Niches ──
+  // 'pcs'-unit niches are added here with a quantity stepper; 'perimeter'-unit
+  // niches are instead drawn wall-to-wall on the canvas (see RoomEditor), so
+  // they arrive already-formed as RoomNichePath elements with their own length.
+  const roomNiches = room.selectedNiches ?? [];
+
+  const addNicheCount = (niche: NicheItem) => {
+    const existing = roomNiches.find((n): n is RoomNicheCount => n.kind === 'count' && n.nicheId === niche.id);
+    if (existing) {
+      updateRoom({
+        selectedNiches: roomNiches.map(n =>
+          n.kind === 'count' && n.nicheId === niche.id ? { ...n, quantity: n.quantity + 1 } : n
+        ),
+      });
+    } else {
+      const newItem: RoomNicheCount = {
+        id: crypto.randomUUID(), kind: 'count',
+        nicheId: niche.id, niche: { ...niche }, quantity: 1,
+      };
+      updateRoom({ selectedNiches: [...roomNiches, newItem] });
+    }
+  };
+
+  const changeNicheQty = (id: string, delta: number) => {
+    const updated = roomNiches
+      .map(n => (n.kind === 'count' && n.id === id) ? { ...n, quantity: n.quantity + delta } : n)
+      .filter(n => n.kind !== 'count' || n.quantity > 0);
+    updateRoom({ selectedNiches: updated });
+  };
+
+  const removeNiche = (id: string) =>
+    updateRoom({ selectedNiches: roomNiches.filter(n => n.id !== id) });
+
+  const nicheTotal = roomNiches.reduce((s, n) => s + n.niche.price * (n.kind === 'count' ? n.quantity : n.lengthM), 0);
+  const nicheInstallTotal = roomNiches.reduce((s, n) => s + n.niche.priceInstall * (n.kind === 'count' ? n.quantity : n.lengthM), 0);
+
   // ── Services ──
   const roomServices = room.selectedServices ?? [];
 
@@ -268,7 +312,14 @@ const RoomMaterials: React.FC = () => {
   const serviceInstallTotal = roomServices.reduce((s, a) => s + a.service.priceInstall * a.quantity, 0);
 
   // ── Derived ──
-  const corners = room.points.length;
+  // Splitting a wall (e.g. to assign it two different profiles) adds a point
+  // without adding a real corner, so bill off the geometric corner count —
+  // not the raw point count. A niche drawn as a routed box also welds in its
+  // own corners, on top of the room's — unless it wraps an existing room
+  // corner, in which case that corner isn't counted twice. The first 4
+  // corners total are free.
+  const nichePaths = roomNiches.filter((n): n is RoomNichePath => n.kind === 'path').map(n => n.points);
+  const billableCorners = Math.max(0, totalFabricCorners(room.points, nichePaths) - FREE_FABRIC_CORNERS);
   const segments = room.profileSegments ?? [];
   const lighting = room.lighting ?? [];
 
@@ -286,13 +337,22 @@ const RoomMaterials: React.FC = () => {
     return acc;
   }, {} as Record<string, { item: LightingCatalogItem; elements: typeof lighting }>);
 
-  const fabricTotal = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * corners : 0;
+  const nicheCounts = roomNiches.filter((n): n is RoomNicheCount => n.kind === 'count');
+  const nichePathGroups = roomNiches
+    .filter((n): n is RoomNichePath => n.kind === 'path')
+    .reduce((acc, e) => {
+      if (!acc[e.nicheId]) acc[e.nicheId] = { item: e.niche, elements: [] };
+      acc[e.nicheId].elements.push(e);
+      return acc;
+    }, {} as Record<string, { item: NicheItem; elements: RoomNichePath[] }>);
+
+  const fabricTotal = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * billableCorners : 0;
   const profileTotal = Object.values(profileGroups).reduce(
     (s, { profile, totalLengthM, count }) => s + profile.price * totalLengthM + profile.priceCorner * count, 0,
   );
   const lightingTotal = lighting.reduce((s, e) =>
     s + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as RoomLightingPath).lengthM), 0);
-  const workerFabric = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * corners : 0;
+  const workerFabric = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * billableCorners : 0;
   const workerProfile = Object.values(profileGroups).reduce(
     (s, { profile, totalLengthM }) => s + profile.priceInstall * totalLengthM, 0,
   );
@@ -303,6 +363,7 @@ const RoomMaterials: React.FC = () => {
     section === 'fabric' ? fabricTotal :
     section === 'profile' ? profileTotal :
     section === 'lighting' ? lightingTotal :
+    section === 'niche' ? nicheTotal :
     section === 'accessories' ? accessoryTotal :
     section === 'services' ? serviceTotal : 0;
 
@@ -310,6 +371,7 @@ const RoomMaterials: React.FC = () => {
     section === 'fabric' ? workerFabric :
     section === 'profile' ? workerProfile :
     section === 'lighting' ? workerLighting :
+    section === 'niche' ? nicheInstallTotal :
     section === 'accessories' ? accessoryInstallTotal :
     section === 'services' ? serviceInstallTotal : 0;
 
@@ -317,6 +379,7 @@ const RoomMaterials: React.FC = () => {
     (section === 'fabric' && room.fabric != null && room.areaSqm > 0) ||
     (section === 'profile' && segments.length > 0) ||
     (section === 'lighting' && lighting.length > 0) ||
+    (section === 'niche' && roomNiches.length > 0) ||
     (section === 'accessories' && roomAccessories.length > 0) ||
     (section === 'services' && roomServices.length > 0);
 
@@ -325,6 +388,7 @@ const RoomMaterials: React.FC = () => {
 
   const fabAction: (() => void) | null =
     (section === 'lighting' && lightings.length > 0) ? () => router.push(`${backHref}?pickLighting=1`, 'back') :
+    (section === 'niche' && niches.length > 0) ? () => setAddNicheOpen(true) :
     (section === 'accessories' && accessories.length > 0) ? () => setAddAccessoryOpen(true) :
     (section === 'services' && services.length > 0) ? () => setAddServiceOpen(true) :
     null;
@@ -576,6 +640,131 @@ const RoomMaterials: React.FC = () => {
                 );
               })}
 
+            </div>
+          )
+        )}
+
+        {/* ═══ НИШИ ═══ */}
+        {section === 'niche' && (
+          niches.length === 0 ? (
+            <EmptyState
+              icon={albumsOutline}
+              iconColor="#00838F"
+              iconBg="#E0F7FA"
+              text={t('mat.noNicheCatalog')}
+              sub={t('mat.noNicheCatalogSub')}
+              buttonLabel={t('mat.openPrices')}
+              buttonColor="#1E88E5"
+              onButton={() => router.push('/price-list/niches')}
+            />
+          ) : roomNiches.length === 0 ? (
+            <EmptyState
+              icon={albumsOutline}
+              iconColor="#00838F"
+              iconBg="#E0F7FA"
+              text={t('mat.noItems')}
+              sub={t('mat.addItemSub')}
+            />
+          ) : (
+            <div style={{ padding: '12px 16px 100px' }}>
+              {nicheCounts.length > 0 && (
+                <div className="card" style={{ overflow: 'hidden', marginBottom: 10 }}>
+                  <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
+                    {nicheCounts.map((item, idx) => (
+                      <IonItem
+                        key={item.id}
+                        lines={idx === nicheCounts.length - 1 ? 'none' : 'inset'}
+                        style={{ '--background': 'transparent' } as React.CSSProperties}
+                      >
+                        <IonLabel>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{item.niche.title}</div>
+                          <p style={{ fontSize: 12, color: '#999', margin: '2px 0 0' }}>
+                            {item.quantity} {t('unit.pcs')} · {item.niche.price.toLocaleString('ru')} ₽ = {(item.niche.price * item.quantity).toLocaleString('ru')} ₽
+                          </p>
+                        </IonLabel>
+                        <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            onClick={() => changeNicheQty(item.id, -1)}
+                            style={{
+                              width: 28, height: 28, borderRadius: 8,
+                              border: '1.5px solid #ddd', background: '#fafafa',
+                              fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#666',
+                            }}
+                          >−</button>
+                          <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center' }}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => changeNicheQty(item.id, 1)}
+                            style={{
+                              width: 28, height: 28, borderRadius: 8,
+                              border: '1.5px solid #00838F', background: 'rgba(0,131,143,0.08)',
+                              fontSize: 18, lineHeight: 1, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#00838F',
+                            }}
+                          >+</button>
+                          <button
+                            onClick={() => removeNiche(item.id)}
+                            style={{
+                              background: 'none', border: 'none', padding: '4px 0 4px 8px',
+                              cursor: 'pointer', color: '#E53935',
+                            }}
+                          >
+                            <IonIcon icon={trashOutline} style={{ fontSize: 18, display: 'block' }} />
+                          </button>
+                        </div>
+                      </IonItem>
+                    ))}
+                  </IonList>
+                </div>
+              )}
+
+              {Object.values(nichePathGroups).map(({ item, elements }) => {
+                const totalLen = elements.reduce((s, e) => s + e.lengthM, 0);
+                const total = item.price * totalLen;
+                return (
+                  <div key={item.id} style={{
+                    background: '#fff', borderRadius: 16, marginBottom: 10,
+                    overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
+                  }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px', borderBottom: '1px solid #F5F5F5',
+                    }}>
+                      <div style={{ width: 28, height: 4, borderRadius: 2, background: '#00838F', flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
+                        <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
+                          {totalLen.toFixed(2)} м · {item.price} ₽ = {Math.round(total).toLocaleString('ru')} ₽
+                        </div>
+                      </div>
+                    </div>
+                    {elements.map((el, idx) => (
+                      <div key={el.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '9px 16px',
+                        borderBottom: idx < elements.length - 1 ? '1px solid #F5F5F5' : 'none',
+                      }}>
+                        <span style={{ fontSize: 13, color: '#aaa' }}>
+                          {t('mat.line')} {idx + 1} · {el.lengthM.toFixed(2)} м
+                        </span>
+                        <button
+                          onClick={() => removeNiche(el.id)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 8px',
+                            cursor: 'pointer', color: '#E53935',
+                          }}
+                        >
+                          <IonIcon icon={trashOutline} style={{ fontSize: 17, display: 'block' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )
         )}
@@ -934,6 +1123,26 @@ const RoomMaterials: React.FC = () => {
           { text: t('common.cancel'), role: 'cancel' as const },
         ]}
         onDidDismiss={() => setApplyAllOpen(false)}
+      />
+
+      {/* Niche picker — 'pcs' niches are added directly here; 'perimeter'
+          niches instead send you back to the canvas to draw the wall-to-wall
+          line, since their length (not a manual count) is what's priced. */}
+      <IonActionSheet
+        isOpen={addNicheOpen}
+        header={t('mat.addNiche')}
+        buttons={[
+          ...niches.map(n => ({
+            text: `${n.title} — ${n.price.toLocaleString('ru')} ₽/${n.unit === 'pcs' ? t('unit.pcs') : t('unit.m')}`,
+            handler: () => {
+              setAddNicheOpen(false);
+              if (n.unit === 'pcs') addNicheCount(n);
+              else router.push(`${backHref}?placeNiche=${n.id}`, 'back');
+            },
+          })),
+          { text: t('common.cancel'), role: 'cancel' as const },
+        ]}
+        onDidDismiss={() => setAddNicheOpen(false)}
       />
 
       {/* Accessory picker */}

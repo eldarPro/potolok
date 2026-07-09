@@ -6,29 +6,41 @@ import {
 import { chevronBackOutline } from 'ionicons/icons';
 import { loadProjects } from '../lib/storage';
 import { Room } from '../types/index';
+import { totalFabricCorners } from '../lib/geometry';
 import { useT } from '../lib/i18n';
 import './Statistics.css';
 
-const corners = (room: Room) => room.points.length;
+// Splitting a wall (e.g. to assign it two different profiles) adds a point
+// without adding a real corner, so count geometric corners, not raw points.
+// A niche drawn as a routed box also welds in its own corners — unless it
+// wraps an existing room corner, which then isn't counted twice.
+const corners = (room: Room) => totalFabricCorners(
+  room.points,
+  (room.selectedNiches ?? []).filter(n => n.kind === 'path').map(n => n.points),
+);
+// The first 4 corners of a room (a plain rectangle) are free — only extra
+// corners past that add to the fabric price.
+const FREE_FABRIC_CORNERS = 4;
+const billableCorners = (room: Room) => Math.max(0, corners(room) - FREE_FABRIC_CORNERS);
 
 const calcClient = (room: Room) => {
-  const c = corners(room);
-  const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
+  const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * billableCorners(room) : 0;
   const p = (room.profileSegments ?? []).reduce((s, seg) => s + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
   const l = (room.lighting ?? []).reduce((s, e) => s + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
   const a = (room.selectedAccessories ?? []).reduce((s, x) => s + x.accessory.price * x.quantity, 0);
   const sv = (room.selectedServices ?? []).reduce((s, x) => s + x.service.price * x.quantity, 0);
-  return f + p + l + a + sv;
+  const n = (room.selectedNiches ?? []).reduce((s, x) => s + x.niche.price * (x.kind === 'count' ? x.quantity : x.lengthM), 0);
+  return f + p + l + a + sv + n;
 };
 
 const calcWorker = (room: Room) => {
-  const c = corners(room);
-  const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * c : 0;
+  const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * billableCorners(room) : 0;
   const p = (room.profileSegments ?? []).reduce((s, seg) => s + seg.profile.priceInstall * seg.lengthM, 0);
   const l = (room.lighting ?? []).reduce((s, e) => s + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as any).lengthM), 0);
   const a = (room.selectedAccessories ?? []).reduce((s, x) => s + x.accessory.priceInstall * x.quantity, 0);
   const sv = (room.selectedServices ?? []).reduce((s, x) => s + x.service.priceInstall * x.quantity, 0);
-  return f + p + l + a + sv;
+  const n = (room.selectedNiches ?? []).reduce((s, x) => s + x.niche.priceInstall * (x.kind === 'count' ? x.quantity : x.lengthM), 0);
+  return f + p + l + a + sv + n;
 };
 
 const fmt = (n: number) => Math.round(n).toLocaleString('ru');

@@ -60,6 +60,28 @@ export interface RoomAccessoryItem {
   quantity: number;
 }
 
+// A 'pcs'-unit niche is added manually with a quantity stepper; a
+// 'perimeter'-unit niche is instead drawn on the canvas as a wall-to-wall
+// line, so it carries its own geometry and a length derived from it.
+export interface RoomNicheCount {
+  id: string;
+  kind: 'count';
+  nicheId: string;
+  niche: NicheItem;
+  quantity: number;
+}
+
+export interface RoomNichePath {
+  id: string;
+  kind: 'path';
+  nicheId: string;
+  niche: NicheItem;
+  points: { x: number; y: number }[];
+  lengthM: number;
+}
+
+export type RoomNicheElement = RoomNicheCount | RoomNichePath;
+
 // --- Lighting catalog ---
 
 export type LightingType = 'spot' | 'strip' | 'line' | 'chandelier' | 'track' | 'track_spot';
@@ -114,6 +136,7 @@ export interface Room {
   lighting: RoomLightingElement[];
   selectedAccessories: RoomAccessoryItem[];
   selectedServices: RoomServiceItem[];
+  selectedNiches: RoomNicheElement[];
   areaSqm: number;
   perimeterM: number;
 }

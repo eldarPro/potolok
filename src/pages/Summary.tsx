@@ -7,30 +7,44 @@ import { chevronBackOutline, downloadOutline, shareSocialOutline, callOutline, l
 import { useParams } from 'react-router-dom';
 import { getProject } from '../lib/storage';
 import { Room } from '../types';
+import { totalFabricCorners } from '../lib/geometry';
 import jsPDF from 'jspdf';
 import { useT } from '../lib/i18n';
 import './Summary.css';
 
-const corners = (room: Room) => room.points.length;
+// Splitting a wall (e.g. to assign it two different profiles) adds a point
+// without adding a real corner, so count geometric corners, not raw points.
+// A niche drawn as a routed box also welds in its own corners — unless it
+// wraps an existing room corner, which then isn't counted twice.
+const corners = (room: Room) => totalFabricCorners(
+  room.points,
+  (room.selectedNiches ?? []).filter(n => n.kind === 'path').map(n => n.points),
+);
+// The first 4 corners of a room (a plain rectangle) are free — only extra
+// corners past that add to the fabric price.
+const FREE_FABRIC_CORNERS = 4;
+const billableCorners = (room: Room) => Math.max(0, corners(room) - FREE_FABRIC_CORNERS);
 
 const calcClient = (room: Room) => {
   const c = corners(room);
-  const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * c : 0;
+  const f = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * billableCorners(room) : 0;
   const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.price * seg.lengthM + seg.profile.priceCorner, 0);
   const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as any).lengthM), 0);
   const a = (room.selectedAccessories ?? []).reduce((sum, a) => sum + a.accessory.price * a.quantity, 0);
   const sv = (room.selectedServices ?? []).reduce((sum, s) => sum + s.service.price * s.quantity, 0);
-  return { fabric: f, profile: p, lighting: l, accessories: a, services: sv, total: f + p + l + a + sv };
+  const n = (room.selectedNiches ?? []).reduce((sum, x) => sum + x.niche.price * (x.kind === 'count' ? x.quantity : x.lengthM), 0);
+  return { fabric: f, profile: p, lighting: l, accessories: a, services: sv, niches: n, total: f + p + l + a + sv + n };
 };
 
 const calcWorker = (room: Room) => {
   const c = corners(room);
-  const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * c : 0;
+  const f = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * billableCorners(room) : 0;
   const p = (room.profileSegments ?? []).reduce((sum, seg) => sum + seg.profile.priceInstall * seg.lengthM, 0);
   const l = (room.lighting ?? []).reduce((sum, e) => sum + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as any).lengthM), 0);
   const a = (room.selectedAccessories ?? []).reduce((sum, a) => sum + a.accessory.priceInstall * a.quantity, 0);
   const sv = (room.selectedServices ?? []).reduce((sum, s) => sum + s.service.priceInstall * s.quantity, 0);
-  return f + p + l + a + sv;
+  const n = (room.selectedNiches ?? []).reduce((sum, x) => sum + x.niche.priceInstall * (x.kind === 'count' ? x.quantity : x.lengthM), 0);
+  return f + p + l + a + sv + n;
 };
 
 const getInitials = (name: string) => {
@@ -79,6 +93,7 @@ const Summary: React.FC = () => {
 
     activeRooms.forEach((room, i) => {
       const c = corners(room);
+      const bc = billableCorners(room);
       const cl = calcClient(room);
 
       doc.setFont('helvetica', 'bold');
@@ -87,7 +102,7 @@ const Summary: React.FC = () => {
       doc.text(`   ${t('pdf.area')}: ${room.areaSqm.toFixed(2)} м²  ${t('pdf.perimeter')}: ${room.perimeterM.toFixed(2)} м  ${t('pdf.corners')}: ${c}`, margin, y); y += 5;
 
       if (room.fabric) {
-        doc.text(`   ${t('sec.fabric')} "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${c} = ${fmt(cl.fabric)} ₽`, margin, y); y += 5;
+        doc.text(`   ${t('sec.fabric')} "${room.fabric.title}": ${room.fabric.price} × ${room.areaSqm.toFixed(2)} м² + ${room.fabric.priceCorner} × ${bc} = ${fmt(cl.fabric)} ₽`, margin, y); y += 5;
       }
       const segs = room.profileSegments ?? [];
       const pGroups: Record<string, { title: string; totalLengthM: number; count: number; price: number; priceCorner: number }> = {};
@@ -181,6 +196,7 @@ const Summary: React.FC = () => {
           {/* ── Room cards ── */}
           {activeRooms.map((room, i) => {
             const c = corners(room);
+            const bc = billableCorners(room);
             const cl = calcClient(room);
             const wk = calcWorker(room);
 
@@ -203,6 +219,7 @@ const Summary: React.FC = () => {
             const lightList = Object.values(lightGroups);
             const accessories = room.selectedAccessories ?? [];
             const services = room.selectedServices ?? [];
+            const niches = room.selectedNiches ?? [];
 
             return (
               <div key={room.id} className="card summary-room-card">
@@ -242,7 +259,7 @@ const Summary: React.FC = () => {
                           <div className="summary-line-item__name">{room.fabric.title}</div>
                           <div className="summary-line-item__calc">
                             {room.fabric.price} ₽ × {room.areaSqm.toFixed(2)} м²
-                            {c > 0 && ` + ${room.fabric.priceCorner} ₽ × ${c} угл.`}
+                            {bc > 0 && ` + ${room.fabric.priceCorner} ₽ × ${bc} доп. угл.`}
                           </div>
                           <div className="summary-line-item__total">{fmt(cl.fabric)} ₽</div>
                         </div>
@@ -305,6 +322,26 @@ const Summary: React.FC = () => {
                           <div className="summary-line-item__name">{s.service.title}</div>
                           <div className="summary-line-item__calc">{s.quantity} {t('unit.pcs')}</div>
                           <div className="summary-line-item__total">{fmt(s.service.price * s.quantity)} ₽</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Niches */}
+                {niches.length > 0 && (
+                  <>
+                    <div className="summary-section-label">{t('sum.niches')}</div>
+                    <div className="summary-line-items">
+                      {niches.map(n => (
+                        <div key={n.id} className="summary-line-item">
+                          <div className="summary-line-item__name">{n.niche.title}</div>
+                          <div className="summary-line-item__calc">
+                            {n.kind === 'count' ? `${n.quantity} ${t('unit.pcs')}` : `${n.lengthM.toFixed(2)} ${t('unit.m')}`}
+                          </div>
+                          <div className="summary-line-item__total">
+                            {fmt(n.niche.price * (n.kind === 'count' ? n.quantity : n.lengthM))} ₽
+                          </div>
                         </div>
                       ))}
                     </div>

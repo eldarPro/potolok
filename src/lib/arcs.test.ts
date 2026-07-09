@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   Point, arcInfo, edgeLen, sampleArc, arcHandlePoint, bulgeFromThreePoints,
-  splitBulge, polygonArea, polygonPerimeter, pointOnArc,
+  splitBulge, polygonArea, polygonPerimeter, pointOnArc, edgeWouldCrossRoom,
 } from './geometry';
 
 const A: Point = { x: 0, y: 0 };
@@ -139,5 +139,35 @@ describe('polygonArea / polygonPerimeter with bulged edges', () => {
 
   it('perimeter grows when an edge is bulged (arc longer than its chord)', () => {
     expect(polygonPerimeter(square(0.6))).toBeGreaterThan(polygonPerimeter(square(0)));
+  });
+});
+
+describe('edgeWouldCrossRoom', () => {
+  // Narrow 10×4 rectangle — bowing the bottom wall inward doesn't have to bulge
+  // much before it reaches the nearby top wall.
+  const narrowRect: Point[] = [
+    { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 4 }, { x: 0, y: 4 },
+  ];
+
+  it('flags a bulge big enough to punch through the opposite wall', () => {
+    // Peak of the bottom edge's arc sits at y = bulge*half = 0.9*5 = 4.5, past y=4,
+    // crossing the top wall's segment well away from either shared corner.
+    expect(edgeWouldCrossRoom(narrowRect, 0, 0.9)).toBe(true);
+  });
+
+  it('allows a modest bulge that stays clear of the opposite wall', () => {
+    // Peak at y = 0.3*5 = 1.5, nowhere near the top wall at y=4.
+    expect(edgeWouldCrossRoom(narrowRect, 0, 0.3)).toBe(false);
+  });
+
+  it('does not false-positive on edges merely sharing a corner', () => {
+    // A gentle bulge on a square's edge should never "cross" its own neighbours
+    // at the shared vertices.
+    const square: Point[] = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
+    expect(edgeWouldCrossRoom(square, 0, 0.4)).toBe(false);
+  });
+
+  it('outward bulges (away from the room) never cross other walls', () => {
+    expect(edgeWouldCrossRoom(narrowRect, 0, -1.5)).toBe(false);
   });
 });
