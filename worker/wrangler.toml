@@ -1,0 +1,11 @@
+name = "ceiling-app-image-edit"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Secrets (not set here — provide them via `wrangler secret put`):
+#   DASHSCOPE_API_KEY
+#   DASHSCOPE_WORKSPACE_ID
+#
+# Optional var to lock CORS down to your app's real origin instead of "*":
+# [vars]
+# ALLOWED_ORIGIN = "https://your-app-domain.example"

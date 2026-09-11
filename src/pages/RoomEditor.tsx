@@ -752,6 +752,11 @@ const RoomEditor: React.FC = () => {
                 onClick={() => { setMenuOpen(false); setRenameOpen(true); }}
               />
               <MenuAction
+                label={t('viz.menuItem')}
+                color="#8E24AA"
+                onClick={() => { setMenuOpen(false); router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push'); }}
+              />
+              <MenuAction
                 label={t('re.clearDraft')}
                 color="#F9A825"
                 onClick={() => { setMenuOpen(false); clearDrawing(); }}

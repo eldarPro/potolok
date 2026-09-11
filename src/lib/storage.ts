@@ -175,5 +175,6 @@ export function createRoom(name: string): Room {
     selectedNiches: [],
     areaSqm: 0,
     perimeterM: 0,
+    visualization: null,
   };
 }

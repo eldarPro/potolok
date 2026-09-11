@@ -20,6 +20,7 @@ import NewProject from './pages/NewProject';
 import ProjectDetail from './pages/ProjectDetail';
 import RoomEditor from './pages/RoomEditor';
 import RoomMaterials from './pages/RoomMaterials';
+import RoomVisualize from './pages/RoomVisualize';
 import Summary from './pages/Summary';
 import CatalogList from './pages/price-list/CatalogList';
 import CatalogForm from './pages/price-list/CatalogForm';
@@ -44,6 +45,7 @@ const App: React.FC = () => (
         <Route exact path="/new-project" component={NewProject} />
         <Route exact path="/project/:projectId/room/:roomId" component={RoomEditor} />
         <Route exact path="/project/:projectId/room/:roomId/materials/:section" component={RoomMaterials} />
+        <Route exact path="/project/:projectId/room/:roomId/visualize" component={RoomVisualize} />
         <Route exact path="/project/:id/summary" component={Summary} />
         <Route exact path="/project/:id" component={ProjectDetail} />
 

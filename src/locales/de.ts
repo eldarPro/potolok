@@ -398,6 +398,26 @@ const s: Record<string, string> = {
   'hb.s4.text': 'Der Bereich „Statistik" im Kabinett zeigt die Gesamtanzahl der Projekte, Gesamtfläche und Arbeitsvolumen über die gesamte Zeit.',
   'hb.s5.title': 'Persönliches Profil',
   'hb.s5.text': 'Name, Firma und Kontakttelefon angeben. Diese Daten erscheinen in Kostenvoranschlägen, die der Kunde sieht.',
+
+  // AI visualization
+  'viz.menuItem': 'KI-Visualisierung',
+  'viz.title': 'KI-Visualisierung',
+  'viz.takePhoto': 'Decke fotografieren',
+  'viz.uploadPhoto': 'Foto hochladen',
+  'viz.emptyTitle': 'Deckenfoto hinzufügen',
+  'viz.emptySubtitle': 'Fotografieren Sie die Decke oder laden Sie ein Foto hoch — danach können Sie mit KI Bespannung, Beleuchtung und weitere Elemente hinzufügen',
+  'viz.promptPH': 'Beschreiben Sie, was hinzugefügt oder geändert werden soll...',
+  'viz.generate': 'Generieren',
+  'viz.generating': 'Generierung...',
+  'viz.undo': 'Rückgängig',
+  'viz.reset': 'Originalfoto',
+  'viz.download': 'Herunterladen',
+  'viz.deletePhoto': 'Foto löschen?',
+  'viz.deletePhotoConfirm': 'Das Foto und der gesamte Versionsverlauf werden unwiderruflich gelöscht.',
+  'viz.error': 'Bild konnte nicht generiert werden. Bitte erneut versuchen',
+  'viz.errorBlocked': 'Anfrage abgelehnt — versuchen Sie einen anderen Prompt',
+  'viz.photoError': 'Foto konnte nicht geladen werden',
+  'viz.storageError': 'Nicht genug Speicherplatz — löschen Sie ältere Versionen',
 };
 
 export const de: Locale = {

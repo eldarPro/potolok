@@ -398,6 +398,26 @@ const s: Record<string, string> = {
   'hb.s4.text': 'Kabinetteki «İstatistikler» bölümü toplam proje sayısını, toplam alanı ve tüm zaman boyunca tamamlanan iş hacmini gösterir.',
   'hb.s5.title': 'Kişisel profil',
   'hb.s5.text': 'Adınızı, şirketinizi ve iletişim telefon numaranızı girin. Bu veriler müşterinin gördüğü tekliflerde görünür.',
+
+  // AI visualization
+  'viz.menuItem': 'AI görselleştirme',
+  'viz.title': 'AI görselleştirme',
+  'viz.takePhoto': 'Tavanı fotoğrafla',
+  'viz.uploadPhoto': 'Fotoğraf yükle',
+  'viz.emptyTitle': 'Tavan fotoğrafı ekleyin',
+  'viz.emptySubtitle': 'Tavanı fotoğraflayın veya bir fotoğraf yükleyin — ardından yapay zeka ile germe tavan, aydınlatma ve diğer öğeleri ekleyebilirsiniz',
+  'viz.promptPH': 'Ne eklenecek veya değiştirilecek açıklayın...',
+  'viz.generate': 'Oluştur',
+  'viz.generating': 'Oluşturuluyor...',
+  'viz.undo': 'Geri al',
+  'viz.reset': 'Orijinal fotoğraf',
+  'viz.download': 'İndir',
+  'viz.deletePhoto': 'Fotoğraf silinsin mi?',
+  'viz.deletePhotoConfirm': 'Fotoğraf ve tüm sürüm geçmişi kalıcı olarak silinecek.',
+  'viz.error': 'Görsel oluşturulamadı. Lütfen tekrar deneyin',
+  'viz.errorBlocked': 'İstek reddedildi — farklı bir prompt deneyin',
+  'viz.photoError': 'Fotoğraf yüklenemedi',
+  'viz.storageError': 'Yeterli depolama alanı yok — eski sürümleri silin',
 };
 
 export const tr: Locale = {

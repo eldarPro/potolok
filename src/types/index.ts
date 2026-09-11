@@ -123,6 +123,21 @@ export interface RoomLightingPath {
 
 export type RoomLightingElement = RoomLightingPoint | RoomLightingPath;
 
+// --- AI photo visualization ---
+
+export interface VisualizationVersion {
+  id: string;
+  image: string; // data URL (base64 JPEG)
+  prompt: string; // '' for the original, unedited photo
+  createdAt: string;
+}
+
+export interface RoomVisualization {
+  // [0] is the original photo; each later entry is a generated edit of the
+  // one before it, so the last entry is always the current image.
+  versions: VisualizationVersion[];
+}
+
 // --- Room & Project ---
 
 export interface Room {
@@ -139,6 +154,7 @@ export interface Room {
   selectedNiches: RoomNicheElement[];
   areaSqm: number;
   perimeterM: number;
+  visualization: RoomVisualization | null;
 }
 
 export interface Project {

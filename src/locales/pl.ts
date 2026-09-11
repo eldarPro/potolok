@@ -398,6 +398,26 @@ const s: Record<string, string> = {
   'hb.s4.text': 'Sekcja „Statystyki" w gabinecie pokazuje łączną liczbę projektów, całkowitą powierzchnię i ilość wykonanych prac za cały czas.',
   'hb.s5.title': 'Profil osobisty',
   'hb.s5.text': 'Podaj swoje imię, firmę i numer kontaktowy. Te dane pojawiają się w kosztorysach, które widzi klient.',
+
+  // AI visualization
+  'viz.menuItem': 'Wizualizacja AI',
+  'viz.title': 'Wizualizacja AI',
+  'viz.takePhoto': 'Sfotografuj sufit',
+  'viz.uploadPhoto': 'Prześlij zdjęcie',
+  'viz.emptyTitle': 'Dodaj zdjęcie sufitu',
+  'viz.emptySubtitle': 'Sfotografuj sufit lub prześlij zdjęcie — potem będzie można dodać tkaninę, oświetlenie i inne elementy za pomocą AI',
+  'viz.promptPH': 'Opisz, co dodać lub zmienić...',
+  'viz.generate': 'Generuj',
+  'viz.generating': 'Generowanie...',
+  'viz.undo': 'Cofnij',
+  'viz.reset': 'Oryginalne zdjęcie',
+  'viz.download': 'Pobierz',
+  'viz.deletePhoto': 'Usunąć zdjęcie?',
+  'viz.deletePhotoConfirm': 'Zdjęcie i cała historia wersji zostaną trwale usunięte.',
+  'viz.error': 'Nie udało się wygenerować obrazu. Spróbuj ponownie',
+  'viz.errorBlocked': 'Żądanie odrzucone — spróbuj innego promptu',
+  'viz.photoError': 'Nie udało się wczytać zdjęcia',
+  'viz.storageError': 'Za mało miejsca — usuń starsze wersje',
 };
 
 export const pl: Locale = {

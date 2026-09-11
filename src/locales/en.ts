@@ -427,6 +427,26 @@ const s: Record<string, string> = {
   'hb.s4.text': 'The "Statistics" section in the cabinet shows the total number of projects, total area and volume of work completed over all time.',
   'hb.s5.title': 'Personal profile',
   'hb.s5.text': 'Enter your name, company and contact phone number. This data appears in quotes that the client sees.',
+
+  // AI visualization
+  'viz.menuItem': 'AI visualization',
+  'viz.title': 'AI visualization',
+  'viz.takePhoto': 'Photograph the ceiling',
+  'viz.uploadPhoto': 'Upload a photo',
+  'viz.emptyTitle': 'Add a ceiling photo',
+  'viz.emptySubtitle': 'Photograph the ceiling or upload a photo — then add fabric, lighting and other elements with AI',
+  'viz.promptPH': 'Describe what to add or change...',
+  'viz.generate': 'Generate',
+  'viz.generating': 'Generating...',
+  'viz.undo': 'Undo',
+  'viz.reset': 'Original photo',
+  'viz.download': 'Download',
+  'viz.deletePhoto': 'Delete photo?',
+  'viz.deletePhotoConfirm': 'The photo and all its version history will be permanently deleted.',
+  'viz.error': "Couldn't generate the image. Please try again",
+  'viz.errorBlocked': 'Request was rejected — try a different prompt',
+  'viz.photoError': "Couldn't load the photo",
+  'viz.storageError': 'Not enough storage space — delete older versions',
 };
 
 export const en: Locale = {
