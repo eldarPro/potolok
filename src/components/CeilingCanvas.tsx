@@ -96,6 +96,10 @@ const CeilingCanvas: React.FC<Props> = ({
   const [closed, setClosed] = useState(room.points.length >= MIN_POINTS);
   const [manualStarted, setManualStarted] = useState(false);
   const [cursor, setCursor] = useState<Point | null>(null);
+  // True while a single touch is held down to place a new point — the point
+  // commits on release (handleTouchEnd), not on touchdown, so it can still be
+  // nudged while the finger is on the glass.
+  const [placingTouch, setPlacingTouch] = useState(false);
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
@@ -112,6 +116,11 @@ const CeilingCanvas: React.FC<Props> = ({
   const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null);
   const isTouching = useRef(false);
   const wallDragOrigin = useRef<Point | null>(null);
+  // The true (unsnapped) touch position for the point currently being
+  // placed — handleTap needs this raw value, not the snapped `cursor` used
+  // for the preview, since its "close the loop" check compares raw distance
+  // to point 0 before any snapping is applied.
+  const touchRawRef = useRef<Point | null>(null);
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
@@ -346,7 +355,7 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (tool !== 'draw' || points.length === 0 || closed) return;
+    if (tool !== 'draw' || points.length === 0 || closed || isDraggingPoint.current) return;
     const last = points[points.length - 1];
     setCursor(snapToGrid(snapAngle(last, snapToGrid(pos))));
   };
@@ -386,10 +395,11 @@ const CeilingCanvas: React.FC<Props> = ({
         my: rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : 0,
       };
       lastTouch.current = null;
+      setPlacingTouch(false);
       return;
     }
 
-    if (tool === 'draw' || placingLighting || placingNiche) {
+    if (placingLighting || placingNiche) {
       e.evt.preventDefault();
       const stage = stageRef.current;
       if (!stage) return;
@@ -397,10 +407,34 @@ const CeilingCanvas: React.FC<Props> = ({
       if (!pos) return;
       const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
       handleTap(pt);
-      // Keep cursor at tap position so the dashed preview appears as soon as
-      // the user starts moving toward the next point (on touch, mousemove doesn't fire)
       if (!closed) setCursor(pt);
-    } else if (!isDraggingPoint.current) {
+      return;
+    }
+
+    if (tool === 'draw' && !closed) {
+      // A touch landing on an existing (draggable) vertex is handled by that
+      // vertex's own onTouchStart, which stops bubbling (e.cancelBubble) —
+      // so by the time we get here, it was a touch on the open canvas (or on
+      // an unrelated listening shape, e.g. a wall's bow-drag hit band, which
+      // should still fall through to the normal placement/close logic below).
+      e.evt.preventDefault();
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const raw = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+      const snapped = points.length > 0
+        ? snapToGrid(snapAngle(points[points.length - 1], snapToGrid(raw)))
+        : snapToGrid(raw);
+      // Don't commit yet — the point lands on release (handleTouchEnd) so the
+      // finger can still nudge it beforehand.
+      touchRawRef.current = raw;
+      setCursor(snapped);
+      setPlacingTouch(true);
+      return;
+    }
+
+    if (!isDraggingPoint.current) {
       lastTouch.current = { x: touches[0].clientX, y: touches[0].clientY };
     }
   };
@@ -458,12 +492,16 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (tool === 'draw' && points.length > 0 && !closed && touches.length === 1) {
+    if (tool === 'draw' && !closed && touches.length === 1 && placingTouch) {
       const rect = stage.container().getBoundingClientRect();
       const tx = (touches[0].clientX - rect.left - viewport.x) / viewport.scale;
       const ty = (touches[0].clientY - rect.top  - viewport.y) / viewport.scale;
-      const last = points[points.length - 1];
-      setCursor(snapToGrid(snapAngle(last, snapToGrid({ x: tx, y: ty }))));
+      const raw = { x: tx, y: ty };
+      const snapped = points.length > 0
+        ? snapToGrid(snapAngle(points[points.length - 1], snapToGrid(raw)))
+        : snapToGrid(raw);
+      touchRawRef.current = raw;
+      setCursor(snapped);
     } else if (tool === 'move' && lastTouch.current && touches.length === 1 && !isDraggingPoint.current) {
       const ddx = touches[0].clientX - lastTouch.current.x;
       const ddy = touches[0].clientY - lastTouch.current.y;
@@ -473,6 +511,11 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleTouchEnd = () => {
+    if (placingTouch) {
+      setPlacingTouch(false);
+      if (touchRawRef.current) handleTap(touchRawRef.current);
+      touchRawRef.current = null;
+    }
     pinchRef.current = null;
     lastTouch.current = null;
     isDraggingPoint.current = false;
@@ -574,7 +617,7 @@ const CeilingCanvas: React.FC<Props> = ({
     : null;
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (tool !== 'draw' || points.length === 0 || closed || placingLighting) return;
+    if (tool !== 'draw' || points.length === 0 || closed || placingLighting || isDraggingPoint.current) return;
     if (e.pointerType === 'touch' && pinchRef.current) return; // ignore during pinch
     const stageEl = stageRef.current?.container();
     if (!stageEl) return;
@@ -741,6 +784,11 @@ const CeilingCanvas: React.FC<Props> = ({
           {points.map((p, i) => {
             const isSelected = selectedPoint === i;
             const baseRadius = i === 0 && nearStart ? 14 : 7;
+            // Point 0 stays a plain pass-through target while the room is
+            // still open — it's the "tap here to close the loop" hotspot in
+            // handleTap, so it must not steal the touch into a drag. Every
+            // other already-placed point can be nudged mid-draw.
+            const canDragVertex = !placingLighting && !placingNiche && (closed || i !== 0);
             return (
               <Group key={i}>
                 {isSelected && (
@@ -759,16 +807,23 @@ const CeilingCanvas: React.FC<Props> = ({
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 3 : 2}
-                  listening={closed && !placingLighting && !placingNiche}
-                  draggable={closed && !placingLighting && !placingNiche}
-                  onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
+                  listening={canDragVertex}
+                  draggable={canDragVertex}
+                  onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
                   onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { ...points[i], x: e.target.x(), y: e.target.y() };
                     setPoints(newPts);
-                    const m = computeMetrics(newPts);
-                    onChange({ points: newPts, ...m });
+                    // Only a closed room has real area/perimeter to report —
+                    // while still mid-draw, keep the update local so this
+                    // doesn't trip the "already closed" check elsewhere.
+                    if (closed) {
+                      const m = computeMetrics(newPts);
+                      onChange({ points: newPts, ...m });
+                    } else {
+                      onChange({ points: newPts });
+                    }
                   }}
                   onDragEnd={() => { isDraggingPoint.current = false; onVertexDragEnd?.(); }}
                   onClick={e => {

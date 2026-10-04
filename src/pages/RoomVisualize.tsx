@@ -10,6 +10,7 @@ import {
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadLightings } from '../lib/storage';
+import { uuid } from '../lib/uuid';
 import { Project, Room, RoomVisualization, VisualizationVersion, CatalogItem, LightingCatalogItem } from '../types';
 import { fileToDataUrl, downscaleDataUrl } from '../lib/image';
 import { generateCeilingImage, ImageEditError } from '../lib/imageEdit';
@@ -82,7 +83,7 @@ const RoomVisualize: React.FC = () => {
     try {
       const raw = await fileToDataUrl(file);
       const resized = await downscaleDataUrl(raw);
-      const version: VisualizationVersion = { id: crypto.randomUUID(), image: resized, prompt: '', createdAt: new Date().toISOString() };
+      const version: VisualizationVersion = { id: uuid(), image: resized, prompt: '', createdAt: new Date().toISOString() };
       persist({ versions: [version] });
     } catch {
       presentToast({ message: t('viz.photoError'), duration: 2500, color: 'danger', position: 'bottom' });
@@ -97,7 +98,7 @@ const RoomVisualize: React.FC = () => {
     try {
       const resultRaw = await generateCeilingImage(current.image, text);
       const result = await downscaleDataUrl(resultRaw);
-      const version: VisualizationVersion = { id: crypto.randomUUID(), image: result, prompt: text, createdAt: new Date().toISOString() };
+      const version: VisualizationVersion = { id: uuid(), image: result, prompt: text, createdAt: new Date().toISOString() };
       persist({ versions: [...versions, version] });
       setPrompt('');
     } catch (e) {

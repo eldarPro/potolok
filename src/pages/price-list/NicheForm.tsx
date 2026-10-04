@@ -9,6 +9,7 @@ import { chevronBackOutline } from 'ionicons/icons';
 import { NicheItem, NicheUnit } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadNiches, upsertNiche } from '../../lib/storage';
+import { uuid } from '../../lib/uuid';
 import { useT } from '../../lib/i18n';
 
 type FormState = Omit<NicheItem, 'id'>;
@@ -40,7 +41,7 @@ const NicheForm: React.FC = () => {
 
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
-    upsertNiche({ id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() });
+    upsertNiche({ id: id ?? uuid(), ...form, title: form.title.trim() });
     router.goBack();
   };
 

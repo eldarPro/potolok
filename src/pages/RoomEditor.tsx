@@ -11,6 +11,7 @@ import {
 } from 'ionicons/icons';
 import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches } from '../lib/storage';
+import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
@@ -284,7 +285,7 @@ const RoomEditor: React.FC = () => {
     if (!placingLighting) return;
     if (placingLighting.placement === 'point') {
       const newEl: RoomLightingPoint = {
-        id: crypto.randomUUID(), kind: 'point',
+        id: uuid(), kind: 'point',
         catalogItemId: placingLighting.id, catalogItem: { ...placingLighting },
         x: pt.x, y: pt.y,
       };
@@ -343,7 +344,7 @@ const RoomEditor: React.FC = () => {
     for (let i = 0; i < lightingPathPts.length - 1; i++)
       totalPx += dist(lightingPathPts[i], lightingPathPts[i + 1]);
     const newEl: RoomLightingPath = {
-      id: crypto.randomUUID(), kind: 'path',
+      id: uuid(), kind: 'path',
       catalogItemId: placingLighting.id, catalogItem: { ...placingLighting },
       points: lightingPathPts, lengthM: pxToMeters(totalPx, room.scale),
     };
@@ -368,7 +369,7 @@ const RoomEditor: React.FC = () => {
         let totalPx = 0;
         for (let i = 0; i < next.length - 1; i++) totalPx += dist(next[i], next[i + 1]);
         const newEl: RoomNichePath = {
-          id: crypto.randomUUID(), kind: 'path',
+          id: uuid(), kind: 'path',
           nicheId: placingNiche.id, niche: { ...placingNiche },
           points: next, lengthM: pxToMeters(totalPx, room.scale),
         };

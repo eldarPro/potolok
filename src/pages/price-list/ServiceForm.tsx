@@ -9,6 +9,7 @@ import { chevronBackOutline } from 'ionicons/icons';
 import { AdditionalService } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadServices, upsertService } from '../../lib/storage';
+import { uuid } from '../../lib/uuid';
 import { useT } from '../../lib/i18n';
 
 type FormState = Omit<AdditionalService, 'id'>;
@@ -38,7 +39,7 @@ const ServiceForm: React.FC = () => {
 
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
-    upsertService({ id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() });
+    upsertService({ id: id ?? uuid(), ...form, title: form.title.trim() });
     router.goBack();
   };
 

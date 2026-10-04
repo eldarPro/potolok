@@ -9,6 +9,7 @@ import { chevronBackOutline } from 'ionicons/icons';
 import { Accessory } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadAccessories, upsertAccessory } from '../../lib/storage';
+import { uuid } from '../../lib/uuid';
 import { useT } from '../../lib/i18n';
 
 type FormState = Omit<Accessory, 'id'>;
@@ -40,7 +41,7 @@ const AccessoryForm: React.FC = () => {
 
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
-    upsertAccessory({ id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() });
+    upsertAccessory({ id: id ?? uuid(), ...form, title: form.title.trim() });
     router.goBack();
   };
 

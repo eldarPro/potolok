@@ -1,4 +1,5 @@
 import { Project, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile } from '../types';
+import { uuid } from './uuid';
 
 const KEY = 'ceiling_projects';
 
@@ -34,7 +35,7 @@ export function deleteProject(id: string): void {
 export function createProject(partial: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'rooms'>): Project {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     createdAt: now,
     updatedAt: now,
     rooms: [],
@@ -112,30 +113,30 @@ export const deleteNiche  = (id: string) => deleteListItem(NICHES_KEY, id);
 export function seedCatalog(): void {
   if (loadFabrics().length < 3) {
     saveList<CatalogItem>(FABRICS_KEY, [
-      { id: crypto.randomUUID(), title: 'Матовое белое',   price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true,  color: '#f5f5f5', description: '' },
-      { id: crypto.randomUUID(), title: 'Глянцевое белое', price: 650, priceCorner: 150, priceInstall: 220, priceInstallCorner: 50, isDefault: false, color: '#ddeeff', description: '' },
-      { id: crypto.randomUUID(), title: 'Сатин',           price: 600, priceCorner: 150, priceInstall: 210, priceInstallCorner: 50, isDefault: false, color: '#e8e8e8', description: '' },
+      { id: uuid(), title: 'Матовое белое',   price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true,  color: '#f5f5f5', description: '' },
+      { id: uuid(), title: 'Глянцевое белое', price: 650, priceCorner: 150, priceInstall: 220, priceInstallCorner: 50, isDefault: false, color: '#ddeeff', description: '' },
+      { id: uuid(), title: 'Сатин',           price: 600, priceCorner: 150, priceInstall: 210, priceInstallCorner: 50, isDefault: false, color: '#e8e8e8', description: '' },
     ]);
   }
   if (loadProfiles().length < 2) {
     saveList<CatalogItem>(PROFILES_KEY, [
-      { id: crypto.randomUUID(), title: 'Стандартный ПВХ', price: 150, priceCorner:  80, priceInstall:  60, priceInstallCorner: 30, isDefault: true,  color: '#ffffff', description: '' },
-      { id: crypto.randomUUID(), title: 'Алюминиевый',     price: 250, priceCorner: 120, priceInstall:  80, priceInstallCorner: 40, isDefault: false, color: '#c0c0c0', description: '' },
+      { id: uuid(), title: 'Стандартный ПВХ', price: 150, priceCorner:  80, priceInstall:  60, priceInstallCorner: 30, isDefault: true,  color: '#ffffff', description: '' },
+      { id: uuid(), title: 'Алюминиевый',     price: 250, priceCorner: 120, priceInstall:  80, priceInstallCorner: 40, isDefault: false, color: '#c0c0c0', description: '' },
     ]);
   }
   if (loadLightings().length < 4) {
     saveList<LightingCatalogItem>(LIGHTINGS_KEY, [
-      { id: crypto.randomUUID(), title: 'Точечный спот',    type: 'spot',       placement: 'point', unit: 'pcs',   symbol: '⊙', price: 150, priceInstall:  80, color: '#fff9c4', description: '' },
-      { id: crypto.randomUUID(), title: 'Люстра',           type: 'chandelier', placement: 'point', unit: 'pcs',   symbol: '✦', price: 500, priceInstall: 200, color: '#fff3e0', description: '' },
-      { id: crypto.randomUUID(), title: 'LED-лента',        type: 'strip',      placement: 'path',  unit: 'meter', symbol: '—', price: 300, priceInstall: 120, color: '#fffde7', description: '' },
-      { id: crypto.randomUUID(), title: 'Трек',             type: 'track',      placement: 'path',  unit: 'meter', symbol: '—', price: 400, priceInstall: 150, color: '#e3f2fd', description: '' },
+      { id: uuid(), title: 'Точечный спот',    type: 'spot',       placement: 'point', unit: 'pcs',   symbol: '⊙', price: 150, priceInstall:  80, color: '#fff9c4', description: '' },
+      { id: uuid(), title: 'Люстра',           type: 'chandelier', placement: 'point', unit: 'pcs',   symbol: '✦', price: 500, priceInstall: 200, color: '#fff3e0', description: '' },
+      { id: uuid(), title: 'LED-лента',        type: 'strip',      placement: 'path',  unit: 'meter', symbol: '—', price: 300, priceInstall: 120, color: '#fffde7', description: '' },
+      { id: uuid(), title: 'Трек',             type: 'track',      placement: 'path',  unit: 'meter', symbol: '—', price: 400, priceInstall: 150, color: '#e3f2fd', description: '' },
     ]);
   }
   if (loadAccessories().length < 3) {
     saveList<Accessory>(ACCESSORIES_KEY, [
-      { id: crypto.randomUUID(), title: 'Кольцо под спот',      price:  50, priceInstall:  30, unit: 'шт', description: '' },
-      { id: crypto.randomUUID(), title: 'Ревизионный люк',      price: 800, priceInstall: 200, unit: 'шт', description: '' },
-      { id: crypto.randomUUID(), title: 'Платформа под люстру', price: 150, priceInstall: 100, unit: 'шт', description: '' },
+      { id: uuid(), title: 'Кольцо под спот',      price:  50, priceInstall:  30, unit: 'шт', description: '' },
+      { id: uuid(), title: 'Ревизионный люк',      price: 800, priceInstall: 200, unit: 'шт', description: '' },
+      { id: uuid(), title: 'Платформа под люстру', price: 150, priceInstall: 100, unit: 'шт', description: '' },
     ]);
   }
 }
@@ -162,7 +163,7 @@ export function saveMasterProfile(profile: MasterProfile): void {
 export function createRoom(name: string): Room {
   const defaultFabric = loadFabrics().find(i => i.isDefault) ?? null;
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     name,
     points: [],
     scale: 50,

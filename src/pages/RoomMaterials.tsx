@@ -12,6 +12,7 @@ import {
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
+import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
   edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE,
@@ -218,7 +219,7 @@ const RoomMaterials: React.FC = () => {
       });
     } else {
       const newItem: RoomAccessoryItem = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         accessoryId: acc.id,
         accessory: { ...acc },
         quantity: 1,
@@ -256,7 +257,7 @@ const RoomMaterials: React.FC = () => {
       });
     } else {
       const newItem: RoomNicheCount = {
-        id: crypto.randomUUID(), kind: 'count',
+        id: uuid(), kind: 'count',
         nicheId: niche.id, niche: { ...niche }, quantity: 1,
       };
       updateRoom({ selectedNiches: [...roomNiches, newItem] });
@@ -289,7 +290,7 @@ const RoomMaterials: React.FC = () => {
       });
     } else {
       const newItem: RoomServiceItem = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         serviceId: svc.id,
         service: { ...svc },
         quantity: 1,

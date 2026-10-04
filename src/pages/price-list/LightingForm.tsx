@@ -9,6 +9,7 @@ import { chevronBackOutline } from 'ionicons/icons';
 import { LightingCatalogItem, LightingType } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadLightings, upsertLighting } from '../../lib/storage';
+import { uuid } from '../../lib/uuid';
 import { LIGHTING_TYPES, LIGHTING_META, POINT_SYMBOLS, UNIT_LABEL } from '../../lib/lighting';
 import { useT } from '../../lib/i18n';
 
@@ -53,7 +54,7 @@ const LightingForm: React.FC = () => {
 
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
-    upsertLighting({ id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() });
+    upsertLighting({ id: id ?? uuid(), ...form, title: form.title.trim() });
     router.goBack();
   };
 

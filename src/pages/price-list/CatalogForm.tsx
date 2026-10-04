@@ -9,6 +9,7 @@ import { chevronBackOutline } from 'ionicons/icons';
 import { CatalogItem } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { loadFabrics, upsertFabric, loadProfiles, upsertProfile } from '../../lib/storage';
+import { uuid } from '../../lib/uuid';
 import { useT } from '../../lib/i18n';
 
 interface Props {
@@ -46,7 +47,7 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
 
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
-    const item: CatalogItem = { id: id ?? crypto.randomUUID(), ...form, title: form.title.trim() };
+    const item: CatalogItem = { id: id ?? uuid(), ...form, title: form.title.trim() };
     if (category === 'fabrics') upsertFabric(item);
     else upsertProfile(item);
     router.goBack();
