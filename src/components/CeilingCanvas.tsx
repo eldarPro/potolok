@@ -55,16 +55,6 @@ type Tool = 'draw' | 'move';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
-const labelOffset = (pts: Point[], p: Point, dist = 18): { ox: number; oy: number } => {
-  if (pts.length === 0) return { ox: 10, oy: -18 };
-  const cx = pts.reduce((s, q) => s + q.x, 0) / pts.length;
-  const cy = pts.reduce((s, q) => s + q.y, 0) / pts.length;
-  const dx = p.x - cx;
-  const dy = p.y - cy;
-  const len = Math.hypot(dx, dy) || 1;
-  return { ox: (dx / len) * dist - 6, oy: (dy / len) * dist - 6 };
-};
-
 const CeilingCanvas: React.FC<Props> = ({
   room, onChange, width, height,
   placingLighting = null,
@@ -574,6 +564,11 @@ const CeilingCanvas: React.FC<Props> = ({
     cursor,
   ] : null;
 
+  const labelCentroid = points.length > 0 ? {
+    x: points.reduce((s, q) => s + q.x, 0) / points.length,
+    y: points.reduce((s, q) => s + q.y, 0) / points.length,
+  } : { x: 0, y: 0 };
+
   const segmentLabels = points.map((p, i) => {
     if (i === 0 && !closed) return null;
     const prev = closed && i === 0 ? points[points.length - 1] : points[i - 1];
@@ -581,7 +576,16 @@ const CeilingCanvas: React.FC<Props> = ({
     const mid = arcHandlePoint(prev, p, prev.bulge);
     const d = edgeLen(prev, p, prev.bulge);
     const cm = pxToCm(d, room.scale);
-    return { mx: mid.x, my: mid.y, label: fmtCm(cm), key: i };
+    const dx = p.x - prev.x, dy = p.y - prev.y;
+    const segLen = Math.hypot(dx, dy) || 1;
+    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    if (angle > 90 || angle < -90) angle += 180; // keep text upright, never upside-down
+    // Push the label out along the wall's normal, away from the room's
+    // centroid, so it floats outside the drawing instead of on the line.
+    let nx = -dy / segLen, ny = dx / segLen;
+    if ((mid.x - labelCentroid.x) * nx + (mid.y - labelCentroid.y) * ny < 0) { nx = -nx; ny = -ny; }
+    const margin = 7;
+    return { mx: mid.x + nx * margin, my: mid.y + ny * margin, label: fmtCm(cm), key: i, angle };
   }).filter(Boolean);
 
   // Invisible wide hit-lines along each wall of the closed room — grab and drag
@@ -686,30 +690,38 @@ const CeilingCanvas: React.FC<Props> = ({
                 strokeWidth={2}
                 dash={[6, 4]}
               />
-              <Text
-                x={(previewLine[0].x + previewLine[1].x) / 2}
-                y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
-                text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1]), room.scale))}
-                fontSize={12}
-                fontStyle="bold"
-                fill={nearStart ? '#2dd36f' : '#fff'}
-                shadowColor="rgba(0,0,0,0.9)"
-                shadowBlur={4}
-                shadowOffsetX={1}
-                shadowOffsetY={1}
-                listening={false}
-              />
+              {dist(previewLine[0], previewLine[1]) > 1 && (
+                <Text
+                  x={(previewLine[0].x + previewLine[1].x) / 2}
+                  y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
+                  text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1]), room.scale))}
+                  fontSize={12}
+                  fontStyle="bold"
+                  fill={nearStart ? '#2dd36f' : '#fff'}
+                  shadowColor="rgba(0,0,0,0.9)"
+                  shadowBlur={4}
+                  shadowOffsetX={1}
+                  shadowOffsetY={1}
+                  listening={false}
+                />
+              )}
             </>
           )}
 
           {/* Diagonals with lengths */}
           {diagonals.map(([i, j], k) => {
             const a = points[i], b = points[j];
-            // Stagger labels along the line so they don't collide at a quad's centre
-            // or crowd together on diagonals fanning out of one vertex
-            const t = 0.28 + (k % 3) * 0.14;
-            const lx = a.x + (b.x - a.x) * t;
-            const ly = a.y + (b.y - a.y) * t;
+            const lx = (a.x + b.x) / 2;
+            const ly = (a.y + b.y) / 2;
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const segLen = Math.hypot(dx, dy) || 1;
+            let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            if (angle > 90 || angle < -90) angle += 180; // keep text upright, never upside-down
+            // Nudge the label to the upper side of the diagonal, same as wall labels
+            let nx = -dy / segLen, ny = dx / segLen;
+            if (ny > 0) { nx = -nx; ny = -ny; }
+            const margin = 7;
+            const label = `${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b), room.scale))}`;
             return (
               <Group key={`diag-${k}`} listening={false}>
                 <Line
@@ -719,20 +731,22 @@ const CeilingCanvas: React.FC<Props> = ({
                   dash={[8, 6]}
                   opacity={0.85}
                 />
-                <Text
-                  x={lx} y={ly - 15}
-                  text={`${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b), room.scale))}`}
-                  fontSize={11} fontStyle="bold" fill="#F9A825"
-                  shadowColor="rgba(0,0,0,0.9)" shadowBlur={4} shadowOffsetX={1} shadowOffsetY={1}
-                />
+                <Group x={lx + nx * margin} y={ly + ny * margin} rotation={angle}>
+                  <Text
+                    text={label}
+                    fontSize={9} fontStyle="bold" fill="#F9A825"
+                    offsetX={label.length * 2.7} offsetY={7}
+                    shadowColor="rgba(0,0,0,0.9)" shadowBlur={4} shadowOffsetX={1} shadowOffsetY={1}
+                  />
+                </Group>
               </Group>
             );
           })}
 
           {/* Segment dimension labels */}
           {segmentLabels.map(seg => seg && (
-            <Group key={seg.key} x={seg.mx} y={seg.my}>
-              <Text text={seg.label} fontSize={11} fill="#fff" offsetX={20} offsetY={8} padding={3} />
+            <Group key={seg.key} x={seg.mx} y={seg.my} rotation={seg.angle}>
+              <Text text={seg.label} fontSize={9} fill="#fff" offsetX={seg.label.length * 2.7} offsetY={7} padding={3} />
             </Group>
           ))}
 
@@ -806,7 +820,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   radius={baseRadius}
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
-                  strokeWidth={isSelected ? 3 : 2}
+                  strokeWidth={isSelected ? 2 : 1}
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
@@ -842,11 +856,13 @@ const CeilingCanvas: React.FC<Props> = ({
                   }}
                 />
                 <Text
-                  x={p.x + labelOffset(points, p).ox}
-                  y={p.y + labelOffset(points, p).oy}
+                  x={p.x} y={p.y}
+                  width={baseRadius * 2} height={baseRadius * 2}
+                  offsetX={baseRadius} offsetY={baseRadius}
+                  align="center" verticalAlign="middle"
                   text={pointLabel(i)}
-                  fontSize={13} fontStyle="bold" fill="#fff"
-                  shadowColor="rgba(0,0,0,0.8)" shadowBlur={3} shadowOffsetX={1} shadowOffsetY={1}
+                  fontSize={baseRadius + 3} fontStyle="bold"
+                  fill={i === 0 && !nearStart ? '#3880ff' : '#fff'}
                   listening={false}
                 />
               </Group>

@@ -158,10 +158,10 @@ export function edgeWouldCrossRoom(pts: Point[], editIndex: number, candidateBul
   return false;
 }
 
-const RU_LETTERS = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЭЮЯ'.split('');
+const POINT_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 export function pointLabel(index: number): string {
-  return RU_LETTERS[index % RU_LETTERS.length];
+  return POINT_LETTERS[index % POINT_LETTERS.length];
 }
 
 export function edgeLabel(fromIndex: number, n: number): string {
