@@ -15,7 +15,7 @@ import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, lo
 import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
-  edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE,
+  edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE, CM_PER_GRID,
   edgeLen, pointOnArc, splitBulge, totalFabricCorners,
 } from '../lib/geometry';
 import { useT } from '../lib/i18n';
@@ -100,7 +100,7 @@ const RoomMaterials: React.FC = () => {
   const assignProfile = (edgeIndex: number, item: CatalogItem) => {
     const newSeg: RoomProfileSegment = {
       edgeIndex, profileId: item.id, profile: { ...item },
-      lengthM: edgeLengthM(room.points, edgeIndex, room.scale),
+      lengthM: edgeLengthM(room.points, edgeIndex),
     };
     const updated = [
       ...(room.profileSegments ?? []).filter(s => s.edgeIndex !== edgeIndex),
@@ -116,7 +116,7 @@ const RoomMaterials: React.FC = () => {
     updateRoom({
       profileSegments: room.points.map((_, i) => ({
         edgeIndex: i, profileId: item.id, profile: { ...item },
-        lengthM: edgeLengthM(room.points, i, room.scale),
+        lengthM: edgeLengthM(room.points, i),
       })),
     });
 
@@ -133,16 +133,16 @@ const RoomMaterials: React.FC = () => {
     // as a straight edge keeps a curved wall's shape and reaches the new length.
     const currentPx = edgeLen(a, b, a.bulge);
     if (currentPx === 0) return;
-    const newPx = (newLenCm * GRID_SIZE) / room.scale;
+    const newPx = (newLenCm * GRID_SIZE) / CM_PER_GRID;
     const ratio = newPx / currentPx;
     const newPts = [...pts];
     newPts[(edgeIndex + 1) % n] = { ...b, x: a.x + dx * ratio, y: a.y + dy * ratio };
     const areaPx = polygonArea(newPts);
     const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     const updatedSegments = (room.profileSegments ?? []).map(s => ({
-      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex, room.scale),
+      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex),
     }));
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
   };
@@ -152,7 +152,7 @@ const RoomMaterials: React.FC = () => {
     const pts = room.points;
     const a = pts[edgeIndex % n];
     const b = pts[(edgeIndex + 1) % n];
-    const edgeTotalCm = edgeLengthCm(pts, edgeIndex, room.scale);
+    const edgeTotalCm = edgeLengthCm(pts, edgeIndex);
     if (edgeTotalCm === 0) return;
     if (distCm <= 0 || distCm >= edgeTotalCm) return;
     // Split fraction along the edge's length (arc-length fraction for a curved wall).
@@ -169,21 +169,21 @@ const RoomMaterials: React.FC = () => {
     const profileAtEdge = existingSegs.find(s => s.edgeIndex === edgeIndex);
     const updatedSegs = existingSegs.map(s => {
       const newIdx = s.edgeIndex > edgeIndex ? s.edgeIndex + 1 : s.edgeIndex;
-      return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx, room.scale) };
+      return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
     });
     if (profileAtEdge) {
       updatedSegs.push({
         edgeIndex: edgeIndex + 1,
         profileId: profileAtEdge.profileId,
         profile: { ...profileAtEdge.profile },
-        lengthM: edgeLengthM(newPts, edgeIndex + 1, room.scale),
+        lengthM: edgeLengthM(newPts, edgeIndex + 1),
       });
       updatedSegs.sort((a, b) => a.edgeIndex - b.edgeIndex);
     }
     const areaPx = polygonArea(newPts);
     const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegs });
   };
 
@@ -194,10 +194,10 @@ const RoomMaterials: React.FC = () => {
     const newPts = pts.map((p, i) => i === edgeIndex % n ? { ...p, bulge: 0 } : p);
     const areaPx = polygonArea(newPts);
     const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     const updatedSegments = (room.profileSegments ?? []).map(s => ({
-      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex, room.scale),
+      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex),
     }));
     updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
   };
@@ -502,7 +502,7 @@ const RoomMaterials: React.FC = () => {
                   <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
                     {room.points.map((_, i) => {
                       const seg = segments.find(s => s.edgeIndex === i);
-                      const lenCm = edgeLengthCm(room.points, i, room.scale);
+                      const lenCm = edgeLengthCm(room.points, i);
                       return (
                         <IonItem
                           key={i}
@@ -1006,7 +1006,7 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={editingEdge !== null}
         header={editingEdge !== null
-          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${Math.round(edgeLengthCm(room.points, editingEdge, room.scale))} см`
+          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${Math.round(edgeLengthCm(room.points, editingEdge))} см`
           : undefined}
         buttons={[
           ...profiles.map(p => ({
@@ -1035,7 +1035,7 @@ const RoomMaterials: React.FC = () => {
           type: 'number',
           placeholder: t('mat.lengthCm'),
           value: editingSizeEdge !== null
-            ? String(Math.round(edgeLengthCm(room.points, editingSizeEdge, room.scale)))
+            ? String(Math.round(edgeLengthCm(room.points, editingSizeEdge)))
             : '',
           min: 1,
         }]}
@@ -1061,7 +1061,7 @@ const RoomMaterials: React.FC = () => {
           ? `${t('mat.splitWall')} ${edgeLabel(splitEdgeIdx, room.points.length)}`
           : undefined}
         message={splitEdgeIdx !== null
-          ? `${t('mat.splitMsg', { len: Math.round(edgeLengthCm(room.points, splitEdgeIdx, room.scale)) })}`
+          ? `${t('mat.splitMsg', { len: Math.round(edgeLengthCm(room.points, splitEdgeIdx)) })}`
           : undefined}
         inputs={[{
           name: 'dist',
@@ -1088,7 +1088,7 @@ const RoomMaterials: React.FC = () => {
       <IonActionSheet
         isOpen={edgeMenuOpen !== null}
         header={edgeMenuOpen !== null
-          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${Math.round(edgeLengthCm(room.points, edgeMenuOpen, room.scale))} см`
+          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${Math.round(edgeLengthCm(room.points, edgeMenuOpen))} см`
           : undefined}
         buttons={[
           {

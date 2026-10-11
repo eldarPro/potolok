@@ -71,7 +71,6 @@ const s: Record<string, string> = {
   'rs.8': 'Балкон',
 
   // Room editor
-  're.scale': 'Масштаб',
   're.area': 'Площадь',
   're.perimeter': 'Периметр',
   're.corners': 'Углов',

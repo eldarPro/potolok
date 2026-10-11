@@ -1,4 +1,4 @@
-import { GRID_SIZE } from './geometry';
+import { GRID_SIZE, CM_PER_GRID } from './geometry';
 
 export type Direction = 'E' | 'S' | 'W' | 'N';
 
@@ -14,17 +14,17 @@ export function turnLeft(d: Direction): Direction {
   return ({ E: 'N', N: 'W', W: 'S', S: 'E' } as Record<Direction, Direction>)[d];
 }
 
-// meters → canvas pixels (given room scale = cm per grid cell)
-export function mToPx(m: number, scale: number): number {
-  return (m * 100 * GRID_SIZE) / scale;
+// meters → canvas pixels
+export function mToPx(m: number): number {
+  return (m * 100 * GRID_SIZE) / CM_PER_GRID;
 }
 
 // Build polygon points from walls (all right-angle corners assumed)
-export function buildPolygon(walls: WallEntry[], scale: number, canvasW: number, canvasH: number) {
+export function buildPolygon(walls: WallEntry[], canvasW: number, canvasH: number) {
   let x = 0, y = 0;
   const pts: { x: number; y: number }[] = [{ x: 0, y: 0 }];
   for (const { lengthM, dir } of walls) {
-    const px = mToPx(lengthM, scale);
+    const px = mToPx(lengthM);
     if (dir === 'E') x += px;
     else if (dir === 'W') x -= px;
     else if (dir === 'S') y += px;

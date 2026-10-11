@@ -144,7 +144,6 @@ export interface Room {
   id: string;
   name: string;
   points: { x: number; y: number; bulge?: number }[];
-  scale: number;
   fabricId: string | null;
   fabric: CatalogItem | null;
   profileSegments: RoomProfileSegment[];

@@ -1,12 +1,40 @@
 import { Project, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile } from '../types';
 import { uuid } from './uuid';
+import { CM_PER_GRID } from './geometry';
 
 const KEY = 'ceiling_projects';
+
+// Legacy rooms stored a per-room `scale` (cm per grid cell, user-adjustable
+// 10–200) that calibrated every canvas-px coordinate on that room. Now the
+// px↔cm ratio is the fixed CM_PER_GRID for all rooms, so an old room drawn at
+// a different scale must have its stored px coordinates rescaled once on
+// load to keep the real-world size it was drawn at.
+function migrateRoomScale(room: any): Room {
+  const legacyScale = room.scale;
+  if (typeof legacyScale !== 'number' || legacyScale === CM_PER_GRID) {
+    const { scale, ...rest } = room;
+    return rest;
+  }
+  const ratio = legacyScale / CM_PER_GRID;
+  const scalePt = (p: { x: number; y: number }) => ({ ...p, x: p.x * ratio, y: p.y * ratio });
+  const { scale, ...rest } = room;
+  return {
+    ...rest,
+    points: (room.points ?? []).map(scalePt),
+    lighting: (room.lighting ?? []).map((el: any) =>
+      el.kind === 'point' ? { ...el, x: el.x * ratio, y: el.y * ratio } : { ...el, points: el.points.map(scalePt) }
+    ),
+    selectedNiches: (room.selectedNiches ?? []).map((el: any) =>
+      el.kind === 'path' ? { ...el, points: el.points.map(scalePt) } : el
+    ),
+  };
+}
 
 export function loadProjects(): Project[] {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : [];
+    const projects = raw ? JSON.parse(raw) : [];
+    return projects.map((p: any) => ({ ...p, rooms: (p.rooms ?? []).map(migrateRoomScale) }));
   } catch {
     return [];
   }
@@ -166,7 +194,6 @@ export function createRoom(name: string): Room {
     id: uuid(),
     name,
     points: [],
-    scale: 50,
     fabricId: defaultFabric ? defaultFabric.id : null,
     fabric:   defaultFabric ? { ...defaultFabric } : null,
     profileSegments: [],

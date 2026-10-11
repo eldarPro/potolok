@@ -63,7 +63,6 @@ const s: Record<string, string> = {
   'rs.7': 'Oficina',
   'rs.8': 'Balcón',
 
-  're.scale': 'Escala',
   're.area': 'Área',
   're.perimeter': 'Perímetro',
   're.corners': 'Esquinas',

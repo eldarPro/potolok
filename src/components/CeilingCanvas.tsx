@@ -111,6 +111,15 @@ const CeilingCanvas: React.FC<Props> = ({
   // for the preview, since its "close the loop" check compares raw distance
   // to point 0 before any snapping is applied.
   const touchRawRef = useRef<Point | null>(null);
+  // Grace-period timer between a first finger touching down in draw mode and
+  // actually committing it as a point: a real two-finger pinch rarely lands
+  // both fingers in the exact same touch frame, so without this the first
+  // finger alone would start "placing" and, if it happens to lift again
+  // (or a stray touchend slips through) before the second finger registers,
+  // drop a point mid-pinch. Holding off the commit for a brief window lets
+  // the second finger's touchstart (which clears this) cancel it instead.
+  const placingTouchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TOUCH_PLACE_DELAY = 60;
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
@@ -144,6 +153,10 @@ const CeilingCanvas: React.FC<Props> = ({
     }
   }, [room.id, room.points.length, room.perimeterM, fitView]);
 
+  useEffect(() => () => {
+    if (placingTouchTimer.current !== null) clearTimeout(placingTouchTimer.current);
+  }, []);
+
   // Clear cursor when switching lighting item
   useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedLighting(null); }, [placingLighting?.id]);
   useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedNicheEl(null); }, [placingNiche?.id]);
@@ -157,16 +170,11 @@ const CeilingCanvas: React.FC<Props> = ({
     };
   }, [viewport]);
 
-  const snapToGrid = (p: Point): Point => ({
-    x: Math.round(p.x / GRID_SIZE) * GRID_SIZE,
-    y: Math.round(p.y / GRID_SIZE) * GRID_SIZE,
-  });
-
   const computeMetrics = (pts: Point[]) => {
     const areaPx = polygonArea(pts);
     const perimPx = polygonPerimeter(pts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     return { areaSqm, perimeterM };
   };
 
@@ -189,13 +197,13 @@ const CeilingCanvas: React.FC<Props> = ({
         } else if (s.edgeIndex > i) {
           newIdx = s.edgeIndex - 1;
         }
-        return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx, room.scale) };
+        return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
       })
       .sort((a, b) => a.edgeIndex - b.edgeIndex);
     const areaPx = polygonArea(newPts);
     const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx, room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     setPoints(newPts);
     setSelectedPoint(null);
     setDrawRedoStack([]);
@@ -257,7 +265,6 @@ const CeilingCanvas: React.FC<Props> = ({
     }
 
     if (tool !== 'draw' || closed) return;
-    const snapped = snapToGrid(pt);
 
     if (points.length >= MIN_POINTS) {
       const first = points[0];
@@ -267,15 +274,8 @@ const CeilingCanvas: React.FC<Props> = ({
       }
     }
 
-    if (points.length > 0) {
-      const last = points[points.length - 1];
-      const snappedAngle = snapToGrid(snapAngle(last, snapped));
-      setDrawRedoStack([]);
-      setPoints(prev => [...prev, snappedAngle]);
-    } else {
-      setDrawRedoStack([]);
-      setPoints([snapped]);
-    }
+    setDrawRedoStack([]);
+    setPoints(prev => [...prev, pt]);
   };
 
   const stageRef = useRef<Konva.Stage>(null);
@@ -346,8 +346,7 @@ const CeilingCanvas: React.FC<Props> = ({
     }
 
     if (tool !== 'draw' || points.length === 0 || closed || isDraggingPoint.current) return;
-    const last = points[points.length - 1];
-    setCursor(snapToGrid(snapAngle(last, snapToGrid(pos))));
+    setCursor(pos);
   };
 
   const handleStageMouseUp = () => {
@@ -374,6 +373,10 @@ const CeilingCanvas: React.FC<Props> = ({
     isTouching.current = true;
     lastMouse.current = null;
     if (touches.length === 2) {
+      if (placingTouchTimer.current !== null) {
+        clearTimeout(placingTouchTimer.current);
+        placingTouchTimer.current = null;
+      }
       const stage = stageRef.current;
       const rect = stage?.container().getBoundingClientRect();
       pinchRef.current = {
@@ -385,7 +388,11 @@ const CeilingCanvas: React.FC<Props> = ({
         my: rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : 0,
       };
       lastTouch.current = null;
+      touchRawRef.current = null;
       setPlacingTouch(false);
+      // The pending point's preview (dashed line to the first finger) must
+      // not linger through the pinch — this is a zoom gesture, not a placement.
+      setCursor(null);
       return;
     }
 
@@ -413,14 +420,17 @@ const CeilingCanvas: React.FC<Props> = ({
       const pos = stage.getPointerPosition();
       if (!pos) return;
       const raw = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
-      const snapped = points.length > 0
-        ? snapToGrid(snapAngle(points[points.length - 1], snapToGrid(raw)))
-        : snapToGrid(raw);
       // Don't commit yet — the point lands on release (handleTouchEnd) so the
-      // finger can still nudge it beforehand.
+      // finger can still nudge it beforehand. And don't even arm the "placing"
+      // state until TOUCH_PLACE_DELAY has passed without a second finger
+      // joining — see the comment on placingTouchTimer above.
       touchRawRef.current = raw;
-      setCursor(snapped);
-      setPlacingTouch(true);
+      setCursor(raw);
+      if (placingTouchTimer.current !== null) clearTimeout(placingTouchTimer.current);
+      placingTouchTimer.current = setTimeout(() => {
+        placingTouchTimer.current = null;
+        setPlacingTouch(true);
+      }, TOUCH_PLACE_DELAY);
       return;
     }
 
@@ -482,16 +492,13 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (tool === 'draw' && !closed && touches.length === 1 && placingTouch) {
+    if (tool === 'draw' && !closed && touches.length === 1 && (placingTouch || placingTouchTimer.current !== null)) {
       const rect = stage.container().getBoundingClientRect();
       const tx = (touches[0].clientX - rect.left - viewport.x) / viewport.scale;
       const ty = (touches[0].clientY - rect.top  - viewport.y) / viewport.scale;
       const raw = { x: tx, y: ty };
-      const snapped = points.length > 0
-        ? snapToGrid(snapAngle(points[points.length - 1], snapToGrid(raw)))
-        : snapToGrid(raw);
       touchRawRef.current = raw;
-      setCursor(snapped);
+      setCursor(raw);
     } else if (tool === 'move' && lastTouch.current && touches.length === 1 && !isDraggingPoint.current) {
       const ddx = touches[0].clientX - lastTouch.current.x;
       const ddy = touches[0].clientY - lastTouch.current.y;
@@ -501,10 +508,21 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleTouchEnd = () => {
-    if (placingTouch) {
+    if (placingTouchTimer.current !== null) {
+      // Finger lifted before the grace window elapsed and no second finger
+      // ever showed up — a genuine quick tap, so commit it right away.
+      clearTimeout(placingTouchTimer.current);
+      placingTouchTimer.current = null;
+      if (touchRawRef.current) handleTap(touchRawRef.current);
+      touchRawRef.current = null;
+      // The preview line only exists while this finger is down — don't let
+      // it linger at the just-placed point once it's lifted.
+      setCursor(null);
+    } else if (placingTouch) {
       setPlacingTouch(false);
       if (touchRawRef.current) handleTap(touchRawRef.current);
       touchRawRef.current = null;
+      setCursor(null);
     }
     pinchRef.current = null;
     lastTouch.current = null;
@@ -538,6 +556,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   // Unified undo: local draw undo when drawing, global undo when committed
   const handleUndoBtn = () => {
+    setCursor(null);
     if (!closed && points.length > 0) {
       localUndoPoint();
     } else {
@@ -546,6 +565,7 @@ const CeilingCanvas: React.FC<Props> = ({
   };
 
   const handleRedoBtn = () => {
+    setCursor(null);
     if (!closed && drawRedoStack.length > 0) {
       localRedoPoint();
     } else {
@@ -575,7 +595,7 @@ const CeilingCanvas: React.FC<Props> = ({
     if (!prev) return null;
     const mid = arcHandlePoint(prev, p, prev.bulge);
     const d = edgeLen(prev, p, prev.bulge);
-    const cm = pxToCm(d, room.scale);
+    const cm = pxToCm(d);
     const dx = p.x - prev.x, dy = p.y - prev.y;
     const segLen = Math.hypot(dx, dy) || 1;
     let angle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -628,8 +648,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const rect = stageEl.getBoundingClientRect();
     const tx = (e.clientX - rect.left - viewport.x) / viewport.scale;
     const ty = (e.clientY - rect.top  - viewport.y) / viewport.scale;
-    const last = points[points.length - 1];
-    setCursor(snapToGrid(snapAngle(last, snapToGrid({ x: tx, y: ty }))));
+    setCursor({ x: tx, y: ty });
   };
 
   return (
@@ -694,7 +713,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 <Text
                   x={(previewLine[0].x + previewLine[1].x) / 2}
                   y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
-                  text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1]), room.scale))}
+                  text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1])))}
                   fontSize={12}
                   fontStyle="bold"
                   fill={nearStart ? '#2dd36f' : '#fff'}
@@ -721,7 +740,7 @@ const CeilingCanvas: React.FC<Props> = ({
             let nx = -dy / segLen, ny = dx / segLen;
             if (ny > 0) { nx = -nx; ny = -ny; }
             const margin = 7;
-            const label = `${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b), room.scale))}`;
+            const label = `${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b)))}`;
             return (
               <Group key={`diag-${k}`} listening={false}>
                 <Line
@@ -769,6 +788,7 @@ const CeilingCanvas: React.FC<Props> = ({
               onDragStart={e => {
                 onVertexDragStart?.();
                 setSelectedPoint(null);
+                setCursor(null);
                 lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
                 wallDragOrigin.current = getPointerPos(e);
               }}
@@ -824,7 +844,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
-                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
+                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { ...points[i], x: e.target.x(), y: e.target.y() };

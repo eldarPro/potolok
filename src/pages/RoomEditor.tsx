@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonRange, IonActionSheet, IonAlert,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
   useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
 import {
@@ -151,8 +151,8 @@ const RoomEditor: React.FC = () => {
     const ox = Math.round((canvasSize.width - sw) / 2 / GRID_SIZE) * GRID_SIZE;
     const oy = Math.round((canvasSize.height - sh) / 2 / GRID_SIZE) * GRID_SIZE;
     const pts = shape.map(([gx, gy]) => ({ x: ox + gx * sc, y: oy + gy * sc }));
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts)), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts), room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2));
     setTemplatesOpen(false);
     updateRoom({ points: pts, areaSqm, perimeterM, lighting: [] });
     setCanvasKey(k => k + 1);
@@ -227,21 +227,15 @@ const RoomEditor: React.FC = () => {
           if (def) {
             updated.profileSegments = pts.map((_, i) => ({
               edgeIndex: i, profileId: def.id, profile: { ...def },
-              lengthM: edgeLengthM(pts, i, updated.scale),
+              lengthM: edgeLengthM(pts, i),
             }));
           }
         } else {
           updated.profileSegments = existing
             .filter(s => s.edgeIndex < pts.length)
-            .map(s => ({ ...s, lengthM: edgeLengthM(pts, s.edgeIndex, updated.scale) }));
+            .map(s => ({ ...s, lengthM: edgeLengthM(pts, s.edgeIndex) }));
         }
       }
-    }
-
-    if (partial.scale !== undefined && updated.points.length >= 3) {
-      updated.profileSegments = (updated.profileSegments ?? []).map(s => ({
-        ...s, lengthM: edgeLengthM(updated.points, s.edgeIndex, partial.scale!),
-      }));
     }
 
     setRoom(updated);
@@ -346,7 +340,7 @@ const RoomEditor: React.FC = () => {
     const newEl: RoomLightingPath = {
       id: uuid(), kind: 'path',
       catalogItemId: placingLighting.id, catalogItem: { ...placingLighting },
-      points: lightingPathPts, lengthM: pxToMeters(totalPx, room.scale),
+      points: lightingPathPts, lengthM: pxToMeters(totalPx),
     };
     updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
     setPlacingLighting(null);
@@ -371,7 +365,7 @@ const RoomEditor: React.FC = () => {
         const newEl: RoomNichePath = {
           id: uuid(), kind: 'path',
           nicheId: placingNiche.id, niche: { ...placingNiche },
-          points: next, lengthM: pxToMeters(totalPx, room.scale),
+          points: next, lengthM: pxToMeters(totalPx),
         };
         updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
         setPlacingNiche(null);
@@ -617,38 +611,6 @@ const RoomEditor: React.FC = () => {
                 </button>
               </div>
             )}
-
-            {/* Scale row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: room.areaSqm > 0 ? 12 : 0 }}>
-              <span style={{
-                fontSize: 11, fontWeight: 700,
-                color: 'rgba(255,255,255,0.35)',
-                textTransform: 'uppercase', letterSpacing: 0.9, flexShrink: 0,
-              }}>
-                {t('re.scale')}
-              </span>
-              <div style={{ flex: 1 }}>
-                <IonRange
-                  min={10} max={200} step={10}
-                  value={room.scale}
-                  onIonChange={e => updateRoom({ scale: e.detail.value as number })}
-                  style={{
-                    '--bar-height': '3px',
-                    '--bar-background': 'rgba(255,255,255,0.1)',
-                    '--bar-background-active': '#1E88E5',
-                    '--knob-background': '#1E88E5',
-                    '--knob-size': '18px',
-                    padding: '0',
-                  } as any}
-                />
-              </div>
-              <span style={{
-                fontSize: 13, color: '#1E88E5', fontWeight: 700,
-                minWidth: 50, textAlign: 'right', flexShrink: 0,
-              }}>
-                {room.scale} см
-              </span>
-            </div>
 
             {/* Summary stats */}
             {room.areaSqm > 0 && (

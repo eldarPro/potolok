@@ -246,32 +246,35 @@ export function snapAngle(start: Point, end: Point, thresholdDeg = 10): Point {
 /** Grid cell size in pixels — must match CeilingCanvas */
 export const GRID_SIZE = 40;
 
-/** Convert canvas px distance to real meters (scale = cm per grid cell) */
-export function pxToMeters(px: number, scale: number): number {
-  return (px * scale) / (GRID_SIZE * 100);
+/** Real-world size a grid cell represents — fixes the canvas-px ↔ cm ratio for every room */
+export const CM_PER_GRID = 50;
+
+/** Convert canvas px distance to real meters */
+export function pxToMeters(px: number): number {
+  return (px * CM_PER_GRID) / (GRID_SIZE * 100);
 }
 
-/** Convert canvas px distance to real centimeters (scale = cm per grid cell) */
-export function pxToCm(px: number, scale: number): number {
-  return (px * scale) / GRID_SIZE;
+/** Convert canvas px distance to real centimeters */
+export function pxToCm(px: number): number {
+  return (px * CM_PER_GRID) / GRID_SIZE;
 }
 
 /** Length of edge i (from point[i] to point[i+1]) in meters — arc-aware via point[i].bulge */
-export function edgeLengthM(pts: Point[], edgeIndex: number, scale: number): number {
+export function edgeLengthM(pts: Point[], edgeIndex: number): number {
   const n = pts.length;
   if (n < 2) return 0;
   const a = pts[edgeIndex % n];
   const b = pts[(edgeIndex + 1) % n];
-  return pxToMeters(edgeLen(a, b, a.bulge), scale);
+  return pxToMeters(edgeLen(a, b, a.bulge));
 }
 
 /** Length of edge i (from point[i] to point[i+1]) in centimeters — arc-aware via point[i].bulge */
-export function edgeLengthCm(pts: Point[], edgeIndex: number, scale: number): number {
+export function edgeLengthCm(pts: Point[], edgeIndex: number): number {
   const n = pts.length;
   if (n < 2) return 0;
   const a = pts[edgeIndex % n];
   const b = pts[(edgeIndex + 1) % n];
-  return pxToCm(edgeLen(a, b, a.bulge), scale);
+  return pxToCm(edgeLen(a, b, a.bulge));
 }
 
 /** Format meters nicely */

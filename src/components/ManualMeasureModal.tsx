@@ -46,16 +46,16 @@ const ManualMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onApply, 
 
   const canClosePolygon = () => {
     if (walls.length < 3) return false;
-    const pts = buildPolygon(walls, room.scale, canvasW, canvasH);
+    const pts = buildPolygon(walls, canvasW, canvasH);
     const first = pts[0], last = pts[pts.length - 1];
     const maxWall = Math.max(...walls.map(w => w.lengthM));
     const d = Math.hypot(first.x - last.x, first.y - last.y);
-    return d < mToPx(maxWall * 0.05, room.scale);
+    return d < mToPx(maxWall * 0.05);
   };
 
   const applyPoints = (pts: { x: number; y: number }[]) => {
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts)), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts), room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2));
     onApply({ points: pts, areaSqm, perimeterM, profileSegments: [], lighting: [] });
     onClose();
   };
@@ -63,8 +63,8 @@ const ManualMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onApply, 
   const applyRect = () => {
     const wCm = parseNum(rectW), hCm = parseNum(rectH);
     if (!(wCm > 0) || !(hCm > 0)) return;
-    const wPx = mToPx(wCm / 100, room.scale);
-    const hPx = mToPx(hCm / 100, room.scale);
+    const wPx = mToPx(wCm / 100);
+    const hPx = mToPx(hCm / 100);
     const ox = (canvasW - wPx) / 2;
     const oy = (canvasH - hPx) / 2;
     applyPoints([
@@ -77,7 +77,7 @@ const ManualMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onApply, 
 
   const applyPoly = () => {
     if (walls.length < 3) return;
-    const pts = buildPolygon(walls, room.scale, canvasW, canvasH);
+    const pts = buildPolygon(walls, canvasW, canvasH);
     applyPoints(pts.slice(0, -1)); // last point == first
   };
 

@@ -140,8 +140,8 @@ const BluetoothMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onAppl
 
   const applyRect = () => {
     if (rectW === null || rectH === null) return;
-    const wPx = mToPx(rectW, room.scale);
-    const hPx = mToPx(rectH, room.scale);
+    const wPx = mToPx(rectW);
+    const hPx = mToPx(rectH);
     const ox = (canvasW - wPx) / 2;
     const oy = (canvasH - hPx) / 2;
     const pts = [
@@ -155,13 +155,13 @@ const BluetoothMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onAppl
 
   const applyPoly = () => {
     if (walls.length < 3) return;
-    const pts = buildPolygon(walls, room.scale, canvasW, canvasH);
+    const pts = buildPolygon(walls, canvasW, canvasH);
     applyPoints(pts.slice(0, -1)); // last point == first
   };
 
   const applyPoints = (pts: { x: number; y: number }[]) => {
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts)), room.scale) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts), room.scale).toFixed(2));
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2));
     onApply({ points: pts, areaSqm, perimeterM, profileSegments: [], lighting: [] });
     onClose();
   };
@@ -171,11 +171,11 @@ const BluetoothMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onAppl
   const canClosePolygon = () => {
     if (walls.length < 3) return false;
     // Check if last point ~= first point (within 5% of longest wall)
-    const pts = buildPolygon(walls, room.scale, canvasW, canvasH);
+    const pts = buildPolygon(walls, canvasW, canvasH);
     const first = pts[0], last = pts[pts.length - 1];
     const maxWall = Math.max(...walls.map(w => w.lengthM));
     const d = Math.hypot(first.x - last.x, first.y - last.y);
-    return d < mToPx(maxWall * 0.05, room.scale);
+    return d < mToPx(maxWall * 0.05);
   };
 
   const disconnect = () => {
