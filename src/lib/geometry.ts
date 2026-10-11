@@ -359,6 +359,22 @@ export function polygonDiagonals(pts: Point[]): [number, number][] {
   return diags;
 }
 
+/**
+ * The single most relevant diagonal partner for vertex `i` while a shape of
+ * `len` vertices is still being drawn or nudged — the "skip one neighbour"
+ * corner, same pairing as the convex-quad case in polygonDiagonals
+ * ([[0,2],[1,3]]), so the live hint lines up with the diagonals shown once
+ * the room closes. A full ear-clipping triangulation isn't meaningful yet
+ * here: the shape isn't closed, so there's no wrap-around edge to reason
+ * about and the vertex being dragged may make it self-intersecting.
+ */
+export function relevantDiagonalPartner(i: number, len: number): number | null {
+  if (len < 4) return null;
+  if (i - 2 >= 0) return i - 2;
+  if (i + 2 <= len - 1) return i + 2;
+  return null;
+}
+
 /** Closest point on segment a–b to p, plus the squared distance to it. */
 function closestOnSegment(p: Point, a: Point, b: Point): { point: Point; distSq: number } {
   const dx = b.x - a.x, dy = b.y - a.y;

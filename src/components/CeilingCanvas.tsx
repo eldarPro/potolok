@@ -5,7 +5,7 @@ import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
 import {
   Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel,
-  pointInPolygon, edgeLengthM, polygonDiagonals, GRID_SIZE,
+  pointInPolygon, edgeLengthM, polygonDiagonals, relevantDiagonalPartner, GRID_SIZE,
   edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom,
   nearestPointOnOutline,
 } from '../lib/geometry';
@@ -98,7 +98,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
   const [selectedNicheEl, setSelectedNicheEl] = useState<string | null>(null);
   const [nicheHoverOnWall, setNicheHoverOnWall] = useState(false);
-  const [showDiagonals, setShowDiagonals] = useState(false);
+  const [showDiagonals, setShowDiagonals] = useState(true);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
@@ -615,9 +615,40 @@ const CeilingCanvas: React.FC<Props> = ({
     return { i, a, b, points: [a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(p => [p.x, p.y])] };
   }) : [];
 
-  const diagonals = showDiagonals && closed && points.length >= 4
-    ? polygonDiagonals(points)
+  // Once the room is closed, show every diagonal the triangulation needs to
+  // fix the shape. While still drawing (or nudging a vertex before closing),
+  // a full triangulation isn't meaningful — there's no wrap-around edge yet,
+  // and the point being dragged can make the shape self-intersect — so show
+  // just the one diagonal relevant to whichever point is actively moving,
+  // the same corner-pairing the closed quad case already uses.
+  type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string };
+  const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
+    ? polygonDiagonals(points).map(([i, j], k) => ({
+        a: points[i], b: points[j], labelI: pointLabel(i), labelJ: pointLabel(j), key: `diag-${k}`,
+      }))
     : [];
+
+  const cursorDiagPartner = showDiagonals && !closed && !placingLighting && !placingNiche && cursor
+    ? relevantDiagonalPartner(points.length, points.length + 1)
+    : null;
+  const cursorDiagonal: DiagonalHint[] = cursorDiagPartner != null && cursor
+    ? [{
+        a: points[cursorDiagPartner], b: cursor,
+        labelI: pointLabel(cursorDiagPartner), labelJ: pointLabel(points.length), key: 'diag-cursor',
+      }]
+    : [];
+
+  const dragDiagPartner = showDiagonals && !closed && draggingPoint != null
+    ? relevantDiagonalPartner(draggingPoint, points.length)
+    : null;
+  const dragDiagonal: DiagonalHint[] = dragDiagPartner != null && draggingPoint != null
+    ? [{
+        a: points[dragDiagPartner], b: points[draggingPoint],
+        labelI: pointLabel(dragDiagPartner), labelJ: pointLabel(draggingPoint), key: 'diag-drag',
+      }]
+    : [];
+
+  const diagonals: DiagonalHint[] = [...closedDiagonals, ...cursorDiagonal, ...dragDiagonal];
 
   const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
     ? dist(cursor, points[0]) * viewport.scale < CLOSE_THRESHOLD
@@ -728,8 +759,7 @@ const CeilingCanvas: React.FC<Props> = ({
           )}
 
           {/* Diagonals with lengths */}
-          {diagonals.map(([i, j], k) => {
-            const a = points[i], b = points[j];
+          {diagonals.map(({ a, b, labelI, labelJ, key }) => {
             const lx = (a.x + b.x) / 2;
             const ly = (a.y + b.y) / 2;
             const dx = b.x - a.x, dy = b.y - a.y;
@@ -740,9 +770,9 @@ const CeilingCanvas: React.FC<Props> = ({
             let nx = -dy / segLen, ny = dx / segLen;
             if (ny > 0) { nx = -nx; ny = -ny; }
             const margin = 7;
-            const label = `${pointLabel(i)}–${pointLabel(j)} ${fmtCm(pxToCm(dist(a, b)))}`;
+            const label = `${labelI}–${labelJ} ${fmtCm(pxToCm(dist(a, b)))}`;
             return (
-              <Group key={`diag-${k}`} listening={false}>
+              <Group key={key} listening={false}>
                 <Line
                   points={[a.x, a.y, b.x, b.y]}
                   stroke="#F9A825"
@@ -844,7 +874,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
-                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; }}
+                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; setDraggingPoint(i); }}
                   onDragMove={e => {
                     const newPts = [...points];
                     newPts[i] = { ...points[i], x: e.target.x(), y: e.target.y() };
@@ -859,7 +889,7 @@ const CeilingCanvas: React.FC<Props> = ({
                       onChange({ points: newPts });
                     }
                   }}
-                  onDragEnd={() => { isDraggingPoint.current = false; onVertexDragEnd?.(); }}
+                  onDragEnd={() => { isDraggingPoint.current = false; setDraggingPoint(null); onVertexDragEnd?.(); }}
                   onClick={e => {
                     if (closed && !placingLighting) {
                       e.cancelBubble = true;
