@@ -19,6 +19,27 @@ import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheIt
 
 const CLOSE_THRESHOLD = 24;
 const MIN_POINTS = 3;
+// A two-finger gesture is either a rotate or a zoom/pan, never both: it does
+// nothing until one movement clears its threshold, then stays locked to that
+// mode until the fingers lift — so a twist doesn't zoom when the fingers
+// drift apart a little, and a pinch doesn't wobble the drawing.
+const ROTATE_START_DEG = 8;
+const ZOOM_START_RATIO = 1.1;  // finger spread change (either way)
+const PAN_START_PX = 20;       // midpoint travel
+// While rotating, the drawing sticks to a multiple of 90° within this angle,
+// making it easy to get back to the original orientation.
+const ROTATE_SNAP_DEG = 4;
+
+const rotatePt = (p: Point, deg: number): Point => {
+  const r = deg * Math.PI / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
+};
+
+const normDeg = (deg: number) => ((deg % 360) + 540) % 360 - 180;
+
+type Rotation = { angle: number; x: number; y: number };
+const NO_ROTATION: Rotation = { angle: 0, x: 0, y: 0 };
 
 interface Props {
   room: Room;
@@ -92,6 +113,13 @@ const CeilingCanvas: React.FC<Props> = ({
   const [placingTouch, setPlacingTouch] = useState(false);
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
+  // Rotation of the drawing only — the grid lives outside the rotated group
+  // and stays put. In stage (pre-viewport) coordinates a world point p is
+  // drawn at R(angle)·p + (x, y), so it composes with pan/zoom untouched.
+  const [rotation, setRotation] = useState<Rotation>(NO_ROTATION);
+  const rotationRef = useRef(rotation);
+  rotationRef.current = rotation;
+  const prevRoomId = useRef(room.id);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
@@ -103,7 +131,18 @@ const CeilingCanvas: React.FC<Props> = ({
   const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
   const lastMouse = useRef<Point | null>(null);
-  const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null);
+  const pinchRef = useRef<{
+    dist: number; mx: number; my: number;
+    // Finger spread and midpoint at touchdown — for deciding the mode.
+    dist0: number; mx0: number; my0: number;
+    mode: 'pending' | 'rotate' | 'zoom';
+    // Twist tracking: finger-line angle last frame, total twist so far, and
+    // the part of it eaten by the ROTATE_START_DEG dead zone.
+    lastAngle: number; twist: number; twistOffset: number;
+    // Rotation at gesture start and the pivot (drawing's centre, stage coords)
+    // it turns around — fixed for the whole gesture so the drawing stays put.
+    rot0: Rotation; pivot: Point;
+  } | null>(null);
   const isTouching = useRef(false);
   const wallDragOrigin = useRef<Point | null>(null);
   // The true (unsnapped) touch position for the point currently being
@@ -125,8 +164,13 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const fitView = useCallback((pts: Point[]) => {
     if (pts.length === 0) return;
-    const xs = pts.map(p => p.x);
-    const ys = pts.map(p => p.y);
+    const rot = rotationRef.current;
+    const shown = pts.map(p => {
+      const q = rotatePt(p, rot.angle);
+      return { x: q.x + rot.x, y: q.y + rot.y };
+    });
+    const xs = shown.map(p => p.x);
+    const ys = shown.map(p => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const bw = maxX - minX || 1;
@@ -146,6 +190,12 @@ const CeilingCanvas: React.FC<Props> = ({
     setClosed(pts.length >= MIN_POINTS && room.areaSqm > 0);
     setTool(pts.length >= MIN_POINTS && room.areaSqm > 0 ? 'move' : 'draw');
     if (pts.length === 0) setManualStarted(false);
+    // A different room (or a cleared one) starts unrotated.
+    if (prevRoomId.current !== room.id || pts.length < MIN_POINTS) {
+      prevRoomId.current = room.id;
+      rotationRef.current = NO_ROTATION;
+      setRotation(NO_ROTATION);
+    }
     if (pts.length >= MIN_POINTS) {
       fitView(pts);
     } else {
@@ -162,13 +212,27 @@ const CeilingCanvas: React.FC<Props> = ({
   useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedNicheEl(null); }, [placingNiche?.id]);
   useEffect(() => { if (!closed) setSelectedPoint(null); }, [closed]);
 
-  const toCanvas = useCallback((clientX: number, clientY: number, stageEl: HTMLDivElement): Point => {
-    const rect = stageEl.getBoundingClientRect();
+  // Container-relative screen px → world (room) coordinates, undoing both the
+  // viewport pan/zoom and the drawing's rotation.
+  const screenToWorld = (sx: number, sy: number): Point => {
+    const stageX = (sx - viewport.x) / viewport.scale;
+    const stageY = (sy - viewport.y) / viewport.scale;
+    return rotatePt({ x: stageX - rotation.x, y: stageY - rotation.y }, -rotation.angle);
+  };
+
+  const worldToScreen = (p: Point): Point => {
+    const q = rotatePt(p, rotation.angle);
     return {
-      x: (clientX - rect.left - viewport.x) / viewport.scale,
-      y: (clientY - rect.top - viewport.y) / viewport.scale,
+      x: (q.x + rotation.x) * viewport.scale + viewport.x,
+      y: (q.y + rotation.y) * viewport.scale + viewport.y,
     };
-  }, [viewport]);
+  };
+
+  // Text rotation (in the drawing's frame) that reads upright on screen.
+  const uprightDeg = (deg: number) => {
+    const onScreen = normDeg(deg + rotation.angle);
+    return onScreen > 90 || onScreen < -90 ? deg + 180 : deg;
+  };
 
   const computeMetrics = (pts: Point[]) => {
     const areaPx = polygonArea(pts);
@@ -285,16 +349,8 @@ const CeilingCanvas: React.FC<Props> = ({
     if (!stage) return null;
     const pos = stage.getPointerPosition();
     if (!pos) return null;
-    return {
-      x: (pos.x - viewport.x) / viewport.scale,
-      y: (pos.y - viewport.y) / viewport.scale,
-    };
+    return screenToWorld(pos.x, pos.y);
   };
-
-  const screenToWorld = (sx: number, sy: number): Point => ({
-    x: (sx - viewport.x) / viewport.scale,
-    y: (sy - viewport.y) / viewport.scale,
-  });
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isTouching.current) return;
@@ -378,14 +434,37 @@ const CeilingCanvas: React.FC<Props> = ({
         placingTouchTimer.current = null;
       }
       const stage = stageRef.current;
+      // A finger that landed on a vertex or wall has already armed a drag of
+      // it — this is a pinch/twist, so drop that drag rather than moving the
+      // point or bending the wall along with the gesture.
+      stage?.find((n: Konva.Node) => n.isDragging()).forEach(n => n.stopDrag());
+      isDraggingPoint.current = false;
+      setDraggingPoint(null);
       const rect = stage?.container().getBoundingClientRect();
+      const mx = rect ? (touches[0].clientX + touches[1].clientX) / 2 - rect.left : 0;
+      const my = rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : 0;
+      // Turn around the drawing's own centre (bbox of what's on screen) so it
+      // spins in place; with nothing drawn yet, fall back to the fingers.
+      let pivot: Point = { x: (mx - viewport.x) / viewport.scale, y: (my - viewport.y) / viewport.scale };
+      if (points.length > 0) {
+        const shown = points.map(p => {
+          const q = rotatePt(p, rotation.angle);
+          return { x: q.x + rotation.x, y: q.y + rotation.y };
+        });
+        const xs = shown.map(p => p.x), ys = shown.map(p => p.y);
+        pivot = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+      }
+      const dist0 = Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY,
+      );
       pinchRef.current = {
-        dist: Math.hypot(
-          touches[0].clientX - touches[1].clientX,
-          touches[0].clientY - touches[1].clientY,
-        ),
-        mx: rect ? (touches[0].clientX + touches[1].clientX) / 2 - rect.left : 0,
-        my: rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : 0,
+        dist: dist0, mx, my,
+        dist0, mx0: mx, my0: my,
+        mode: 'pending',
+        lastAngle: Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX) * 180 / Math.PI,
+        twist: 0, twistOffset: 0,
+        rot0: rotation, pivot,
       };
       lastTouch.current = null;
       touchRawRef.current = null;
@@ -402,7 +481,7 @@ const CeilingCanvas: React.FC<Props> = ({
       if (!stage) return;
       const pos = stage.getPointerPosition();
       if (!pos) return;
-      const pt = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+      const pt = screenToWorld(pos.x, pos.y);
       handleTap(pt);
       if (!closed) setCursor(pt);
       return;
@@ -419,7 +498,7 @@ const CeilingCanvas: React.FC<Props> = ({
       if (!stage) return;
       const pos = stage.getPointerPosition();
       if (!pos) return;
-      const raw = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+      const raw = screenToWorld(pos.x, pos.y);
       // Don't commit yet — the point lands on release (handleTouchEnd) so the
       // finger can still nudge it beforehand. And don't even arm the "placing"
       // state until TOUCH_PLACE_DELAY has passed without a second finger
@@ -442,29 +521,61 @@ const CeilingCanvas: React.FC<Props> = ({
   const handleTouchMove = (e: Konva.KonvaEventObject<TouchEvent>) => {
     const touches = e.evt.touches;
 
-    // ── Pinch: zoom anchored to midpoint + pan ──
+    // ── Two fingers: twist rotates the drawing, or pinch zooms (anchored to
+    // the midpoint) + pans — whichever clears its threshold first wins ──
     if (touches.length === 2 && pinchRef.current) {
       e.evt.preventDefault();
+      const pinch = pinchRef.current;
       const newDist = Math.hypot(
         touches[0].clientX - touches[1].clientX,
         touches[0].clientY - touches[1].clientY,
       );
-      const ratio = newDist / pinchRef.current.dist;
+      const ratio = newDist / pinch.dist;
 
       const stage = stageRef.current;
       const rect = stage?.container().getBoundingClientRect();
-      const mx = rect ? (touches[0].clientX + touches[1].clientX) / 2 - rect.left : pinchRef.current.mx;
-      const my = rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : pinchRef.current.my;
-      const pdx = mx - pinchRef.current.mx;
-      const pdy = my - pinchRef.current.my;
+      const mx = rect ? (touches[0].clientX + touches[1].clientX) / 2 - rect.left : pinch.mx;
+      const my = rect ? (touches[0].clientY + touches[1].clientY) / 2 - rect.top  : pinch.my;
 
-      setViewport(v => ({
-        scale: Math.min(8, Math.max(0.2, v.scale * ratio)),
-        x: mx - (mx - v.x) * ratio + pdx,
-        y: my - (my - v.y) * ratio + pdy,
-      }));
+      // Accumulate the twist frame by frame (so it can go past ±180°).
+      const angle = Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX) * 180 / Math.PI;
+      const twist = pinch.twist + normDeg(angle - pinch.lastAngle);
+      let { mode, twistOffset } = pinch;
+      if (mode === 'pending') {
+        const spread = newDist / pinch.dist0;
+        if (Math.abs(twist) > ROTATE_START_DEG) {
+          mode = 'rotate';
+          // Measure from the dead zone's edge so the drawing doesn't jump.
+          twistOffset = Math.sign(twist) * ROTATE_START_DEG;
+        } else if (
+          spread > ZOOM_START_RATIO || spread < 1 / ZOOM_START_RATIO ||
+          Math.hypot(mx - pinch.mx0, my - pinch.my0) > PAN_START_PX
+        ) {
+          mode = 'zoom';
+        }
+      }
 
-      pinchRef.current = { dist: newDist, mx, my };
+      if (mode === 'rotate') {
+        const { rot0, pivot } = pinch;
+        let target = rot0.angle + twist - twistOffset;
+        const square = Math.round(target / 90) * 90;
+        if (Math.abs(target - square) < ROTATE_SNAP_DEG) target = square;
+        // Re-pivot: R(Δ)·(t0 − c) + c keeps the pivot (drawing centre) fixed.
+        const t = rotatePt({ x: rot0.x - pivot.x, y: rot0.y - pivot.y }, target - rot0.angle);
+        setRotation({ angle: normDeg(target), x: t.x + pivot.x, y: t.y + pivot.y });
+      } else if (mode === 'zoom' && pinch.mode === 'zoom') {
+        // Applied per frame from the previous one — skipped on the frame the
+        // mode locks in, so the movement spent deciding isn't applied as a jump.
+        const pdx = mx - pinch.mx;
+        const pdy = my - pinch.my;
+        setViewport(v => ({
+          scale: Math.min(8, Math.max(0.2, v.scale * ratio)),
+          x: mx - (mx - v.x) * ratio + pdx,
+          y: my - (my - v.y) * ratio + pdy,
+        }));
+      }
+
+      pinchRef.current = { ...pinch, dist: newDist, mx, my, mode, lastAngle: angle, twist, twistOffset };
       return;
     }
 
@@ -473,12 +584,12 @@ const CeilingCanvas: React.FC<Props> = ({
     const pos = stage.getPointerPosition();
 
     if (placingLighting?.placement === 'path' && inProgressLightingPath.length > 0 && touches.length === 1 && pos) {
-      setCursor({ x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale });
+      setCursor(screenToWorld(pos.x, pos.y));
       return;
     }
 
     if (placingNiche && touches.length === 1 && pos) {
-      const raw = { x: (pos.x - viewport.x) / viewport.scale, y: (pos.y - viewport.y) / viewport.scale };
+      const raw = screenToWorld(pos.x, pos.y);
       if (inProgressNichePath.length > 0) {
         const { point, onWall } = snapToWall(raw);
         const last = inProgressNichePath[inProgressNichePath.length - 1];
@@ -494,9 +605,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (tool === 'draw' && !closed && touches.length === 1 && (placingTouch || placingTouchTimer.current !== null)) {
       const rect = stage.container().getBoundingClientRect();
-      const tx = (touches[0].clientX - rect.left - viewport.x) / viewport.scale;
-      const ty = (touches[0].clientY - rect.top  - viewport.y) / viewport.scale;
-      const raw = { x: tx, y: ty };
+      const raw = screenToWorld(touches[0].clientX - rect.left, touches[0].clientY - rect.top);
       touchRawRef.current = raw;
       setCursor(raw);
     } else if (tool === 'move' && lastTouch.current && touches.length === 1 && !isDraggingPoint.current) {
@@ -598,8 +707,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const cm = pxToCm(d);
     const dx = p.x - prev.x, dy = p.y - prev.y;
     const segLen = Math.hypot(dx, dy) || 1;
-    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    if (angle > 90 || angle < -90) angle += 180; // keep text upright, never upside-down
+    const angle = uprightDeg(Math.atan2(dy, dx) * 180 / Math.PI); // keep text upright, never upside-down
     // Push the label out along the wall's normal, away from the room's
     // centroid, so it floats outside the drawing instead of on the line.
     let nx = -dy / segLen, ny = dx / segLen;
@@ -677,9 +785,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const stageEl = stageRef.current?.container();
     if (!stageEl) return;
     const rect = stageEl.getBoundingClientRect();
-    const tx = (e.clientX - rect.left - viewport.x) / viewport.scale;
-    const ty = (e.clientY - rect.top  - viewport.y) / viewport.scale;
-    setCursor({ x: tx, y: ty });
+    setCursor(screenToWorld(e.clientX - rect.left, e.clientY - rect.top));
   };
 
   return (
@@ -715,6 +821,9 @@ const CeilingCanvas: React.FC<Props> = ({
             <Line key={`gh${i}`} points={[-width, i * GRID_SIZE, width * 2, i * GRID_SIZE]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
           ))}
 
+          {/* Everything below is the drawing — rotated as one, the grid above is not */}
+          <Group x={rotation.x} y={rotation.y} rotation={rotation.angle}>
+
           {/* Filled polygon */}
           {closed && points.length > 2 && (
             <Line
@@ -743,7 +852,9 @@ const CeilingCanvas: React.FC<Props> = ({
               {dist(previewLine[0], previewLine[1]) > 1 && (
                 <Text
                   x={(previewLine[0].x + previewLine[1].x) / 2}
-                  y={(previewLine[0].y + previewLine[1].y) / 2 - 16}
+                  y={(previewLine[0].y + previewLine[1].y) / 2}
+                  offsetY={16}
+                  rotation={-rotation.angle}
                   text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1])))}
                   fontSize={12}
                   fontStyle="bold"
@@ -764,11 +875,10 @@ const CeilingCanvas: React.FC<Props> = ({
             const ly = (a.y + b.y) / 2;
             const dx = b.x - a.x, dy = b.y - a.y;
             const segLen = Math.hypot(dx, dy) || 1;
-            let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-            if (angle > 90 || angle < -90) angle += 180; // keep text upright, never upside-down
-            // Nudge the label to the upper side of the diagonal, same as wall labels
+            const angle = uprightDeg(Math.atan2(dy, dx) * 180 / Math.PI); // keep text upright, never upside-down
+            // Nudge the label to the upper side (on screen) of the diagonal, same as wall labels
             let nx = -dy / segLen, ny = dx / segLen;
-            if (ny > 0) { nx = -nx; ny = -ny; }
+            if (rotatePt({ x: nx, y: ny }, rotation.angle).y > 0) { nx = -nx; ny = -ny; }
             const margin = 7;
             const label = `${labelI}–${labelJ} ${fmtCm(pxToCm(dist(a, b)))}`;
             return (
@@ -816,6 +926,7 @@ const CeilingCanvas: React.FC<Props> = ({
               x={0} y={0}
               onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
               onDragStart={e => {
+                if (pinchRef.current) { e.target.stopDrag(); return; }
                 onVertexDragStart?.();
                 setSelectedPoint(null);
                 setCursor(null);
@@ -823,7 +934,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 wallDragOrigin.current = getPointerPos(e);
               }}
               onDragMove={e => {
-                if (!wallDragOrigin.current) return;
+                if (!wallDragOrigin.current || pinchRef.current) return;
                 const dragPt = { x: wallDragOrigin.current.x + e.target.x(), y: wallDragOrigin.current.y + e.target.y() };
                 const bulge = bulgeFromThreePoints(w.a, w.b, dragPt, MAX_WALL_BULGE);
                 // Stop the wall right where it would start overlapping another
@@ -874,8 +985,9 @@ const CeilingCanvas: React.FC<Props> = ({
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
-                  onDragStart={() => { onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; setDraggingPoint(i); }}
+                  onDragStart={e => { if (pinchRef.current) { e.target.stopDrag(); return; } onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; setDraggingPoint(i); }}
                   onDragMove={e => {
+                    if (pinchRef.current) return;
                     const newPts = [...points];
                     newPts[i] = { ...points[i], x: e.target.x(), y: e.target.y() };
                     setPoints(newPts);
@@ -909,6 +1021,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   x={p.x} y={p.y}
                   width={baseRadius * 2} height={baseRadius * 2}
                   offsetX={baseRadius} offsetY={baseRadius}
+                  rotation={-rotation.angle}
                   align="center" verticalAlign="middle"
                   text={pointLabel(i)}
                   fontSize={baseRadius + 3} fontStyle="bold"
@@ -940,7 +1053,9 @@ const CeilingCanvas: React.FC<Props> = ({
                   onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
                 />
                 <Text
-                  x={el.x - 10} y={el.y - 10}
+                  x={el.x} y={el.y}
+                  offsetX={10} offsetY={10}
+                  rotation={-rotation.angle}
                   text={el.catalogItem.symbol}
                   fontSize={20}
                   fill={lightColor(el.catalogItem.color)}
@@ -1057,6 +1172,7 @@ const CeilingCanvas: React.FC<Props> = ({
           {nicheStartMarker && (
             <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9} fill="#2dd36f" listening={false} />
           )}
+          </Group>
         </Layer>
       </Stage>
 
@@ -1118,8 +1234,7 @@ const CeilingCanvas: React.FC<Props> = ({
       {/* Delete point button */}
       {selectedPoint !== null && points.length > 3 && (() => {
         const p = points[selectedPoint];
-        const sx = p.x * viewport.scale + viewport.x;
-        const sy = p.y * viewport.scale + viewport.y;
+        const { x: sx, y: sy } = worldToScreen(p);
         return (
           <button
             onClick={() => deletePoint(selectedPoint)}
@@ -1157,8 +1272,7 @@ const CeilingCanvas: React.FC<Props> = ({
           wx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
           wy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
         }
-        const sx = wx * viewport.scale + viewport.x;
-        const sy = wy * viewport.scale + viewport.y;
+        const { x: sx, y: sy } = worldToScreen({ x: wx, y: wy });
         return (
           <button
             onClick={() => {
@@ -1192,8 +1306,7 @@ const CeilingCanvas: React.FC<Props> = ({
         if (!el) return null;
         const wx = el.points.reduce((s, p) => s + p.x, 0) / el.points.length;
         const wy = el.points.reduce((s, p) => s + p.y, 0) / el.points.length;
-        const sx = wx * viewport.scale + viewport.x;
-        const sy = wy * viewport.scale + viewport.y;
+        const { x: sx, y: sy } = worldToScreen({ x: wx, y: wy });
         return (
           <button
             onClick={() => {
