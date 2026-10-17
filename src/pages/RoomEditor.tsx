@@ -4,29 +4,17 @@ import {
   IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
   useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
-import {
-  chevronBackOutline,
-  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
-  closeOutline, ellipsisVerticalOutline,
-} from 'ionicons/icons';
+import { chevronBackOutline, closeOutline, ellipsisVerticalOutline } from 'ionicons/icons';
 import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
 import CeilingCanvas from '../components/CeilingCanvas';
+import RoomSheet from '../components/RoomSheet';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
 import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
 import { useT } from '../lib/i18n';
-
-const MAT_TABS = [
-  { section: 'fabric',      labelKey: 'mat.tabFabric',   icon: layersOutline,       color: '#1E88E5' },
-  { section: 'profile',     labelKey: 'mat.tabProfile',  icon: reorderThreeOutline, color: '#8E24AA' },
-  { section: 'lighting',    labelKey: 'mat.tabLight',    icon: bulbOutline,         color: '#F9A825' },
-  { section: 'niche',       labelKey: 'mat.tabNiche',    icon: albumsOutline,       color: '#00838F' },
-  { section: 'accessories', labelKey: 'mat.tabAccess',   icon: buildOutline,        color: '#2E7D32' },
-  { section: 'services',    labelKey: 'mat.tabServices', icon: briefcaseOutline,    color: '#C62828', noWrap: true },
-];
 
 const RoomEditor: React.FC = () => {
   const { t } = useT();
@@ -79,7 +67,18 @@ const RoomEditor: React.FC = () => {
     setUndoStack([]);
     setRedoStack([]);
   }, [projectId, roomId]);
+  // The outline can change on another page (diagonals). Coming back, record the
+  // shape we had as an undo step so «Отменить» can return to it.
+  const roomRef = useRef<Room | null>(null);
+  roomRef.current = room;
   useIonViewWillEnter(() => {
+    const before = roomRef.current;
+    const after = getProject(projectId)?.rooms.find(r => r.id === roomId);
+    if (before && after && before.id === after.id &&
+        JSON.stringify(before.points) !== JSON.stringify(after.points)) {
+      setUndoStack(prev => [...prev.slice(-30), before]);
+      setRedoStack([]);
+    }
     load();
     const params = new URLSearchParams(window.location.search);
     if (params.get('pickLighting') === '1') {
@@ -413,56 +412,7 @@ const RoomEditor: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-
-          {/* ── Materials tab bar ── */}
-          <div style={{
-            background: 'rgba(8, 12, 22, 0.96)',
-            borderBottom: '1px solid rgba(255,255,255,0.07)',
-            overflowX: 'auto',
-            flexShrink: 0,
-            WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'none',
-          } as React.CSSProperties}>
-            <div style={{
-              display: 'flex',
-              padding: '6px 8px',
-            }}>
-              {MAT_TABS.map((tab, idx) => (
-                <React.Fragment key={tab.section}>
-                  {idx > 0 && (
-                    <div style={{
-                      width: 1, alignSelf: 'stretch',
-                      background: 'rgba(255,255,255,0.1)',
-                      margin: '6px 0',
-                      flexShrink: 0,
-                    }} />
-                  )}
-                  <button
-                    onClick={() => router.push(`/project/${projectId}/room/${roomId}/materials/${tab.section}`)}
-                    style={{
-                      flex: 1, maxWidth: 90,
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                      padding: '8px 4px', borderRadius: 12, border: 'none',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <IonIcon icon={tab.icon} style={{ fontSize: 22, color: tab.color, display: 'block' }} />
-                    <span style={{
-                      fontSize: 9, fontWeight: 700,
-                      textTransform: 'uppercase', letterSpacing: 0.5,
-                      lineHeight: 1.2, textAlign: 'center',
-                      color: 'rgba(255,255,255,0.5)',
-                      whiteSpace: (tab as any).noWrap ? 'nowrap' : 'normal',
-                    }}>
-                      {t(tab.labelKey)}
-                    </span>
-                  </button>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, position: 'relative' }}>
 
           {/* ── Canvas ── */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
@@ -511,7 +461,14 @@ const RoomEditor: React.FC = () => {
             </div>
           </div>{/* end canvas */}
 
-          {/* ── Bottom dock ── */}
+          {/* ── Bottom: summary sheet, or the finish bar while placing ── */}
+          {!placingLighting && !placingNiche ? (
+            <RoomSheet
+              room={room}
+              onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
+              onOpenEstimate={() => router.push(`/project/${projectId}/summary`)}
+            />
+          ) : (
           <div style={{
             background: 'rgba(8, 12, 22, 0.94)',
             backdropFilter: 'blur(20px)',
@@ -612,15 +569,8 @@ const RoomEditor: React.FC = () => {
               </div>
             )}
 
-            {/* Summary stats */}
-            {room.areaSqm > 0 && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <StatBadge label={t('re.area')} value={`${room.areaSqm.toFixed(2)} м²`} />
-                <StatBadge label={t('re.perimeter')} value={`${room.perimeterM.toFixed(2)} м`} />
-                <StatBadge label={t('re.corners')} value={String(room.points.length)} />
-              </div>
-            )}
           </div>
+          )}
         </div>
 
       {/* ── Templates sheet ── */}
@@ -811,16 +761,6 @@ const MenuAction: React.FC<{ label: string; color: string; onClick: () => void }
   >
     {label}
   </button>
-);
-
-const StatBadge: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div style={{
-    flex: 1, background: 'rgba(255,255,255,0.07)', borderRadius: 12,
-    padding: '8px 10px', textAlign: 'center',
-  }}>
-    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{value}</div>
-    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-  </div>
 );
 
 export default RoomEditor;

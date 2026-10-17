@@ -154,6 +154,8 @@ export interface Room {
   areaSqm: number;
   perimeterM: number;
   visualization: RoomVisualization | null;
+  /** Diagonal hints on the drawing; undefined = shown */
+  showDiagonals?: boolean;
 }
 
 export interface Project {

@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
-  IonList, IonItem, IonLabel,
+  IonList, IonItem, IonLabel, IonToggle,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
   chevronBackOutline, checkmarkOutline,
   trashOutline, pencilOutline, addOutline, settingsOutline, ellipsisVerticalOutline,
-  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
+  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline, resizeOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
@@ -16,9 +16,11 @@ import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
   edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE, CM_PER_GRID,
-  edgeLen, pointOnArc, splitBulge, totalFabricCorners,
+  edgeLen, pointOnArc, splitBulge, totalFabricCorners, dist,
 } from '../lib/geometry';
 import { useT } from '../lib/i18n';
+import DiagonalPreview from '../components/DiagonalPreview';
+import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm, makePointMapper } from '../lib/diagonals';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
@@ -26,9 +28,10 @@ const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 // per-corner price only applies past that.
 const FREE_FABRIC_CORNERS = 4;
 
-type Section = 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
+type Section = 'diagonals' | 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
 
 const SECTION_META: Record<Section, { titleKey: string; icon: string }> = {
+  diagonals:   { titleKey: 'sec.diagonals',    icon: resizeOutline },
   fabric:      { titleKey: 'sec.fabric',       icon: layersOutline },
   profile:     { titleKey: 'sec.profile',      icon: reorderThreeOutline },
   lighting:    { titleKey: 'sec.lighting',     icon: bulbOutline },
@@ -59,6 +62,10 @@ const RoomMaterials: React.FC = () => {
   const [addNicheOpen, setAddNicheOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [activeDiag, setActiveDiag] = useState<string | null>(null);
+  // Diagonal lengths being typed (cm, raw input) — applied to the drawing on «Применить»
+  const [diagDraft, setDiagDraft] = useState<Record<string, string>>({});
+  const [diagDriver, setDiagDriver] = useState<string | null>(null);
 
   const load = () => {
     const p = getProject(projectId);
@@ -88,6 +95,65 @@ const RoomMaterials: React.FC = () => {
     };
     setProject(proj);
     upsertProject(proj);
+  };
+
+  // ── Diagonals ──
+  // The walls stay as they are; typing a diagonal reshapes the outline around
+  // it. Only n − 3 diagonals are free — for a quad, the one typed last drives
+  // and the other follows.
+  const diagList = room.areaSqm > 0 ? roomDiagonals(room.points) : [];
+  const diagFixing = shapeDiagonals(room.points, diagDriver);
+  const diagTargets: Record<string, number> = {};
+  for (const [i, j] of diagFixing) {
+    const raw = diagDraft[`${i}-${j}`];
+    const cm = raw == null ? NaN : Math.round(parseFloat(raw));
+    if (cm > 0) diagTargets[`${i}-${j}`] = cm;
+  }
+  const diagPoints = Object.keys(diagTargets).length > 0
+    ? reshapeByDiagonals(room.points, diagFixing, diagTargets)
+    : room.points;
+  const diagDirty = diagPoints != null &&
+    Object.entries(diagTargets).some(([k, cm]) => {
+      const [i, j] = k.split('-').map(Number);
+      return cm !== diagonalCm(room.points, i, j);
+    });
+  const diagRange = diagPoints == null && diagDriver
+    ? diagonalRangeCm(room.points, diagFixing, diagTargets, diagDriver)
+    : null;
+
+  const editDiagonal = (key: string, raw: string) => {
+    setActiveDiag(key);
+    setDiagDriver(key);
+    // drafts for diagonals that no longer drive the shape would be stale
+    const free = new Set(shapeDiagonals(room.points, key).map(([i, j]) => `${i}-${j}`));
+    setDiagDraft(prev => {
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) if (free.has(k)) next[k] = v;
+      next[key] = raw;
+      return next;
+    });
+  };
+
+  const applyDiagonals = () => {
+    if (!diagPoints || !diagDirty) return;
+    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(diagPoints))) ** 2).toFixed(2));
+    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(diagPoints)).toFixed(2));
+    // Lights and niche lines move with the walls around them
+    const move = makePointMapper(room.points, diagPoints, diagFixing);
+    const pathM = (ps: { x: number; y: number }[]) =>
+      pxToMeters(ps.slice(1).reduce((sum, p, i) => sum + dist(ps[i], p), 0));
+    const lighting = (room.lighting ?? []).map(e => {
+      if (e.kind === 'point') return { ...e, ...move(e) };
+      const pts = e.points.map(move);
+      return { ...e, points: pts, lengthM: pathM(pts) };
+    });
+    const selectedNiches = (room.selectedNiches ?? []).map(n => {
+      if (n.kind !== 'path') return n;
+      const pts = n.points.map(move);
+      return { ...n, points: pts, lengthM: pathM(pts) };
+    });
+    updateRoom({ points: diagPoints, areaSqm, perimeterM, lighting, selectedNiches });
+    setDiagDraft({});
   };
 
   // ── Fabric ──
@@ -550,6 +616,118 @@ const RoomMaterials: React.FC = () => {
                   </IonList>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ ДИАГОНАЛИ ═══ */}
+        {section === 'diagonals' && (
+          <div style={{ padding: '12px 16px 100px' }}>
+            {room.areaSqm === 0 ? (
+              <div style={{ padding: '8px 0' }}>
+                <HintText text={t('mat.drawFirst')} />
+                <button
+                  onClick={() => router.push(backHref, 'back')}
+                  style={{
+                    marginTop: 8, padding: '10px 18px', borderRadius: 12,
+                    border: '1.5px solid #1E88E5', background: 'transparent',
+                    color: '#1E88E5', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {t('mat.openDraft')}
+                </button>
+              </div>
+            ) : diagList.length === 0 ? (
+              <HintText text={t('diag.triangle')} />
+            ) : (
+              <>
+                <DiagonalPreview
+                  points={diagPoints ?? room.points}
+                  diagonals={diagList}
+                  activeKey={activeDiag}
+                  invalid={diagPoints == null}
+                  onSelect={setActiveDiag}
+                />
+                <div style={{ marginTop: 12 }}>
+                  <HintText text={t('diag.hint')} />
+                </div>
+                <div className="card" style={{ overflow: 'hidden', marginTop: 4 }}>
+                  {diagList.map((d, k) => {
+                    const value = diagDraft[d.key] ?? String(diagonalCm(diagPoints ?? room.points, d.i, d.j));
+                    const active = activeDiag === d.key;
+                    const bad = diagPoints == null && diagDriver === d.key;
+                    return (
+                      <div
+                        key={d.key}
+                        onClick={() => setActiveDiag(d.key)}
+                        style={{
+                          padding: '12px 16px',
+                          borderTop: k > 0 ? '1px solid rgba(0,0,0,0.07)' : undefined,
+                          background: active ? 'rgba(249,168,37,0.08)' : undefined,
+                          boxShadow: active ? 'inset 3px 0 0 #F9A825' : undefined,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{
+                            width: 44, height: 36, borderRadius: 10, flexShrink: 0,
+                            background: 'rgba(249,168,37,0.15)', color: '#F9A825',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontWeight: 800, fontSize: 14,
+                          }}>
+                            {d.label}
+                          </div>
+                          <div style={{ flex: 1 }} />
+                          <div style={{
+                            width: 130, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+                            borderRadius: 10, padding: '0 12px',
+                            border: `1.5px solid ${bad ? '#E53935' : active ? '#F9A825' : 'rgba(0,0,0,0.15)'}`,
+                          }}>
+                            <input
+                              type="number" inputMode="numeric" min="0" step="1"
+                              value={value}
+                              onChange={e => editDiagonal(d.key, e.target.value)}
+                              onFocus={e => { setActiveDiag(d.key); e.target.select(); }}
+                              style={{
+                                width: '100%', minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+                                padding: '9px 0', fontSize: 17, fontWeight: 700, color: 'inherit',
+                              }}
+                            />
+                            <span style={{ fontSize: 14, color: '#888', flexShrink: 0 }}>{t('re.cm')}</span>
+                          </div>
+                        </div>
+                        {bad && diagRange && (
+                          <div style={{ fontSize: 12, color: '#E53935', marginTop: 6, textAlign: 'right' }}>
+                            {t('diag.range', { min: diagRange[0], max: diagRange[1] })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={applyDiagonals}
+                  disabled={!diagDirty}
+                  style={{
+                    width: '100%', marginTop: 16, padding: '14px 16px', borderRadius: 14, border: 'none',
+                    fontSize: 15, fontWeight: 700,
+                    background: diagDirty ? '#F9A825' : 'rgba(0,0,0,0.08)',
+                    color: diagDirty ? '#000' : 'rgba(0,0,0,0.3)',
+                    cursor: diagDirty ? 'pointer' : 'default',
+                  }}
+                >
+                  {t('diag.apply')}
+                </button>
+                <div className="card" style={{ marginTop: 16, overflow: 'hidden' }}>
+                  <IonItem lines="none" style={{ '--background': 'transparent' } as React.CSSProperties}>
+                    <IonToggle
+                      checked={room.showDiagonals !== false}
+                      onIonChange={e => updateRoom({ showDiagonals: e.detail.checked })}
+                    >
+                      {t('diag.show')}
+                    </IonToggle>
+                  </IonItem>
+                </div>
+              </>
             )}
           </div>
         )}

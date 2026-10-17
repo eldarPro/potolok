@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, trashOutline, resizeOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, trashOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
 import {
@@ -126,7 +126,6 @@ const CeilingCanvas: React.FC<Props> = ({
   const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
   const [selectedNicheEl, setSelectedNicheEl] = useState<string | null>(null);
   const [nicheHoverOnWall, setNicheHoverOnWall] = useState(false);
-  const [showDiagonals, setShowDiagonals] = useState(true);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
@@ -161,6 +160,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const TOUCH_PLACE_DELAY = 60;
 
   const isClosed = closed || points.length >= MIN_POINTS;
+  const showDiagonals = room.showDiagonals !== false;
 
   const fitView = useCallback((pts: Point[]) => {
     if (pts.length === 0) return;
@@ -182,6 +182,10 @@ const CeilingCanvas: React.FC<Props> = ({
     setViewport({ scale, x: width / 2 - cx * scale, y: height / 2 - cy * scale });
   }, [width, height]);
 
+  // Re-sync whenever the outline itself changes — not just its point count or
+  // perimeter: reshaping by a diagonal keeps both and only moves corners.
+  const shapeKey = room.points.map(p => `${p.x},${p.y},${p.bulge ?? 0}`).join(';');
+
   useEffect(() => {
     if (isDraggingPoint.current) return;
     const pts = room.points;
@@ -201,7 +205,7 @@ const CeilingCanvas: React.FC<Props> = ({
     } else {
       setViewport({ x: 0, y: 0, scale: 1 });
     }
-  }, [room.id, room.points.length, room.perimeterM, fitView]);
+  }, [room.id, shapeKey, room.perimeterM, fitView]);
 
   useEffect(() => () => {
     if (placingTouchTimer.current !== null) clearTimeout(placingTouchTimer.current);
@@ -1211,25 +1215,6 @@ const CeilingCanvas: React.FC<Props> = ({
           </>
         )}
       </div>
-
-      {/* Diagonals toggle */}
-      {closed && points.length >= 4 && !placingLighting && (
-        <button
-          onClick={() => setShowDiagonals(s => !s)}
-          title="Диагонали"
-          style={{
-            position: 'absolute', top: 10, right: 10,
-            width: 44, height: 44, borderRadius: 14, border: 'none',
-            cursor: 'pointer',
-            background: showDiagonals ? 'rgba(249,168,37,0.92)' : 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(8px)',
-            color: showDiagonals ? '#000' : '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <IonIcon icon={resizeOutline} style={{ fontSize: 22 }} />
-        </button>
-      )}
 
       {/* Delete point button */}
       {selectedPoint !== null && points.length > 3 && (() => {
