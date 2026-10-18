@@ -16,7 +16,7 @@ export interface Env {
   ALLOWED_ORIGIN?: string;
 }
 
-const MODEL = 'qwen-image-edit';
+const MODEL = 'qwen-image-3.0';
 
 function corsHeaders(env: Env): Record<string, string> {
   return {

@@ -311,6 +311,7 @@ const ProjectDetail: React.FC = () => {
         onDidDismiss={() => setRoomMenuId(null)}
         header={menuRoom?.name}
         buttons={[
+          { text: t('viz.menuItem'), handler: () => { if (menuRoom) router.push(`/project/${id}/room/${menuRoom.id}/visualize`, 'forward', 'push'); } },
           { text: t('common.delete'), role: 'destructive', handler: () => { if (menuRoom) handleDeleteRoom(menuRoom.id); } },
           { text: t('common.cancel'), role: 'cancel' },
         ]}

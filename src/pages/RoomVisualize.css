@@ -39,6 +39,12 @@
   max-width: 320px;
 }
 
+.viz-empty__hint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .viz-empty__actions {
   display: flex;
   flex-direction: column;

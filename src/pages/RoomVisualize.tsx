@@ -6,7 +6,7 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline, cameraOutline, imagesOutline, sparklesOutline,
-  arrowUndoOutline, refreshOutline, downloadOutline, trashOutline,
+  arrowUndoOutline, refreshOutline, downloadOutline, trashOutline, cubeOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadLightings } from '../lib/storage';
@@ -60,6 +60,8 @@ const RoomVisualize: React.FC = () => {
 
   if (!project || !room) return null;
 
+  const hasDrawing = room.areaSqm > 0;
+
   const versions = room.visualization?.versions ?? [];
   const current = versions[versions.length - 1] ?? null;
 
@@ -90,21 +92,52 @@ const RoomVisualize: React.FC = () => {
     }
   };
 
+  /** Generates an edit of the last version in `base`; on failure the prompt stays in the box to retry. */
+  const generateFrom = async (base: VisualizationVersion[], text: string) => {
+    try {
+      const resultRaw = await generateCeilingImage(base[base.length - 1].image, text);
+      const result = await downscaleDataUrl(resultRaw);
+      const version: VisualizationVersion = { id: uuid(), image: result, prompt: text, createdAt: new Date().toISOString() };
+      persist({ versions: [...base, version] });
+      setPrompt('');
+    } catch (e) {
+      setPrompt(text);
+      const code = e instanceof ImageEditError ? e.code : 'network';
+      const key = code === 'blocked' ? 'viz.errorBlocked' : 'viz.error';
+      presentToast({ message: t(key), duration: 3000, color: 'danger', position: 'bottom' });
+    }
+  };
+
   const handleGenerate = async () => {
     if (!current || busy) return;
     const text = prompt.trim();
     if (!text) return;
     setBusy(true);
     try {
-      const resultRaw = await generateCeilingImage(current.image, text);
-      const result = await downscaleDataUrl(resultRaw);
-      const version: VisualizationVersion = { id: uuid(), image: result, prompt: text, createdAt: new Date().toISOString() };
-      persist({ versions: [...versions, version] });
-      setPrompt('');
-    } catch (e) {
-      const code = e instanceof ImageEditError ? e.code : 'network';
-      const key = code === 'blocked' ? 'viz.errorBlocked' : 'viz.error';
-      presentToast({ message: t(key), duration: 3000, color: 'danger', position: 'bottom' });
+      await generateFrom(versions, text);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // The 3D sketch becomes the "original" (versions[0]); the AI pass on top of it is versions[1].
+  const handleFromDrawing = async () => {
+    if (busy || !hasDrawing) return;
+    setBusy(true);
+    try {
+      let sketch: VisualizationVersion;
+      let text: string;
+      try {
+        const { renderRoomScene, drawingPrompt } = await import('../lib/roomScene');
+        const image = await downscaleDataUrl(await renderRoomScene(room));
+        sketch = { id: uuid(), image, prompt: '', createdAt: new Date().toISOString() };
+        text = drawingPrompt(room);
+      } catch {
+        presentToast({ message: t('viz.sketchError'), duration: 2500, color: 'danger', position: 'bottom' });
+        return;
+      }
+      persist({ versions: [sketch] });
+      await generateFrom([sketch], text);
     } finally {
       setBusy(false);
     }
@@ -146,6 +179,10 @@ const RoomVisualize: React.FC = () => {
               <ActionButton icon={imagesOutline} onClick={() => photoInputRef.current?.click()}>
                 {t('viz.uploadPhoto')}
               </ActionButton>
+              <ActionButton icon={cubeOutline} disabled={!hasDrawing || busy} onClick={handleFromDrawing}>
+                {busy ? t('viz.generating') : t('viz.fromDrawing')}
+              </ActionButton>
+              {!hasDrawing && <div className="viz-empty__hint">{t('viz.needDrawing')}</div>}
             </div>
           </div>
         ) : (
