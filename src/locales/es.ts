@@ -306,7 +306,6 @@ const s: Record<string, string> = {
   'prof.applySize': 'Aplicar medida',
   'prof.sheetTitle': 'Perfil para la pared',
   'prof.wallCost': 'pared ≈ {sum} ₽',
-  'prof.applyAllWalls': 'Aplicar a todas las paredes',
   'split.from': 'Desde {p}',
   'split.to': 'Hasta {p}',
   'split.part': 'Parte {n}',

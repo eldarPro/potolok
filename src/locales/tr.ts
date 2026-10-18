@@ -306,7 +306,6 @@ const s: Record<string, string> = {
   'prof.applySize': 'Ölçüyü uygula',
   'prof.sheetTitle': 'Duvar profili',
   'prof.wallCost': 'duvar ≈ {sum} ₽',
-  'prof.applyAllWalls': 'Tüm duvarlara uygula',
   'split.from': '{p} noktasından',
   'split.to': '{p} noktasına',
   'split.part': 'Parça {n}',

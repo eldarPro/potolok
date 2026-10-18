@@ -61,7 +61,6 @@ const RoomMaterials: React.FC = () => {
   const [activeWall, setActiveWall] = useState<number | null>(null);
   const [wallDraft, setWallDraft] = useState<Record<number, string>>({});
   const [profileSheetWall, setProfileSheetWall] = useState<number | null>(null);
-  const [profileSheetAll, setProfileSheetAll] = useState(false);
   const [wallMenu, setWallMenu] = useState<number | null>(null);
   const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
@@ -470,7 +469,6 @@ const RoomMaterials: React.FC = () => {
     if (cm > 0 && cm !== wallCmOf(wallPreviewPts, i)) wallPreviewPts = resizedPoints(wallPreviewPts, i, cm) ?? wallPreviewPts;
   }
   const wallsDirty = wallPreviewPts !== room.points;
-  const profileTotals = Object.values(profileGroups);
   const applyWallSizes = () => {
     if (wallsDirty) updateRoom(reshapedRoom(wallPreviewPts));
     setWallDraft({});
@@ -579,22 +577,6 @@ const RoomMaterials: React.FC = () => {
                   onWallTap={setActiveWall}
                 />
 
-                {/* Metres per profile */}
-                {profileTotals.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                    {profileTotals.map(({ profile, totalLengthM }) => (
-                      <span key={profile.id} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px',
-                        borderRadius: 999, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                        fontSize: 12.5, fontWeight: 600,
-                      }}>
-                        <Swatch color={profile.color} size={10} />
-                        {profile.title} · {totalLengthM.toFixed(2)} м
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 2px 8px' }}>
                   <span style={{ fontSize: 12, color: '#999' }}>{t('prof.tapSize')}</span>
                   {profiles.length > 0 && (
@@ -649,7 +631,7 @@ const RoomMaterials: React.FC = () => {
                           <span style={{ fontSize: 12, color: '#888' }}>{t('re.cm')}</span>
                         </div>
                         <button
-                          onClick={e => { e.stopPropagation(); setActiveWall(i); setProfileSheetAll(false); setProfileSheetWall(i); }}
+                          onClick={e => { e.stopPropagation(); setActiveWall(i); setProfileSheetWall(i); }}
                           style={{
                             flex: 1, minWidth: 0, height: 38, display: 'flex', alignItems: 'center', gap: 6,
                             padding: '0 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -1294,10 +1276,8 @@ const RoomMaterials: React.FC = () => {
           wallM={edgeLengthM(room.points, profileSheetWall)}
           profiles={profiles}
           currentId={segOf(profileSheetWall)?.profileId ?? null}
-          applyAll={profileSheetAll}
-          onApplyAllChange={setProfileSheetAll}
           onPick={item => {
-            if (profileSheetAll) applyToAll(item); else assignProfile(profileSheetWall, item);
+            assignProfile(profileSheetWall, item);
             setProfileSheetWall(null);
           }}
           onClear={() => { clearProfile(profileSheetWall); setProfileSheetWall(null); }}
@@ -1415,18 +1395,16 @@ const Swatch: React.FC<{ color: string; size: number }> = ({ color, size }) => (
   }} />
 );
 
-/** Bottom sheet for picking one wall's profile (or every wall's, with the toggle on). */
+/** Bottom sheet for picking one wall's profile. */
 const ProfileSheet: React.FC<{
   title: string;
   wallM: number;
   profiles: CatalogItem[];
   currentId: string | null;
-  applyAll: boolean;
-  onApplyAllChange: (v: boolean) => void;
   onPick: (item: CatalogItem) => void;
   onClear: () => void;
   onClose: () => void;
-}> = ({ title, wallM, profiles, currentId, applyAll, onApplyAllChange, onPick, onClear, onClose }) => {
+}> = ({ title, wallM, profiles, currentId, onPick, onClear, onClose }) => {
   const { t } = useT();
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'flex-end' }}>
@@ -1446,7 +1424,7 @@ const ProfileSheet: React.FC<{
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
             {profiles.map(p => {
-              const on = !applyAll && p.id === currentId;
+              const on = p.id === currentId;
               return (
                 <button
                   key={p.id}
@@ -1462,7 +1440,7 @@ const ProfileSheet: React.FC<{
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{p.title}</div>
                     <div style={{ fontSize: 12, color: '#888' }}>
-                      {p.price} ₽/м{applyAll ? '' : ` · ${t('prof.wallCost', { sum: Math.round(p.price * wallM + p.priceCorner).toLocaleString('ru') })}`}
+                      {p.price} ₽/м · {t('prof.wallCost', { sum: Math.round(p.price * wallM + p.priceCorner).toLocaleString('ru') })}
                     </div>
                   </div>
                   {on && <IonIcon icon={checkmarkCircle} style={{ fontSize: 22, color: '#1E88E5' }} />}
@@ -1471,12 +1449,7 @@ const ProfileSheet: React.FC<{
             })}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-          <IonToggle checked={applyAll} onIonChange={e => onApplyAllChange(e.detail.checked)} labelPlacement="start" justify="space-between" style={{ width: '100%' }}>
-            {t('prof.applyAllWalls')}
-          </IonToggle>
-        </div>
-        {currentId && !applyAll && (
+        {currentId && (
           <button
             onClick={onClear}
             style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: '#E53935', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}

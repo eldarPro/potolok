@@ -306,7 +306,6 @@ const s: Record<string, string> = {
   'prof.applySize': 'Застосувати розмір',
   'prof.sheetTitle': 'Профіль для стіни',
   'prof.wallCost': 'стіна ≈ {sum} ₽',
-  'prof.applyAllWalls': 'Застосувати до всіх стін',
   'split.from': 'Від {p}',
   'split.to': 'До {p}',
   'split.part': 'Частина {n}',
