@@ -26,6 +26,13 @@ const s: Record<string, string> = {
   'proj.noAddress': 'Адрес не указан',
   'proj.deleteConfirm': 'Удалить проект?',
   'proj.deleteMsg': 'Все помещения и данные будут удалены без возможности восстановления.',
+  'proj.kpiProjects': 'в работе',
+  'proj.kpiArea': 'м² всего',
+  'proj.kpiSum': 'по сметам',
+  'proj.today': 'сегодня',
+  'proj.yesterday': 'вчера',
+  'proj.newEmpty': 'Новый · нет помещений',
+  'proj.roomsShort': '{n} пом.',
 
   // Room plural keys (fallback for languages without few)
   'rooms.one': 'помещение',
@@ -367,6 +374,15 @@ const s: Record<string, string> = {
   'pd.deleteTitle': 'Удалить проект?',
   'pd.deleteMsg': 'Все помещения и данные будут удалены без возможности восстановления.',
   'pd.editProject': 'Редактировать проект',
+  'pd.call': 'Позвонить',
+  'pd.message': 'Написать',
+  'pd.route': 'Маршрут',
+  'pd.drawnOf': '{n} из {total} начерчено',
+  'pd.draw': 'Начертить',
+  'pd.noDrawing': 'Нет чертежа',
+  'pd.approxShort': 'ориентир.',
+  'pd.emptyHint': 'Начертите комнату — площадь, периметр и стоимость посчитаются автоматически',
+  'pd.roomMenu': 'Помещение',
 
   // Summary extras
   'sum.total': 'Итого',

@@ -1,63 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
+  IonPage, IonHeader, IonToolbar, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon,
-  IonFab, IonFabButton,
-  IonModal, IonItem, IonItemSliding, IonItemOptions, IonItemOption,
+  IonModal, IonItem,
   IonActionSheet, IonAlert, IonList, IonLabel, IonInput, IonTextarea,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
-  chevronBackOutline, addOutline, trashOutline,
-  chevronForwardOutline, documentTextOutline, settingsOutline, ellipsisVerticalOutline, readerOutline,
-  callOutline, locationOutline, squareOutline,
+  chevronBackOutline, addOutline,
+  documentTextOutline, ellipsisVerticalOutline, readerOutline,
+  callOutline, locationOutline, chatbubbleOutline, navigateOutline, createOutline,
 } from 'ionicons/icons';
+import { Capacitor } from '@capacitor/core';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
 import { Project } from '../types';
-import { tessellateRoom } from '../lib/geometry';
 import { calcRoomClientPrice } from '../lib/pricing';
 import ActionButton from '../components/ActionButton';
+import RoomThumb from '../components/RoomThumb';
 import { useT } from '../lib/i18n';
 import './ProjectDetail.css';
 
-const AVATAR_COLORS = ['#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935', '#00897B', '#3949AB', '#F4511E'];
+const formatRub = (v: number) => `${Math.round(v).toLocaleString('ru')} ₽`;
 
-const RoomThumbnail: React.FC<{ points: { x: number; y: number; bulge?: number }[] }> = ({ points }) => {
-  if (points.length < 3) return null;
-  const outline = tessellateRoom(points, true);
-  const xs = outline.map(p => p.x);
-  const ys = outline.map(p => p.y);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const w = maxX - minX || 1;
-  const h = maxY - minY || 1;
-  const PAD = 10;
-  const INNER = 32;
-  const sc = Math.min(INNER / w, INNER / h);
-  const ox = PAD + (INNER - w * sc) / 2;
-  const oy = PAD + (INNER - h * sc) / 2;
-  const poly = outline.map(p => `${(p.x - minX) * sc + ox},${(p.y - minY) * sc + oy}`).join(' ');
-  const size = INNER + PAD * 2;
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ display: 'block' }}>
-      <polygon points={poly} fill="rgba(56,128,255,0.22)" stroke="#3880ff" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
-};
-
-const getInitials = (name: string) => {
-  if (!name?.trim()) return '?';
-  const parts = name.trim().split(/\s+/);
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : name.slice(0, 2).toUpperCase();
-};
-
-const getAvatarColor = (name: string) => {
-  let hash = 0;
-  for (const ch of (name || '')) hash = (hash * 31 + ch.charCodeAt(0)) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[Math.abs(hash)];
+const mapsUrl = (address: string) => {
+  const q = encodeURIComponent(address);
+  switch (Capacitor.getPlatform()) {
+    case 'android': return `geo:0,0?q=${q}`;
+    case 'ios': return `maps://?q=${q}`;
+    default: return `https://www.google.com/maps/search/?api=1&query=${q}`;
+  }
 };
 
 const ProjectDetail: React.FC = () => {
@@ -71,6 +43,7 @@ const ProjectDetail: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showMenu, setShowMenu] = useState(false);
+  const [roomMenuId, setRoomMenuId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
@@ -139,21 +112,18 @@ const ProjectDetail: React.FC = () => {
   const totalSqm = project.rooms.reduce((s, r) => s + r.areaSqm, 0);
   const totalPerimeterM = project.rooms.reduce((s, r) => s + r.perimeterM, 0);
   const totalPrice = project.rooms.reduce((s, r) => s + calcRoomClientPrice(r), 0);
-  const initials = getInitials(project.clientName);
-  const avatarColor = getAvatarColor(project.clientName);
+  const drawnCount = project.rooms.filter(r => r.areaSqm > 0).length;
+  const tel = (project.phone ?? '').replace(/[^\d+]/g, '');
+  const menuRoom = project.rooms.find(r => r.id === roomMenuId);
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="project-detail-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/" />
           </IonButtons>
           <IonButtons slot="end">
-            <IonButton fill="clear" color="primary" onClick={() => router.push(`/project/${id}/summary`, 'forward', 'push')}>
-              <IonIcon icon={documentTextOutline} style={{ marginRight: 4 }} />
-              {t('pd.estimate')}
-            </IonButton>
             <IonButton fill="clear" onClick={() => setShowMenu(true)}>
               <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
             </IonButton>
@@ -162,112 +132,129 @@ const ProjectDetail: React.FC = () => {
       </IonHeader>
 
       <IonContent className="project-detail-content">
-        {/* ── Client card ── */}
-        <div className="card-list" style={{ paddingBottom: 0 }}>
-          <div className="card project-detail-client-card">
-            <div className="project-detail-client-header">
-              <div className="avatar avatar--lg" style={{ background: avatarColor }}>
-                {initials}
-              </div>
-              <div className="project-detail-client-info">
-                <div className="project-detail-client-name">{project.clientName || t('pd.project')}</div>
-                {project.phone && (
-                  <div className="project-detail-client-meta">
-                    <IonIcon icon={callOutline} />
-                    {project.phone}
-                  </div>
-                )}
-                {project.address && (
-                  <div className="project-detail-client-meta">
-                    <IonIcon icon={locationOutline} />
-                    {project.address}
-                  </div>
-                )}
-                {project.notes && (
-                  <div className="project-detail-client-meta">
-                    <IonIcon icon={readerOutline} />
-                    {project.notes}
-                  </div>
-                )}
-              </div>
+        {/* ── Client ── */}
+        <div className="project-detail-hero">
+          <div className="project-detail-hero__name">{project.clientName || t('pd.project')}</div>
+          {(project.phone || project.address) && (
+            <div className="project-detail-hero__info">
+              {project.phone && <span><IonIcon icon={callOutline} />{project.phone}</span>}
+              {project.address && <span><IonIcon icon={locationOutline} />{project.address}</span>}
             </div>
-
-          </div>
+          )}
+          {project.notes && (
+            <div className="project-detail-hero__notes">
+              <IonIcon icon={readerOutline} />
+              {project.notes}
+            </div>
+          )}
+          {(tel || project.address) && (
+            <div className="project-detail-hero__actions">
+              {tel && (
+                <a className="project-detail-hero__action" href={`tel:${tel}`}>
+                  <IonIcon icon={callOutline} />{t('pd.call')}
+                </a>
+              )}
+              {tel && (
+                <a className="project-detail-hero__action" href={`sms:${tel}`}>
+                  <IonIcon icon={chatbubbleOutline} />{t('pd.message')}
+                </a>
+              )}
+              {project.address && (
+                <a className="project-detail-hero__action" href={mapsUrl(project.address)} target="_blank" rel="noopener noreferrer">
+                  <IonIcon icon={navigateOutline} />{t('pd.route')}
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ── Rooms header ── */}
+        {/* ── Totals ── */}
+        <div className="project-detail-totals card">
+          <div className="project-detail-totals__stat project-detail-totals__stat--price">
+            <b className={totalPrice > 0 ? '' : 'project-detail-totals__none'}>{totalPrice > 0 ? formatRub(totalPrice) : '— ₽'}</b>
+            <small>{t('pd.approxShort')}</small>
+          </div>
+          <div className="project-detail-totals__stat">
+            <b className={totalSqm > 0 ? '' : 'project-detail-totals__none'}>{totalSqm.toFixed(1)}</b>
+            <small>м²</small>
+          </div>
+          <div className="project-detail-totals__stat">
+            <b className={totalPerimeterM > 0 ? '' : 'project-detail-totals__none'}>{totalPerimeterM.toFixed(1)}</b>
+            <small>{t('pd.linM')}</small>
+          </div>
+          <button
+            className="project-detail-totals__estimate"
+            disabled={project.rooms.length === 0}
+            onClick={() => router.push(`/project/${id}/summary`, 'forward', 'push')}
+          >
+            <IonIcon icon={documentTextOutline} />
+            {t('pd.estimate')}
+          </button>
+        </div>
+
+        {/* ── Rooms ── */}
         <div className="project-detail-section-header">
           <div className="project-detail-section-title">{t('pd.rooms')}</div>
+          {project.rooms.length > 0 && (
+            <div className="project-detail-section-meta">
+              {t('pd.drawnOf', { n: drawnCount, total: project.rooms.length })}
+            </div>
+          )}
         </div>
 
-        {/* ── Room cards ── */}
-        {project.rooms.length === 0 ? (
-          <div className="project-detail-no-rooms">
-            {t('pd.noRooms')}
-          </div>
-        ) : (
-          <div className="card-list" style={{ paddingTop: 0, paddingBottom: 8 }}>
-            {project.rooms.map(room => {
-              const roomPrice = calcRoomClientPrice(room);
-              const drawn = room.areaSqm > 0;
-              return (
-                <IonItemSliding key={room.id}>
-                  <IonItem
-                    button
-                    detail={false}
-                    routerLink={`/project/${id}/room/${room.id}`}
-                    lines="none"
-                    className="project-detail-room-item"
-                  >
-                    <div className="room-card card">
-                      <div className={`room-card__icon ${drawn ? 'room-card__icon--drawn' : ''}`}>
-                        {drawn ? <RoomThumbnail points={room.points} /> : <IonIcon icon={squareOutline} />}
-                      </div>
+        <div className="project-detail-rooms">
+          {project.rooms.map(room => {
+            const roomPrice = calcRoomClientPrice(room);
+            const drawn = room.areaSqm > 0;
+            return (
+              <div
+                key={room.id}
+                className="room-tile card"
+                onClick={() => router.push(`/project/${id}/room/${room.id}`, 'forward', 'push')}
+              >
+                <div className={`room-tile__preview${drawn ? '' : ' room-tile__preview--empty'}`}>
+                  {drawn ? (
+                    <RoomThumb points={room.points} size={88} pad={4} strokeWidth={2} />
+                  ) : (
+                    <>
+                      <IonIcon icon={createOutline} />
+                      {t('pd.draw')}
+                    </>
+                  )}
+                </div>
+                <div className="room-tile__body">
+                  <div className="room-tile__top">
+                    <div className="room-tile__name">{room.name}</div>
+                    <button
+                      className="room-tile__menu"
+                      aria-label={t('pd.roomMenu')}
+                      onClick={e => { e.stopPropagation(); setRoomMenuId(room.id); }}
+                    >
+                      <IonIcon icon={ellipsisVerticalOutline} />
+                    </button>
+                  </div>
+                  <div className="room-tile__meta">
+                    {drawn
+                      ? [`${room.areaSqm.toFixed(1)} м²`, room.fabric?.title].filter(Boolean).join(' · ')
+                      : t('pd.noDrawing')}
+                  </div>
+                  <div className={`room-tile__price${roomPrice > 0 ? '' : ' room-tile__price--none'}`}>
+                    {roomPrice > 0 ? formatRub(roomPrice) : '—'}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
 
-                      <div className="room-card__body">
-                        <div className="room-card__name">{room.name}</div>
-                        {drawn ? (
-                          <div className="room-card__chips">
-                            <span className="chip">{room.areaSqm.toFixed(1)} м²</span>
-                            <span className="chip">{room.perimeterM.toFixed(1)} пог. м</span>
-                            {room.fabric && <span className="chip">{room.fabric.title}</span>}
-                          </div>
-                        ) : (
-                          <span className="room-card__undrawned">{t('pd.notDrawn')}</span>
-                        )}
-                      </div>
-
-                      {roomPrice > 0 ? (
-                        <div className="room-card__price">
-                          {Math.round(roomPrice).toLocaleString('ru')} ₽
-                        </div>
-                      ) : (
-                        <IonIcon icon={chevronForwardOutline} color="medium" style={{ flexShrink: 0 }} />
-                      )}
-                    </div>
-                  </IonItem>
-
-                  <IonItemOptions side="end">
-                    <IonItemOption color="danger" onClick={() => handleDeleteRoom(room.id)}>
-                      <IonIcon slot="icon-only" icon={trashOutline} />
-                    </IonItemOption>
-                  </IonItemOptions>
-                </IonItemSliding>
-              );
-            })}
-          </div>
-        )}
-
-        <IonFab
-          vertical="bottom"
-          horizontal="end"
-          slot="fixed"
-          style={totalSqm > 0 ? { marginBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' } : undefined}
-        >
-          <IonFabButton onClick={handleOpenNewRoom}>
+          <button className="room-tile room-tile--add" onClick={handleOpenNewRoom}>
             <IonIcon icon={addOutline} />
-          </IonFabButton>
-        </IonFab>
+            {t('pd.newRoom')}
+          </button>
+        </div>
+
+        {project.rooms.length === 0 && (
+          <div className="project-detail-empty-hint">{t('pd.emptyHint')}</div>
+        )}
 
         <IonModal
           isOpen={showNewRoom}
@@ -319,27 +306,16 @@ const ProjectDetail: React.FC = () => {
         </IonModal>
       </IonContent>
 
-      {totalSqm > 0 && (
-        <div className="project-detail-totals">
-          <div className="project-detail-totals__heading">{t('sum.total')}</div>
-          <div className="project-detail-totals__stat">
-            <span className="project-detail-totals__value">{totalSqm.toFixed(1)}</span>
-            <span className="project-detail-totals__label">м²</span>
-          </div>
-          {totalPerimeterM > 0 && (
-            <div className="project-detail-totals__stat">
-              <span className="project-detail-totals__value">{totalPerimeterM.toFixed(1)}</span>
-              <span className="project-detail-totals__label">{t('pd.linM')}</span>
-            </div>
-          )}
-          {totalPrice > 0 && (
-            <div className="project-detail-totals__stat project-detail-totals__stat--price">
-              <span className="project-detail-totals__value">{Math.round(totalPrice).toLocaleString('ru')} ₽</span>
-              <span className="project-detail-totals__label">{t('pd.approx')}</span>
-            </div>
-          )}
-        </div>
-      )}
+      <IonActionSheet
+        isOpen={!!menuRoom}
+        onDidDismiss={() => setRoomMenuId(null)}
+        header={menuRoom?.name}
+        buttons={[
+          { text: t('common.delete'), role: 'destructive', handler: () => { if (menuRoom) handleDeleteRoom(menuRoom.id); } },
+          { text: t('common.cancel'), role: 'cancel' },
+        ]}
+      />
+
       <IonActionSheet
         isOpen={showMenu}
         onDidDismiss={() => setShowMenu(false)}
