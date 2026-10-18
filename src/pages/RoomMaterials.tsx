@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet,
   IonList, IonItem, IonLabel, IonToggle,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
-  chevronBackOutline, checkmarkOutline,
+  chevronBackOutline, chevronDownOutline, checkmarkOutline, checkmarkCircle,
   trashOutline, pencilOutline, addOutline, settingsOutline, ellipsisVerticalOutline,
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline, resizeOutline,
 } from 'ionicons/icons';
@@ -16,10 +16,11 @@ import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
   edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE, CM_PER_GRID,
-  edgeLen, pointOnArc, splitBulge, totalFabricCorners, dist,
+  edgeLen, pointOnArc, splitBulge, totalFabricCorners, dist, Point, vertexLabels, nextVertexLabel,
 } from '../lib/geometry';
 import { useT } from '../lib/i18n';
-import DiagonalPreview from '../components/DiagonalPreview';
+import RoomPreview from '../components/RoomPreview';
+import WallSplitScreen from '../components/WallSplitScreen';
 import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm, makePointMapper } from '../lib/diagonals';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
@@ -54,10 +55,15 @@ const RoomMaterials: React.FC = () => {
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [services, setServices] = useState<AdditionalService[]>([]);
 
-  const [editingEdge, setEditingEdge] = useState<number | null>(null);
-  const [editingSizeEdge, setEditingSizeEdge] = useState<number | null>(null);
+  // Profiles page: the wall in focus, wall lengths being typed (cm, raw input —
+  // applied together on «Применить размер»), the wall whose profile / menu is
+  // open, the wall being split
+  const [activeWall, setActiveWall] = useState<number | null>(null);
+  const [wallDraft, setWallDraft] = useState<Record<number, string>>({});
+  const [profileSheetWall, setProfileSheetWall] = useState<number | null>(null);
+  const [profileSheetAll, setProfileSheetAll] = useState(false);
+  const [wallMenu, setWallMenu] = useState<number | null>(null);
   const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
-  const [edgeMenuOpen, setEdgeMenuOpen] = useState<number | null>(null);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
   const [addNicheOpen, setAddNicheOpen] = useState(false);
   const [addAccessoryOpen, setAddAccessoryOpen] = useState(false);
@@ -136,25 +142,10 @@ const RoomMaterials: React.FC = () => {
 
   const applyDiagonals = () => {
     if (!diagPoints || !diagDirty) return;
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(diagPoints))) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(diagPoints)).toFixed(2));
-    // Lights and niche lines move with the walls around them
-    const move = makePointMapper(room.points, diagPoints, diagFixing);
-    const pathM = (ps: { x: number; y: number }[]) =>
-      pxToMeters(ps.slice(1).reduce((sum, p, i) => sum + dist(ps[i], p), 0));
-    const lighting = (room.lighting ?? []).map(e => {
-      if (e.kind === 'point') return { ...e, ...move(e) };
-      const pts = e.points.map(move);
-      return { ...e, points: pts, lengthM: pathM(pts) };
-    });
-    const selectedNiches = (room.selectedNiches ?? []).map(n => {
-      if (n.kind !== 'path') return n;
-      const pts = n.points.map(move);
-      return { ...n, points: pts, lengthM: pathM(pts) };
-    });
-    updateRoom({ points: diagPoints, areaSqm, perimeterM, lighting, selectedNiches });
+    updateRoom(reshapedRoom(diagPoints, diagFixing));
     setDiagDraft({});
   };
+
 
   // ── Fabric ──
   const selectFabric = (item: CatalogItem) => {
@@ -186,71 +177,87 @@ const RoomMaterials: React.FC = () => {
       })),
     });
 
-  const resizeEdge = (edgeIndex: number, newLenCm: number) => {
-    if (newLenCm <= 0) return;
-    const n = room.points.length;
-    const pts = room.points;
+  // Outline after setting wall `edgeIndex` to `newLenCm`: its end corner slides
+  // along the wall and the next wall follows. Arc length scales linearly with
+  // chord length for a fixed bulge (the arc's included angle stays the same),
+  // so scaling the chord by the same ratio as a straight edge keeps a curved
+  // wall's shape and reaches the new length.
+  const resizedPoints = (pts: Point[], edgeIndex: number, newLenCm: number) => {
+    const n = pts.length;
     const a = pts[edgeIndex % n];
     const b = pts[(edgeIndex + 1) % n];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    // Arc length scales linearly with chord length for a fixed bulge (the arc's
-    // included angle stays the same), so scaling the chord by the same ratio
-    // as a straight edge keeps a curved wall's shape and reaches the new length.
     const currentPx = edgeLen(a, b, a.bulge);
-    if (currentPx === 0) return;
-    const newPx = (newLenCm * GRID_SIZE) / CM_PER_GRID;
-    const ratio = newPx / currentPx;
+    if (!(newLenCm > 0) || currentPx === 0) return null;
+    const ratio = ((newLenCm * GRID_SIZE) / CM_PER_GRID) / currentPx;
     const newPts = [...pts];
-    newPts[(edgeIndex + 1) % n] = { ...b, x: a.x + dx * ratio, y: a.y + dy * ratio };
-    const areaPx = polygonArea(newPts);
-    const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
-    const updatedSegments = (room.profileSegments ?? []).map(s => ({
-      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex),
-    }));
-    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
+    newPts[(edgeIndex + 1) % n] = { ...b, x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio };
+    return newPts;
   };
 
-  const splitEdgeAt = (edgeIndex: number, distCm: number) => {
-    const n = room.points.length;
+  // Everything that follows a change of outline (same corners, new positions):
+  // area, perimeter, profile lengths — and lights and niche lines carried
+  // along with the walls around them.
+  const reshapedRoom = (newPts: Point[], diags = shapeDiagonals(room.points)): Partial<Room> => {
+    const move = makePointMapper(room.points, newPts, diags);
+    const pathM = (ps: { x: number; y: number }[]) =>
+      pxToMeters(ps.slice(1).reduce((sum, p, i) => sum + dist(ps[i], p), 0));
+    return {
+      points: newPts,
+      areaSqm: parseFloat((pxToMeters(Math.sqrt(polygonArea(newPts))) ** 2).toFixed(2)),
+      perimeterM: parseFloat(pxToMeters(polygonPerimeter(newPts)).toFixed(2)),
+      profileSegments: (room.profileSegments ?? []).map(s => ({ ...s, lengthM: edgeLengthM(newPts, s.edgeIndex) })),
+      lighting: (room.lighting ?? []).map(e => {
+        if (e.kind === 'point') return { ...e, ...move(e) };
+        const ps = e.points.map(move);
+        return { ...e, points: ps, lengthM: pathM(ps) };
+      }),
+      selectedNiches: (room.selectedNiches ?? []).map(n => {
+        if (n.kind !== 'path') return n;
+        const ps = n.points.map(move);
+        return { ...n, points: ps, lengthM: pathM(ps) };
+      }),
+    };
+  };
+
+  // Split a wall `distCm` from its start. Every corner keeps its letter and the
+  // new point takes the next free one; each part gets its own profile.
+  const splitEdgeAt = (edgeIndex: number, distCm: number, first: CatalogItem | null, second: CatalogItem | null) => {
     const pts = room.points;
-    const a = pts[edgeIndex % n];
-    const b = pts[(edgeIndex + 1) % n];
+    const a = pts[edgeIndex];
+    const b = pts[(edgeIndex + 1) % pts.length];
     const edgeTotalCm = edgeLengthCm(pts, edgeIndex);
-    if (edgeTotalCm === 0) return;
-    if (distCm <= 0 || distCm >= edgeTotalCm) return;
+    if (edgeTotalCm === 0 || distCm <= 0 || distCm >= edgeTotalCm) return;
     // Split fraction along the edge's length (arc-length fraction for a curved wall).
     const t = distCm / edgeTotalCm;
     const splitPt = pointOnArc(a, b, a.bulge, t);
     const [bulgeBefore, bulgeAfter] = splitBulge(a.bulge ?? 0, t);
+    const labels = vertexLabels(pts);
+    const lettered = pts.map((p, k) => ({ ...p, label: labels[k] }));
     const newPts = [
-      ...pts.slice(0, edgeIndex),
-      { ...a, bulge: bulgeBefore },
-      { ...splitPt, bulge: bulgeAfter },
-      ...pts.slice(edgeIndex + 1),
+      ...lettered.slice(0, edgeIndex),
+      { ...lettered[edgeIndex], bulge: bulgeBefore },
+      { x: splitPt.x, y: splitPt.y, bulge: bulgeAfter, label: nextVertexLabel(pts) },
+      ...lettered.slice(edgeIndex + 1),
     ];
-    const existingSegs = room.profileSegments ?? [];
-    const profileAtEdge = existingSegs.find(s => s.edgeIndex === edgeIndex);
-    const updatedSegs = existingSegs.map(s => {
-      const newIdx = s.edgeIndex > edgeIndex ? s.edgeIndex + 1 : s.edgeIndex;
-      return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
+    const part = (edgeIdx: number, item: CatalogItem | null): RoomProfileSegment[] => item
+      ? [{ edgeIndex: edgeIdx, profileId: item.id, profile: { ...item }, lengthM: edgeLengthM(newPts, edgeIdx) }]
+      : [];
+    const updatedSegs = [
+      ...(room.profileSegments ?? [])
+        .filter(s => s.edgeIndex !== edgeIndex)
+        .map(s => {
+          const newIdx = s.edgeIndex > edgeIndex ? s.edgeIndex + 1 : s.edgeIndex;
+          return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
+        }),
+      ...part(edgeIndex, first),
+      ...part(edgeIndex + 1, second),
+    ].sort((x, y) => x.edgeIndex - y.edgeIndex);
+    updateRoom({
+      points: newPts,
+      areaSqm: parseFloat((pxToMeters(Math.sqrt(polygonArea(newPts))) ** 2).toFixed(2)),
+      perimeterM: parseFloat(pxToMeters(polygonPerimeter(newPts)).toFixed(2)),
+      profileSegments: updatedSegs,
     });
-    if (profileAtEdge) {
-      updatedSegs.push({
-        edgeIndex: edgeIndex + 1,
-        profileId: profileAtEdge.profileId,
-        profile: { ...profileAtEdge.profile },
-        lengthM: edgeLengthM(newPts, edgeIndex + 1),
-      });
-      updatedSegs.sort((a, b) => a.edgeIndex - b.edgeIndex);
-    }
-    const areaPx = polygonArea(newPts);
-    const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
-    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegs });
   };
 
   const straightenEdge = (edgeIndex: number) => {
@@ -450,6 +457,25 @@ const RoomMaterials: React.FC = () => {
     (section === 'accessories' && roomAccessories.length > 0) ||
     (section === 'services' && roomServices.length > 0);
 
+  // ── Profiles page (derived) ──
+  const nPts = room.points.length;
+  const segOf = (i: number) => segments.find(s => s.edgeIndex === i);
+  const wallColors = room.points.map((_, i) => segOf(i)?.profile.color ?? null);
+  const wallCmOf = (pts: Point[], i: number) => Math.round(edgeLengthCm(pts, i));
+  // Typed lengths go in wall order, each on top of the previous one, so the
+  // preview (and every other field) shows exactly what «Применить» will save.
+  let wallPreviewPts: Point[] = room.points;
+  for (const [k, raw] of Object.entries(wallDraft).sort((x, y) => +x[0] - +y[0])) {
+    const i = +k, cm = Math.round(parseFloat(raw));
+    if (cm > 0 && cm !== wallCmOf(wallPreviewPts, i)) wallPreviewPts = resizedPoints(wallPreviewPts, i, cm) ?? wallPreviewPts;
+  }
+  const wallsDirty = wallPreviewPts !== room.points;
+  const profileTotals = Object.values(profileGroups);
+  const applyWallSizes = () => {
+    if (wallsDirty) updateRoom(reshapedRoom(wallPreviewPts));
+    setWallDraft({});
+  };
+
   const meta = SECTION_META[section as Section] ?? SECTION_META.fabric;
   const backHref = `/project/${projectId}/room/${roomId}`;
 
@@ -529,23 +555,9 @@ const RoomMaterials: React.FC = () => {
 
         {/* ═══ ПРОФИЛЬ ═══ */}
         {section === 'profile' && (
-          <div style={{ padding: '12px 0 100px' }}>
-            {profiles.length > 0 && room.points.length >= 3 && (
-              <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setApplyAllOpen(true)}
-                  style={{
-                    fontSize: 13, color: '#1E88E5', fontWeight: 600,
-                    background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0',
-                  }}
-                >
-                  {t('mat.applyAll')}
-                </button>
-              </div>
-            )}
-
-            {room.points.length < 3 ? (
-              <div style={{ padding: '20px 16px' }}>
+          <div style={{ padding: '12px 16px 100px' }}>
+            {nPts < 3 ? (
+              <div style={{ padding: '8px 0' }}>
                 <HintText text={t('mat.drawFirst')} />
                 <button
                   onClick={() => router.push(backHref, 'back')}
@@ -558,64 +570,123 @@ const RoomMaterials: React.FC = () => {
                   {t('mat.openDraft')}
                 </button>
               </div>
-            ) : profiles.length === 0 ? (
-              <div style={{ padding: '20px 16px' }}>
-                <HintText text={t('mat.noProfiles')} />
-              </div>
             ) : (
-              <div style={{ padding: '0 16px' }}>
-                <div className="card" style={{ overflow: 'hidden' }}>
-                  <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
-                    {room.points.map((_, i) => {
-                      const seg = segments.find(s => s.edgeIndex === i);
-                      const lenCm = edgeLengthCm(room.points, i);
-                      return (
-                        <IonItem
-                          key={i}
-                          button
-                          detail={false}
-                          lines={i === room.points.length - 1 ? 'none' : 'inset'}
-                          onClick={() => setEdgeMenuOpen(i)}
-                          style={{ '--background': 'transparent' } as React.CSSProperties}
-                        >
-                          <IonLabel>
-                            <div>
-                              <span style={{ fontWeight: 700, fontSize: 14 }}>
-                                {t('mat.wall')} {edgeLabel(i, room.points.length)}
-                              </span>
-                              <span style={{ fontWeight: 400, fontSize: 13, color: '#888', marginLeft: 8 }}>
-                                {Math.round(lenCm)} см
-                              </span>
-                              {room.points[i]?.bulge ? (
-                                <span title={t('mat.curved')} style={{ fontSize: 13, color: '#F9A825', marginLeft: 6 }}>
-                                  ⌒
-                                </span>
-                              ) : null}
-                            </div>
-                            {seg ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                <div style={{
-                                  width: 10, height: 10, borderRadius: 3,
-                                  background: seg.profile.color,
-                                  border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0,
-                                }} />
-                                <span style={{ fontSize: 12, color: '#888' }}>
-                                  {seg.profile.title} · {seg.profile.price} ₽/м
-                                </span>
-                              </div>
-                            ) : (
-                              <p style={{ fontSize: 12, color: '#FB8C00', fontWeight: 500, margin: '2px 0 0' }}>
-                                {t('mat.noProfile')}
-                              </p>
-                            )}
-                          </IonLabel>
-                          <IonIcon icon={ellipsisVerticalOutline} slot="end" style={{ fontSize: 20, color: '#999' }} />
-                        </IonItem>
-                      );
-                    })}
-                  </IonList>
+              <>
+                <RoomPreview
+                  points={wallPreviewPts}
+                  wallColors={wallColors}
+                  selectedWall={activeWall}
+                  onWallTap={setActiveWall}
+                />
+
+                {/* Metres per profile */}
+                {profileTotals.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                    {profileTotals.map(({ profile, totalLengthM }) => (
+                      <span key={profile.id} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+                        borderRadius: 999, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                        fontSize: 12.5, fontWeight: 600,
+                      }}>
+                        <Swatch color={profile.color} size={10} />
+                        {profile.title} · {totalLengthM.toFixed(2)} м
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 2px 8px' }}>
+                  <span style={{ fontSize: 12, color: '#999' }}>{t('prof.tapSize')}</span>
+                  {profiles.length > 0 && (
+                    <button
+                      onClick={() => setApplyAllOpen(true)}
+                      style={{ fontSize: 13, color: '#1E88E5', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}
+                    >
+                      {t('mat.applyAll')}
+                    </button>
+                  )}
                 </div>
-              </div>
+
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  {room.points.map((p, i) => {
+                    const seg = segOf(i);
+                    const active = activeWall === i;
+                    const shownCm = wallCmOf(wallPreviewPts, i);
+                    const edited = wallDraft[i] != null && Math.round(parseFloat(wallDraft[i])) !== wallCmOf(room.points, i);
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => setActiveWall(i)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px 9px 0',
+                          borderTop: i > 0 ? '1px solid rgba(0,0,0,0.07)' : undefined,
+                          background: active ? 'rgba(249,168,37,0.08)' : undefined,
+                        }}
+                      >
+                        <div style={{
+                          width: 4, alignSelf: 'stretch', borderRadius: '0 3px 3px 0', flexShrink: 0,
+                          background: seg?.profile.color ?? '#ff6b66',
+                          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)',
+                        }} />
+                        <div style={{ width: 40, flexShrink: 0, fontSize: 14, fontWeight: 800 }}>
+                          {edgeLabel(room.points, i).replace(/ /g, '')}
+                          {p.bulge ? <span title={t('mat.curved')} style={{ color: '#F9A825', marginLeft: 2 }}>⌒</span> : null}
+                        </div>
+                        <div style={{
+                          width: 92, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, height: 38, padding: '0 8px',
+                          borderRadius: 10, border: `1.5px solid ${edited || active ? '#F9A825' : 'rgba(0,0,0,0.15)'}`, background: '#fff',
+                        }}>
+                          <input
+                            type="number" inputMode="numeric" min="1" step="1"
+                            value={wallDraft[i] ?? String(shownCm)}
+                            onChange={e => { const v = e.target.value; setWallDraft(d => ({ ...d, [i]: v })); }}
+                            onFocus={e => { setActiveWall(i); e.target.select(); }}
+                            style={{
+                              width: '100%', minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+                              fontSize: 16, fontWeight: 700, color: 'inherit',
+                            }}
+                          />
+                          <span style={{ fontSize: 12, color: '#888' }}>{t('re.cm')}</span>
+                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); setActiveWall(i); setProfileSheetAll(false); setProfileSheetWall(i); }}
+                          style={{
+                            flex: 1, minWidth: 0, height: 38, display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '0 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                            background: seg ? '#f2f3f7' : 'rgba(251,140,0,0.1)', color: seg ? 'inherit' : '#FB8C00',
+                          }}
+                        >
+                          {seg && <Swatch color={seg.profile.color} size={10} />}
+                          <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {seg ? seg.profile.title : t('mat.noProfile')}
+                          </span>
+                          <IonIcon icon={chevronDownOutline} style={{ marginLeft: 'auto', fontSize: 14, color: '#999', flexShrink: 0 }} />
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setActiveWall(i); setWallMenu(i); }}
+                          style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#999', flexShrink: 0 }}
+                        >
+                          <IonIcon icon={ellipsisVerticalOutline} style={{ fontSize: 20, display: 'block' }} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={applyWallSizes}
+                  disabled={!wallsDirty}
+                  style={{
+                    width: '100%', marginTop: 12, padding: '14px 16px', borderRadius: 14, border: 'none',
+                    fontSize: 15, fontWeight: 700,
+                    background: wallsDirty ? '#F9A825' : 'rgba(0,0,0,0.08)',
+                    color: wallsDirty ? '#000' : 'rgba(0,0,0,0.3)',
+                    cursor: wallsDirty ? 'pointer' : 'default',
+                  }}
+                >
+                  {t('prof.applySize')}
+                </button>
+              </>
             )}
           </div>
         )}
@@ -641,12 +712,12 @@ const RoomMaterials: React.FC = () => {
               <HintText text={t('diag.triangle')} />
             ) : (
               <>
-                <DiagonalPreview
+                <RoomPreview
                   points={diagPoints ?? room.points}
                   diagonals={diagList}
-                  activeKey={activeDiag}
+                  activeDiagonal={activeDiag}
                   invalid={diagPoints == null}
-                  onSelect={setActiveDiag}
+                  onDiagonalTap={setActiveDiag}
                 />
                 <div style={{ marginTop: 12 }}>
                   <HintText text={t('diag.hint')} />
@@ -1180,115 +1251,59 @@ const RoomMaterials: React.FC = () => {
         </button>
       )}
 
-      {/* Profile picker — single wall */}
+      {splitEdgeIdx !== null && splitEdgeIdx < nPts && (
+        <WallSplitScreen
+          points={room.points}
+          edgeIndex={splitEdgeIdx}
+          profiles={profiles}
+          current={segOf(splitEdgeIdx)?.profile ?? null}
+          wallColors={wallColors}
+          onCancel={() => setSplitEdgeIdx(null)}
+          onSplit={(distCm, first, second) => {
+            splitEdgeAt(splitEdgeIdx, distCm, first, second);
+            setWallDraft({});
+            setActiveWall(splitEdgeIdx);
+            setSplitEdgeIdx(null);
+          }}
+        />
+      )}
+
+      {/* Wall menu: split / straighten */}
       <IonActionSheet
-        isOpen={editingEdge !== null}
-        header={editingEdge !== null
-          ? `${t('mat.wall')} ${edgeLabel(editingEdge, room.points.length)} · ${Math.round(edgeLengthCm(room.points, editingEdge))} см`
+        isOpen={wallMenu !== null}
+        header={wallMenu !== null && wallMenu < nPts
+          ? `${t('mat.wall')} ${edgeLabel(room.points, wallMenu)} · ${wallCmOf(room.points, wallMenu)} см`
           : undefined}
         buttons={[
-          ...profiles.map(p => ({
-            text: p.title,
-            handler: () => {
-              if (editingEdge !== null) { assignProfile(editingEdge, p); setEditingEdge(null); }
-            },
-          })),
-          {
-            text: t('mat.noProfileBtn'), role: 'destructive' as const,
-            handler: () => { if (editingEdge !== null) { clearProfile(editingEdge); setEditingEdge(null); } },
-          },
-          { text: t('common.cancel'), role: 'cancel' as const },
-        ]}
-        onDidDismiss={() => setEditingEdge(null)}
-      />
-
-      {/* Size editor */}
-      <IonAlert
-        isOpen={editingSizeEdge !== null}
-        header={editingSizeEdge !== null
-          ? `${t('mat.wallSize')} ${edgeLabel(editingSizeEdge, room.points.length)}`
-          : undefined}
-        inputs={[{
-          name: 'length',
-          type: 'number',
-          placeholder: t('mat.lengthCm'),
-          value: editingSizeEdge !== null
-            ? String(Math.round(edgeLengthCm(room.points, editingSizeEdge)))
-            : '',
-          min: 1,
-        }]}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          {
-            text: t('common.apply'),
-            handler: (data: { length: string }) => {
-              const val = parseFloat(data.length);
-              if (editingSizeEdge !== null && !isNaN(val) && val > 0) {
-                resizeEdge(editingSizeEdge, val);
-              }
-            },
-          },
-        ]}
-        onDidDismiss={() => setEditingSizeEdge(null)}
-      />
-
-      {/* Split edge */}
-      <IonAlert
-        isOpen={splitEdgeIdx !== null}
-        header={splitEdgeIdx !== null
-          ? `${t('mat.splitWall')} ${edgeLabel(splitEdgeIdx, room.points.length)}`
-          : undefined}
-        message={splitEdgeIdx !== null
-          ? `${t('mat.splitMsg', { len: Math.round(edgeLengthCm(room.points, splitEdgeIdx)) })}`
-          : undefined}
-        inputs={[{
-          name: 'dist',
-          type: 'number',
-          placeholder: t('mat.distCm'),
-          min: 1,
-        }]}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
           {
             text: t('mat.split'),
-            handler: (data: { dist: string }) => {
-              const val = parseFloat(data.dist);
-              if (splitEdgeIdx !== null && !isNaN(val) && val > 0) {
-                splitEdgeAt(splitEdgeIdx, val);
-              }
-            },
+            handler: () => { const w = wallMenu; setWallMenu(null); setWallDraft({}); setSplitEdgeIdx(w); },
           },
-        ]}
-        onDidDismiss={() => setSplitEdgeIdx(null)}
-      />
-
-      {/* Edge context menu */}
-      <IonActionSheet
-        isOpen={edgeMenuOpen !== null}
-        header={edgeMenuOpen !== null
-          ? `${t('mat.wall')} ${edgeLabel(edgeMenuOpen, room.points.length)} · ${Math.round(edgeLengthCm(room.points, edgeMenuOpen))} см`
-          : undefined}
-        buttons={[
-          {
-            text: t('mat.changeProfile'),
-            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingEdge(e); },
-          },
-          {
-            text: t('mat.changeSize'),
-            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setEditingSizeEdge(e); },
-          },
-          {
-            text: t('mat.split'),
-            handler: () => { const e = edgeMenuOpen; setEdgeMenuOpen(null); setSplitEdgeIdx(e); },
-          },
-          ...(edgeMenuOpen !== null && room.points[edgeMenuOpen]?.bulge ? [{
+          ...(wallMenu !== null && room.points[wallMenu]?.bulge ? [{
             text: t('mat.straighten'),
-            handler: () => { straightenEdge(edgeMenuOpen); setEdgeMenuOpen(null); },
+            handler: () => { straightenEdge(wallMenu); setWallDraft({}); setWallMenu(null); },
           }] : []),
           { text: t('common.cancel'), role: 'cancel' as const },
         ]}
-        onDidDismiss={() => setEdgeMenuOpen(null)}
+        onDidDismiss={() => setWallMenu(null)}
       />
+
+      {profileSheetWall !== null && profileSheetWall < nPts && (
+        <ProfileSheet
+          title={`${t('prof.sheetTitle')} ${edgeLabel(room.points, profileSheetWall).replace(/ /g, '')}`}
+          wallM={edgeLengthM(room.points, profileSheetWall)}
+          profiles={profiles}
+          currentId={segOf(profileSheetWall)?.profileId ?? null}
+          applyAll={profileSheetAll}
+          onApplyAllChange={setProfileSheetAll}
+          onPick={item => {
+            if (profileSheetAll) applyToAll(item); else assignProfile(profileSheetWall, item);
+            setProfileSheetWall(null);
+          }}
+          onClear={() => { clearProfile(profileSheetWall); setProfileSheetWall(null); }}
+          onClose={() => setProfileSheetWall(null)}
+        />
+      )}
 
       {/* Profile — apply all */}
       <IonActionSheet
@@ -1392,6 +1407,87 @@ const EmptyState: React.FC<{
     )}
   </div>
 );
+
+const Swatch: React.FC<{ color: string; size: number }> = ({ color, size }) => (
+  <span style={{
+    width: size, height: size, borderRadius: size / 3.5, flexShrink: 0,
+    background: color, border: '1px solid rgba(0,0,0,0.15)',
+  }} />
+);
+
+/** Bottom sheet for picking one wall's profile (or every wall's, with the toggle on). */
+const ProfileSheet: React.FC<{
+  title: string;
+  wallM: number;
+  profiles: CatalogItem[];
+  currentId: string | null;
+  applyAll: boolean;
+  onApplyAllChange: (v: boolean) => void;
+  onPick: (item: CatalogItem) => void;
+  onClear: () => void;
+  onClose: () => void;
+}> = ({ title, wallM, profiles, currentId, applyAll, onApplyAllChange, onPick, onClear, onClose }) => {
+  const { t } = useT();
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{
+        position: 'relative', width: '100%', maxHeight: '85%', overflowY: 'auto',
+        background: '#fff', borderRadius: '20px 20px 0 0', padding: '10px 16px',
+        paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: '#ddd' }} />
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 800 }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{Math.round(wallM * 100)} см</div>
+        {profiles.length === 0 ? (
+          <div style={{ marginTop: 14 }}><HintText text={t('mat.noProfiles')} /></div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+            {profiles.map(p => {
+              const on = !applyAll && p.id === currentId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => onPick(p)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14,
+                    border: `1.5px solid ${on ? '#1E88E5' : 'rgba(0,0,0,0.1)'}`,
+                    background: on ? 'rgba(30,136,229,0.06)' : 'transparent',
+                    cursor: 'pointer', textAlign: 'left', color: 'inherit',
+                  }}
+                >
+                  <Swatch color={p.color} size={18} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700 }}>{p.title}</div>
+                    <div style={{ fontSize: 12, color: '#888' }}>
+                      {p.price} ₽/м{applyAll ? '' : ` · ${t('prof.wallCost', { sum: Math.round(p.price * wallM + p.priceCorner).toLocaleString('ru') })}`}
+                    </div>
+                  </div>
+                  {on && <IonIcon icon={checkmarkCircle} style={{ fontSize: 22, color: '#1E88E5' }} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+          <IonToggle checked={applyAll} onIonChange={e => onApplyAllChange(e.detail.checked)} labelPlacement="start" justify="space-between" style={{ width: '100%' }}>
+            {t('prof.applyAllWalls')}
+          </IonToggle>
+        </div>
+        {currentId && !applyAll && (
+          <button
+            onClick={onClear}
+            style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: '#E53935', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
+          >
+            {t('mat.noProfileBtn')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const HintText: React.FC<{ text: string }> = ({ text }) => (
   <p style={{ fontSize: 13, color: '#c0c0c0', margin: '0 0 8px' }}>{text}</p>

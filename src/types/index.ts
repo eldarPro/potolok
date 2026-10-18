@@ -143,7 +143,8 @@ export interface RoomVisualization {
 export interface Room {
   id: string;
   name: string;
-  points: { x: number; y: number; bulge?: number }[];
+  /** label — the corner's letter, set once a wall has been split (see vertexLabels) */
+  points: { x: number; y: number; bulge?: number; label?: string }[];
   fabricId: string | null;
   fabric: CatalogItem | null;
   profileSegments: RoomProfileSegment[];

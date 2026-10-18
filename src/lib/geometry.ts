@@ -1,4 +1,4 @@
-export interface Point { x: number; y: number; bulge?: number }
+export interface Point { x: number; y: number; bulge?: number; label?: string }
 
 // ── Curved (bulged) edges ──
 // A wall segment a→b can bow into a circular arc via a DXF-style "bulge" factor
@@ -164,8 +164,34 @@ export function pointLabel(index: number): string {
   return POINT_LETTERS[index % POINT_LETTERS.length];
 }
 
-export function edgeLabel(fromIndex: number, n: number): string {
-  return `${pointLabel(fromIndex)} – ${pointLabel((fromIndex + 1) % n)}`;
+/**
+ * Letters of a room's corners. Plain rooms are lettered a, b, c… by position.
+ * Splitting a wall pins every corner's letter on the point and gives the new
+ * point the next free one, so the existing corners keep theirs. A point
+ * without a letter of its own takes the next one not in use.
+ */
+export function vertexLabels(pts: { label?: string }[]): string[] {
+  if (!pts.some(p => p.label)) return pts.map((_, i) => pointLabel(i));
+  const used = new Set(pts.map(p => p.label).filter(Boolean));
+  let next = 0;
+  return pts.map(p => {
+    if (p.label) return p.label;
+    while (used.has(pointLabel(next)) && next < POINT_LETTERS.length) next++;
+    const l = pointLabel(next);
+    used.add(l);
+    return l;
+  });
+}
+
+/** The first letter not used by any corner of the room. */
+export function nextVertexLabel(pts: { label?: string }[]): string {
+  const used = new Set(vertexLabels(pts));
+  return POINT_LETTERS.find(l => !used.has(l)) ?? pointLabel(pts.length);
+}
+
+export function edgeLabel(pts: { label?: string }[], fromIndex: number): string {
+  const l = vertexLabels(pts);
+  return `${l[fromIndex]} – ${l[(fromIndex + 1) % pts.length]}`;
 }
 
 /**
@@ -180,19 +206,29 @@ export function edgeLabel(fromIndex: number, n: number): string {
 export function countRealCorners(pts: Point[]): number {
   const n = pts.length;
   if (n < 3) return n;
-  let count = 0;
+  return cornerIndices(pts).length;
+}
+
+/**
+ * Indices of the points where the wall actually turns — everything except
+ * straight-through points (a split on a straight wall). Falls back to all
+ * points if fewer than 3 would remain.
+ */
+export function cornerIndices(pts: Point[]): number[] {
+  const n = pts.length;
+  const out: number[] = [];
   for (let i = 0; i < n; i++) {
     const prev = pts[(i - 1 + n) % n];
     const curr = pts[i];
     const next = pts[(i + 1) % n];
-    if (prev.bulge || curr.bulge) { count++; continue; }
+    if (prev.bulge || curr.bulge) { out.push(i); continue; }
     const ax = curr.x - prev.x, ay = curr.y - prev.y;
     const bx = next.x - curr.x, by = next.y - curr.y;
     const cross = ax * by - ay * bx;
     const collinear = Math.abs(cross) < 1e-6 && (ax * bx + ay * by) > 0;
-    if (!collinear) count++;
+    if (!collinear) out.push(i);
   }
-  return count;
+  return out.length >= 3 ? out : pts.map((_, i) => i);
 }
 
 /** Polygon area in canvas px², using shoelace formula (arc-aware via per-point bulge) */

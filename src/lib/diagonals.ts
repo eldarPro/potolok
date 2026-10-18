@@ -1,4 +1,7 @@
-import { Point, polygonDiagonals, pointLabel, pxToCm, dist, GRID_SIZE, CM_PER_GRID } from './geometry';
+import { Point, polygonDiagonals, vertexLabels, cornerIndices, pxToCm, dist, GRID_SIZE, CM_PER_GRID } from './geometry';
+
+// Points on a straight wall (where a wall was split to change profile) aren't
+// corners: no diagonals run to them, and reshaping keeps them on their wall.
 
 type Pair = [number, number];
 
@@ -13,9 +16,11 @@ export interface DiagonalInfo {
 
 /** Diagonals shown for a room, vertex pair always in ascending order (a–c, not c–a). */
 export function roomDiagonals(pts: Point[]): DiagonalInfo[] {
-  return polygonDiagonals(pts).map(([p, q]) => {
-    const i = Math.min(p, q), j = Math.max(p, q);
-    return { i, j, key: diagonalKey(i, j), label: `${pointLabel(i)}–${pointLabel(j)}` };
+  const labels = vertexLabels(pts);
+  const corners = cornerIndices(pts);
+  return polygonDiagonals(corners.map(i => pts[i])).map(([p, q]) => {
+    const i = Math.min(corners[p], corners[q]), j = Math.max(corners[p], corners[q]);
+    return { i, j, key: diagonalKey(i, j), label: `${labels[i]}–${labels[j]}` };
   });
 }
 
@@ -30,22 +35,24 @@ const cmToPx = (cm: number) => (cm * GRID_SIZE) / CM_PER_GRID;
  */
 export function shapeDiagonals(pts: Point[], driverKey?: string | null): Pair[] {
   const all = roomDiagonals(pts).map(d => [d.i, d.j] as Pair);
-  if (all.length <= pts.length - 3) return all;
+  if (all.length <= cornerIndices(pts).length - 3) return all;
   return [all.find(([i, j]) => diagonalKey(i, j) === driverKey) ?? all[0]];
 }
 
-/** Triangles of the polygon split by `diags` (walls + diagonals as their sides). */
-function triangles(n: number, diags: Pair[]): [number, number, number][] {
+/** Triangles of the corner outline split by `diags` (corner-to-corner walls + diagonals as sides). */
+function triangles(pts: Point[], diags: Pair[]): [number, number, number][] {
+  const c = cornerIndices(pts);
+  const m = c.length;
   const edges = new Set<string>();
-  for (let i = 0; i < n; i++) edges.add(diagonalKey(i, (i + 1) % n));
+  for (let k = 0; k < m; k++) edges.add(diagonalKey(c[k], c[(k + 1) % m]));
   diags.forEach(([i, j]) => edges.add(diagonalKey(i, j)));
   const has = (i: number, j: number) => edges.has(diagonalKey(i, j));
   const out: [number, number, number][] = [];
-  for (let i = 0; i < n; i++)
-    for (let j = i + 1; j < n; j++)
-      if (has(i, j))
-        for (let k = j + 1; k < n; k++)
-          if (has(i, k) && has(j, k)) out.push([i, j, k]);
+  for (let x = 0; x < m; x++)
+    for (let y = x + 1; y < m; y++)
+      if (has(c[x], c[y]))
+        for (let z = y + 1; z < m; z++)
+          if (has(c[x], c[z]) && has(c[y], c[z])) out.push([c[x], c[y], c[z]]);
   return out;
 }
 
@@ -60,23 +67,25 @@ const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y
  */
 export function reshapeByDiagonals(pts: Point[], diags: Pair[], targetCm: Record<string, number>): Point[] | null {
   const n = pts.length;
+  const corners = cornerIndices(pts);
   const len = (i: number, j: number) => {
     const t = targetCm[diagonalKey(i, j)];
     return t != null ? cmToPx(t) : dist(pts[i], pts[j]);
   };
-  const tris = triangles(n, diags);
-  if (tris.length !== n - 2) return null;
+  const tris = triangles(pts, diags);
+  if (tris.length !== corners.length - 2) return null;
 
   const placed: (Point | null)[] = new Array(n).fill(null);
-  const d01 = dist(pts[0], pts[1]);
+  const [c0, c1] = corners;
+  const d01 = dist(pts[c0], pts[c1]);
   if (d01 === 0) return null;
-  placed[0] = { x: pts[0].x, y: pts[0].y };
-  placed[1] = {
-    x: pts[0].x + (pts[1].x - pts[0].x) / d01 * len(0, 1),
-    y: pts[0].y + (pts[1].y - pts[0].y) / d01 * len(0, 1),
+  placed[c0] = { x: pts[c0].x, y: pts[c0].y };
+  placed[c1] = {
+    x: pts[c0].x + (pts[c1].x - pts[c0].x) / d01 * len(c0, c1),
+    y: pts[c0].y + (pts[c1].y - pts[c0].y) / d01 * len(c0, c1),
   };
 
-  for (let left = n - 2; left > 0; left--) {
+  for (let left = corners.length - 2; left > 0; left--) {
     const tri = tris.find(t => t.filter(v => placed[v]).length === 2);
     if (!tri) return null;
     const [a, b] = tri.filter(v => placed[v]);
@@ -92,6 +101,17 @@ export function reshapeByDiagonals(pts: Point[], diags: Pair[], targetCm: Record
     const h = Math.sqrt(h2) * side;
     placed[c] = { x: A.x + ex * x - ey * h, y: A.y + ey * x + ex * h };
   }
+
+  // A point on a straight wall stays on it, at the same fraction of the wall.
+  corners.forEach((from, k) => {
+    const to = corners[(k + 1) % corners.length];
+    const span = dist(pts[from], pts[to]);
+    for (let i = (from + 1) % n; i !== to; i = (i + 1) % n) {
+      const f = span > 0 ? dist(pts[from], pts[i]) / span : 0;
+      const A = placed[from]!, B = placed[to]!;
+      placed[i] = { x: A.x + (B.x - A.x) * f, y: A.y + (B.y - A.y) * f };
+    }
+  });
 
   // Keep the room where it was on the canvas: same centre as before.
   const cx = (ps: Point[]) => ps.reduce((s, p) => s + p.x, 0) / ps.length;
@@ -111,7 +131,7 @@ export function diagonalRangeCm(pts: Point[], diags: Pair[], targetCm: Record<st
     return t != null ? cmToPx(t) : dist(pts[i], pts[j]);
   };
   let lo = 0, hi = Infinity;
-  for (const tri of triangles(pts.length, diags)) {
+  for (const tri of triangles(pts, diags)) {
     const k = tri.findIndex((_, m) => diagonalKey(tri[m], tri[(m + 1) % 3]) === key);
     if (k < 0) continue;
     const [p, q, r] = [tri[k], tri[(k + 1) % 3], tri[(k + 2) % 3]];
@@ -141,7 +161,7 @@ function barycentric(p: XY, a: XY, b: XY, c: XY): [number, number, number] | nul
  * stays on that wall.
  */
 export function makePointMapper(oldPts: Point[], newPts: Point[], diags: Pair[]): (p: XY) => XY {
-  const tris = triangles(oldPts.length, diags);
+  const tris = triangles(oldPts, diags);
   return p => {
     let best: { t: [number, number, number]; bc: [number, number, number] } | null = null;
     let bestScore = -Infinity;

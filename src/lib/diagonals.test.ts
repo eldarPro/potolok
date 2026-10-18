@@ -84,3 +84,25 @@ describe('makePointMapper', () => {
     expect(q.y).toBeLessThan(Math.max(...ys));
   });
 });
+
+describe('a point splitting a straight wall', () => {
+  // rectangle with c–d split at 100 cm from c: a b c [e] d
+  const split = [cm(0, 0), cm(400, 0), cm(400, 300), { ...cm(300, 300), label: 'e' }, cm(0, 300)]
+    .map((p, i) => ({ ...p, label: p.label ?? 'abcd'[i < 3 ? i : 3] }));
+
+  it('gets no diagonals — still just a–c and b–d', () => {
+    expect(roomDiagonals(split).map(d => d.label)).toEqual(['a–c', 'b–d']);
+    expect(shapeDiagonals(split, '0-2')).toEqual([[0, 2]]);
+  });
+
+  it('stays on its wall, at the same fraction, when the room is reshaped', () => {
+    const out = reshapeByDiagonals(split, shapeDiagonals(split, '0-2'), { '0-2': 480 })!;
+    const [c, e, d] = [out[2], out[3], out[4]];
+    // collinear with c and d…
+    expect((e.x - c.x) * (d.y - c.y) - (e.y - c.y) * (d.x - c.x)).toBeCloseTo(0, 6);
+    // …and still 100 cm from c on the 400 cm wall
+    expect(Math.round(pxToCm(dist(c, e)))).toBe(100);
+    expect(Math.round(pxToCm(dist(e, d)))).toBe(300);
+    expect(diagonalCm(out, 0, 2)).toBe(480);
+  });
+});

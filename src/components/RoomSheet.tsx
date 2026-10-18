@@ -6,6 +6,7 @@ import {
 } from 'ionicons/icons';
 import { Room } from '../types';
 import { roomDiagonals, diagonalCm } from '../lib/diagonals';
+import { countRealCorners } from '../lib/geometry';
 import { calcRoomClientPrice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
 
@@ -150,7 +151,7 @@ const RoomSheet: React.FC<Props> = ({ room, onOpenSection, onOpenEstimate }) => 
             <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>
               {room.areaSqm.toFixed(2)} м²
               <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.45)' }}>
-                {' '}· {room.perimeterM.toFixed(2)} м · {t('re.corners')}: {pts.length}
+                {' '}· {room.perimeterM.toFixed(2)} м · {t('re.corners')}: {countRealCorners(pts)}
               </span>
             </div>
           )}

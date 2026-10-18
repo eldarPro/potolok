@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners } from './geometry';
+import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners, vertexLabels, nextVertexLabel, edgeLabel } from './geometry';
 
 const pts = (arr: [number, number][]): Point[] => arr.map(([x, y]) => ({ x, y }));
 
@@ -150,5 +150,24 @@ describe('totalFabricCorners', () => {
     const routed = pts([[6.3, 0.5], [6.8, 1.5], [6.8, 4.5], [6.3, 5.5]]);
     // В and Г (2 corners) are removed; the niche's own 4 points replace them
     expect(totalFabricCorners(hexagon, [routed])).toBe(6 - 2 + 4);
+  });
+});
+
+describe('vertexLabels', () => {
+  it('letters a plain room by position', () => {
+    expect(vertexLabels([{}, {}, {}, {}])).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('keeps pinned letters and gives a split point the next free one', () => {
+    // a b c [new] d — the wall c–d was split
+    const pts = [{ label: 'a' }, { label: 'b' }, { label: 'c' }, { label: 'e' }, { label: 'd' }];
+    expect(vertexLabels(pts)).toEqual(['a', 'b', 'c', 'e', 'd']);
+    expect(edgeLabel(pts, 2)).toBe('c – e');
+    expect(edgeLabel(pts, 4)).toBe('d – a');
+  });
+
+  it('fills unlettered points with unused letters', () => {
+    expect(vertexLabels([{ label: 'a' }, {}, { label: 'b' }])).toEqual(['a', 'c', 'b']);
+    expect(nextVertexLabel([{ label: 'a' }, { label: 'b' }, { label: 'c' }, { label: 'e' }])).toBe('d');
   });
 });

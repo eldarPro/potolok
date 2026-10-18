@@ -4,11 +4,12 @@ import { arrowUndoOutline, arrowRedoOutline, trashOutline, createOutline, appsOu
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import Konva from 'konva';
 import {
-  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel,
-  pointInPolygon, edgeLengthM, polygonDiagonals, relevantDiagonalPartner, GRID_SIZE,
+  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, vertexLabels,
+  pointInPolygon, edgeLengthM, relevantDiagonalPartner, GRID_SIZE,
   edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom,
   nearestPointOnOutline,
 } from '../lib/geometry';
+import { roomDiagonals } from '../lib/diagonals';
 
 // A wall can bow at most into a full semicircle. Capping here (rather than
 // higher) keeps the arc's projection onto its own chord monotonic, so the
@@ -733,10 +734,11 @@ const CeilingCanvas: React.FC<Props> = ({
   // and the point being dragged can make the shape self-intersect — so show
   // just the one diagonal relevant to whichever point is actively moving,
   // the same corner-pairing the closed quad case already uses.
+  const labels = vertexLabels(points);
   type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string };
   const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
-    ? polygonDiagonals(points).map(([i, j], k) => ({
-        a: points[i], b: points[j], labelI: pointLabel(i), labelJ: pointLabel(j), key: `diag-${k}`,
+    ? roomDiagonals(points).map(d => ({
+        a: points[d.i], b: points[d.j], labelI: labels[d.i], labelJ: labels[d.j], key: `diag-${d.key}`,
       }))
     : [];
 
@@ -746,7 +748,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const cursorDiagonal: DiagonalHint[] = cursorDiagPartner != null && cursor
     ? [{
         a: points[cursorDiagPartner], b: cursor,
-        labelI: pointLabel(cursorDiagPartner), labelJ: pointLabel(points.length), key: 'diag-cursor',
+        labelI: labels[cursorDiagPartner], labelJ: pointLabel(points.length), key: 'diag-cursor',
       }]
     : [];
 
@@ -756,7 +758,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const dragDiagonal: DiagonalHint[] = dragDiagPartner != null && draggingPoint != null
     ? [{
         a: points[dragDiagPartner], b: points[draggingPoint],
-        labelI: pointLabel(dragDiagPartner), labelJ: pointLabel(draggingPoint), key: 'diag-drag',
+        labelI: labels[dragDiagPartner], labelJ: labels[draggingPoint], key: 'diag-drag',
       }]
     : [];
 
@@ -1027,7 +1029,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   offsetX={baseRadius} offsetY={baseRadius}
                   rotation={-rotation.angle}
                   align="center" verticalAlign="middle"
-                  text={pointLabel(i)}
+                  text={labels[i]}
                   fontSize={baseRadius + 3} fontStyle="bold"
                   fill={i === 0 && !nearStart ? '#3880ff' : '#fff'}
                   listening={false}
