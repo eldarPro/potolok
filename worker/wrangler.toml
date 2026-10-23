@@ -2,10 +2,17 @@ name = "ceiling-app-image-edit"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
-# Secrets (not set here — provide them via `wrangler secret put`):
+[ai]
+binding = "AI"
+
+[vars]
+# "workers-ai" (FLUX.2 [klein] 4B, default), "dashscope" (Qwen-Image) or
+# "bfl" (FLUX 3 via api.bfl.ai; model in BFL_MODEL, key in the BFL_API_KEY secret) or
+# "proxyapi" (proxyapi.ru, Russian cards; model in PROXYAPI_MODEL, key in PROXYAPI_KEY).
+PROVIDER = "workers-ai"
+# Optional: lock CORS down to your app's real origin instead of "*":
+# ALLOWED_ORIGIN = "https://your-app-domain.example"
+
+# Secrets, only needed for PROVIDER = "dashscope" (via `wrangler secret put`):
 #   DASHSCOPE_API_KEY
 #   DASHSCOPE_WORKSPACE_ID
-#
-# Optional var to lock CORS down to your app's real origin instead of "*":
-# [vars]
-# ALLOWED_ORIGIN = "https://your-app-domain.example"

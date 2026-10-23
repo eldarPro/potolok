@@ -131,8 +131,54 @@ export interface RoomSceneOptions {
   ceilingHeightM?: number;
 }
 
+/**
+ * Where a fixture landed in the rendered frame, for models that take a layout
+ * (FLUX 3 bounding boxes). `bbox` is [top, left, bottom, right] on a 0–1000 grid.
+ */
+export interface LayoutBox {
+  id: string;
+  bbox: [number, number, number, number];
+  /** English — it goes to the image model verbatim */
+  desc: string;
+}
+
+export interface RoomSceneResult {
+  image: string;
+  layout: LayoutBox[];
+}
+
+const LAYOUT_DESC: Record<LightingType, string> = {
+  spot: 'A small round recessed LED downlight set flush into the stretch ceiling, switched on.',
+  chandelier: 'A modern pendant chandelier hanging from the ceiling on a rod, with several arms and small lit shades.',
+  strip: 'A continuous hidden LED strip glowing along the ceiling edge.',
+  line: 'A straight linear LED light line recessed into the stretch ceiling, glowing.',
+  track: 'A slim black ceiling track rail.',
+  track_spot: 'A small black spotlight head mounted on a ceiling track, switched on.',
+};
+
+const LAYOUT_ID: Record<LightingType, string> = {
+  spot: 'spot', chandelier: 'chandelier', strip: 'led_strip', line: 'light_line', track: 'track', track_spot: 'track_spot',
+};
+
+/** Box around world points as seen by the camera; null when none of them is in frame. */
+function screenBox(points: THREE.Vector3[], camera: THREE.PerspectiveCamera): [number, number, number, number] | null {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, inFrame = false;
+  for (const p of points) {
+    if (p.clone().applyMatrix4(camera.matrixWorldInverse).z > -camera.near) continue; // behind the camera
+    const ndc = p.clone().project(camera);
+    if (Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) inFrame = true;
+    const x = Math.max(-1, Math.min(1, ndc.x)), y = Math.max(-1, Math.min(1, ndc.y));
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  if (!inFrame) return null;
+  const g = (v: number) => Math.round(v * 1000);
+  // at least ~1% of the frame, so tiny far-away spots still get a usable box
+  const top = g((1 - maxY) / 2), left = g((minX + 1) / 2);
+  return [top, left, Math.max(g((1 - minY) / 2), top + 10), Math.max(g((maxX + 1) / 2), left + 10)];
+}
+
 /** Render the room sketch; resolves to a JPEG data URL. Throws if the room has no closed outline. */
-export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): Promise<string> {
+export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): Promise<RoomSceneResult> {
   if (room.points.length < 3) throw new Error('room has no outline');
   const H = opts.ceilingHeightM ?? DEFAULT_CEILING_HEIGHT_M;
 
@@ -159,8 +205,8 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
     new THREE.ShapeGeometry(shape),
     new THREE.MeshStandardMaterial({
       color: fabricColor,
-      roughness: glossy ? 0.12 : 0.95,
-      metalness: glossy ? 0.25 : 0,
+      roughness: glossy ? 0.32 : 0.95,
+      metalness: glossy ? 0.1 : 0,
       side: THREE.DoubleSide,
     }),
   );
@@ -230,17 +276,67 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
     scene.add(m);
   };
 
+  // Fixtures are modelled after the real thing — big soft blobs get read by the
+  // image model as surface-mounted plafonds and multiplied.
+  const bezelMat = new THREE.MeshStandardMaterial({ color: '#d8d8d8', roughness: 0.35, metalness: 0.6, side: THREE.DoubleSide });
+  const brassMat = new THREE.MeshStandardMaterial({ color: '#b08d57', roughness: 0.35, metalness: 0.8 });
+  const shadeMat = new THREE.MeshStandardMaterial({
+    color: '#fff6e0', emissive: '#ffe7b8', emissiveIntensity: 0.9, roughness: 0.6, side: THREE.DoubleSide,
+  });
+
+  const addChandelier = (p: Point) => {
+    const drop = 0.55;
+    const canopy = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 24), brassMat);
+    canopy.position.copy(v3(p, H - 0.015));
+    scene.add(canopy);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, drop, 8), brassMat);
+    rod.position.copy(v3(p, H - drop / 2));
+    scene.add(rod);
+    const hubY = H - drop;
+    const hub = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), brassMat);
+    hub.position.copy(v3(p, hubY));
+    scene.add(hub);
+    // five curved-up arms, each ending in a small lit shade
+    const arms = 5, reach = 0.32;
+    for (let i = 0; i < arms; i++) {
+      const a = (i / arms) * Math.PI * 2;
+      const tip = { x: p.x + Math.cos(a) * reach, y: p.y + Math.sin(a) * reach };
+      const curve = new THREE.QuadraticBezierCurve3(
+        v3(p, hubY),
+        v3({ x: p.x + Math.cos(a) * reach * 0.8, y: p.y + Math.sin(a) * reach * 0.8 }, hubY - 0.04),
+        v3(tip, hubY + 0.08),
+      );
+      scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.007, 6), brassMat));
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.11, 20, 1, true), shadeMat);
+      shade.position.copy(v3(tip, hubY + 0.13));
+      scene.add(shade);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), emissive);
+      bulb.position.copy(v3(tip, hubY + 0.1));
+      scene.add(bulb);
+    }
+    addGlow(p, hubY + 0.05, 0.9);
+    addPointLight(p, hubY - 0.1, 3);
+  };
+
+  /** Recessed downlight: thin metal bezel flush with the ceiling, small lit lens */
+  const ringGeo = new THREE.RingGeometry(0.03, 0.045, 32);
+  const lensGeo = new THREE.CircleGeometry(0.03, 24);
+  const addSpot = (p: Point) => {
+    const ring = new THREE.Mesh(ringGeo, bezelMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(v3(p, H - 0.004));
+    scene.add(ring);
+    const lens = new THREE.Mesh(lensGeo, emissive);
+    lens.rotation.x = Math.PI / 2;
+    lens.position.copy(v3(p, H - 0.005));
+    scene.add(lens);
+    addHalo(p, 0.16);
+    addPointLight(p, H - 0.25, 1.2);
+  };
+
   const addPoint = (p: Point, type: LightingType) => {
     if (type === 'chandelier') {
-      const drop = 0.45;
-      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, drop), railMat);
-      cord.position.copy(v3(p, H - drop / 2));
-      scene.add(cord);
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 16), emissive);
-      body.position.copy(v3(p, H - drop - 0.12));
-      scene.add(body);
-      addGlow(p, H - drop - 0.12, 1.2);
-      addPointLight(p, H - drop - 0.3, 3);
+      addChandelier(p);
     } else if (type === 'track_spot') {
       const spot = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 16), railMat);
       spot.position.copy(v3(p, H - 0.1));
@@ -248,23 +344,38 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
       addGlow(p, H - 0.18, 0.25);
       addPointLight(p, H - 0.3, 1.2);
     } else {
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(0.045, 24), emissive);
-      disc.rotation.x = Math.PI / 2;
-      disc.position.copy(v3(p, H - 0.005));
-      scene.add(disc);
-      addHalo(p, 0.32);
-      addPointLight(p, H - 0.25, 1.2);
+      addSpot(p);
     }
+  };
+
+  // World-space extents of every fixture, projected into layout boxes once the camera is placed
+  const fixtures: { type: LightingType; points: THREE.Vector3[] }[] = [];
+  const pointExtent = (p: Point, type: LightingType): THREE.Vector3[] => {
+    const [r, depth] = type === 'chandelier' ? [0.4, 0.75] : type === 'track_spot' ? [0.05, 0.17] : [0.05, 0.01];
+    const out: THREE.Vector3[] = [];
+    for (const dx of [-r, r]) for (const dy of [-r, r]) for (const h of [H, H - depth]) out.push(v3({ x: p.x + dx, y: p.y + dy }, h));
+    return out;
+  };
+  const pathExtent = (path: Point[]): THREE.Vector3[] => {
+    const out: THREE.Vector3[] = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1];
+      const k = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.1));
+      for (let j = 0; j <= k; j++) out.push(v3({ x: a.x + (b.x - a.x) * j / k, y: a.y + (b.y - a.y) * j / k }, H));
+    }
+    return out;
   };
 
   for (const el of room.lighting) {
     const type = el.catalogItem.type;
     if (el.kind === 'point') {
       addPoint(toM(el), type);
+      fixtures.push({ type, points: pointExtent(toM(el), type) });
       continue;
     }
     const path = el.points.map(toM);
     if (path.length < 2) continue;
+    fixtures.push({ type, points: pathExtent(path) });
     if (type === 'track' || type === 'track_spot') {
       scene.add(ceilingBand(path, 0.04, H - 0.01, railMat));
       if (type === 'track_spot') {
@@ -274,7 +385,9 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
           const k = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 0.8));
           for (let j = 0; j < k; j++) {
             const t = (j + 0.5) / k;
-            addPoint({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, 'track_spot');
+            const head = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+            addPoint(head, 'track_spot');
+            fixtures.push({ type: 'track_spot', points: pointExtent(head, 'track_spot') });
           }
         }
       }
@@ -300,6 +413,19 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
     { x: eye.x + (centre.x - eye.x) * 1.4, y: eye.y + (centre.y - eye.y) * 1.4 },
     EYE_HEIGHT_M + Math.min(1.0, lookDist * 0.4),
   ));
+  camera.updateMatrixWorld();
+
+  const layout: LayoutBox[] = [];
+  const seen = new Map<LightingType, number>();
+  for (const f of fixtures) {
+    const bbox = screenBox(f.points, camera);
+    if (!bbox) continue;
+    // a box over most of the frame (a perimeter strip) says nothing about placement
+    if ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) > 500_000) continue;
+    const n = (seen.get(f.type) ?? 0) + 1;
+    seen.set(f.type, n);
+    layout.push({ id: `${LAYOUT_ID[f.type]}_${n}`, bbox, desc: LAYOUT_DESC[f.type] });
+  }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   try {
@@ -307,7 +433,7 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.render(scene, camera);
-    return renderer.domElement.toDataURL('image/jpeg', 0.9);
+    return { image: renderer.domElement.toDataURL('image/jpeg', 0.9), layout };
   } finally {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -316,24 +442,37 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
 }
 
 /** Prompt for turning the sketch into a photo — lists what's in the drawing so the model keeps it. */
+const LIGHT_KIND: Record<LightingType, string> = {
+  spot: 'встраиваемый точечный светильник',
+  chandelier: 'подвесная люстра',
+  strip: 'светодиодная лента',
+  line: 'встроенная световая линия',
+  track: 'трековая система',
+  track_spot: 'трековые споты',
+};
+
 export function drawingPrompt(room: Room): string {
-  const counts = new Map<string, number>();
+  // Catalog titles are free text ("Спот GX53") — the type tells the model what the fixture actually is
+  const counts = new Map<string, { kind: string; n: number }>();
   for (const el of room.lighting) {
     const title = el.catalogItem.title;
-    counts.set(title, (counts.get(title) ?? 0) + (el.kind === 'point' ? 1 : 0));
+    const entry = counts.get(title) ?? { kind: LIGHT_KIND[el.catalogItem.type], n: 0 };
+    if (el.kind === 'point') entry.n++;
+    counts.set(title, entry);
   }
   const lights = [...counts.entries()]
-    .map(([title, n]) => (n > 0 ? `${title} — ${n} шт.` : title))
+    .map(([title, { kind, n }]) => `${title} (${kind})${n > 0 ? ` — ${n} шт.` : ''}`)
     .join(', ');
   const fabric = room.fabric?.title;
   const niches = room.selectedNiches.some(n => n.kind === 'path');
 
   return [
-    'Это 3D-эскиз комнаты с натяжным потолком. Преврати его в фотореалистичную фотографию интерьера современной квартиры.',
+    // The point is to sell the ceiling — an empty room gives the model nothing to invent besides it
+    'Это 3D-эскиз комнаты с натяжным потолком. Преврати его в фотореалистичную фотографию пустой комнаты после ремонта — главное в кадре потолок.',
     'Строго сохрани ракурс камеры, форму комнаты и потолка, а также точное количество и расположение каждого светильника — ничего не добавляй на потолок и не убирай.',
     fabric ? `Потолок — натяжное полотно «${fabric}».` : '',
     lights ? `Освещение на потолке: ${lights}. Светильники включены.` : '',
     niches ? 'Тёмная полоса у стены — скрытая ниша для штор, добавь в неё шторы.' : '',
-    'Стены, пол, окна и мебель сделай реалистичными и уместными для комнаты «' + room.name + '».',
+    'Комната пустая, без мебели и декора: только гладкие светлые стены, напольное покрытие и окно с дневным светом.',
   ].filter(Boolean).join(' ');
 }

@@ -8,6 +8,8 @@
 //
 // Set VITE_IMAGE_EDIT_PROXY_URL (in .env.local) to the deployed Worker URL.
 
+import type { LayoutBox } from './roomScene';
+
 const PROXY_URL = import.meta.env.VITE_IMAGE_EDIT_PROXY_URL;
 
 export type ImageEditErrorCode = 'no-proxy' | 'blocked' | 'http' | 'no-image' | 'network';
@@ -20,7 +22,14 @@ export class ImageEditError extends Error {
   }
 }
 
-export async function generateCeilingImage(baseImage: string, prompt: string): Promise<string> {
+/** Asks for `n` variants of the same edit (the Worker runs them in parallel); resolves to 1..n images. */
+/**
+ * `layout` — fixture boxes in `baseImage` (from the 3D sketch); only providers that
+ * understand boxes use it, the rest ignore it.
+ */
+export async function generateCeilingImages(
+  baseImage: string, prompt: string, n = 1, layout?: LayoutBox[],
+): Promise<string[]> {
   if (!PROXY_URL) throw new ImageEditError('proxy URL not configured', 'no-proxy');
 
   let res: Response;
@@ -28,18 +37,20 @@ export async function generateCeilingImage(baseImage: string, prompt: string): P
     res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: baseImage, prompt }),
+      body: JSON.stringify({ image: baseImage, prompt, n, layout }),
     });
   } catch {
     throw new ImageEditError('network error', 'network');
   }
 
-  const json = await res.json().catch(() => null) as { image?: string; error?: string; detail?: string } | null;
+  const json = await res.json().catch(() => null) as { image?: string; images?: string[]; error?: string; detail?: string } | null;
 
   if (!res.ok) {
     if (res.status === 422 || json?.error === 'blocked') throw new ImageEditError('blocked', 'blocked');
     throw new ImageEditError(json?.detail || json?.error || `HTTP ${res.status}`, 'http');
   }
-  if (!json?.image) throw new ImageEditError('no image in response', 'no-image');
-  return json.image;
+  // `images` from the variants-aware Worker; a single `image` from older deployments
+  const images = json?.images?.length ? json.images : json?.image ? [json.image] : [];
+  if (!images.length) throw new ImageEditError('no image in response', 'no-image');
+  return images;
 }

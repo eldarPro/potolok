@@ -133,6 +133,23 @@
   border-color: #1E88E5;
 }
 
+/* ── Variant picker ── */
+.viz-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.viz-variants__thumb {
+  width: 96px;
+  height: 72px;
+  cursor: pointer;
+}
+
+.viz-variants__apply {
+  flex: 1;
+}
+
 /* ── Toolbar ── */
 .viz-toolbar {
   display: flex;

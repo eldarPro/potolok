@@ -7,19 +7,33 @@ import {
 import {
   chevronBackOutline, cameraOutline, imagesOutline, sparklesOutline,
   arrowUndoOutline, refreshOutline, downloadOutline, trashOutline, cubeOutline,
+  checkmarkOutline, closeOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadLightings } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { Project, Room, RoomVisualization, VisualizationVersion, CatalogItem, LightingCatalogItem } from '../types';
 import { fileToDataUrl, downscaleDataUrl } from '../lib/image';
-import { generateCeilingImage, ImageEditError } from '../lib/imageEdit';
+import { generateCeilingImages, ImageEditError } from '../lib/imageEdit';
+import type { LayoutBox } from '../lib/roomScene';
 import ActionButton from '../components/ActionButton';
 import { useT } from '../lib/i18n';
 import './RoomVisualize.css';
 
+/** The model sometimes adds or drops a fixture — a few variants per run let the user pick a faithful one. */
+const VARIANTS = 3;
+
+/** Generated variants waiting for the user to pick one; only the picked one is stored. */
+interface PendingVariants {
+  base: VisualizationVersion[];
+  prompt: string;
+  images: string[];
+  selected: number;
+}
+
+// Dark fabrics used to darken the whole room, walls included — so the walls are pinned explicitly.
 const fabricPreset = (title: string) =>
-  `Замени потолок на натяжной потолок «${title}». Сохрани перспективу, пропорции комнаты, стены, мебель и естественное освещение — измени только сам потолок. Результат должен быть фотореалистичным.`;
+  `Замени полотно натяжного потолка на «${title}». Меняется только поверхность потолка: стены, пол, мебель и окна остаются ровно того же цвета и вида, что сейчас, — стены не темнеют. Все светильники на потолке сохрани на своих местах. Сохрани перспективу и естественное освещение комнаты. Результат должен быть фотореалистичным.`;
 
 const lightingPreset = (title: string, type: LightingCatalogItem['type']) => {
   const placement =
@@ -42,6 +56,7 @@ const RoomVisualize: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [pending, setPending] = useState<PendingVariants | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -92,13 +107,12 @@ const RoomVisualize: React.FC = () => {
     }
   };
 
-  /** Generates an edit of the last version in `base`; on failure the prompt stays in the box to retry. */
-  const generateFrom = async (base: VisualizationVersion[], text: string) => {
+  /** Generates variants of an edit of the last version in `base`; on failure the prompt stays in the box to retry. */
+  const generateFrom = async (base: VisualizationVersion[], text: string, layout?: LayoutBox[]) => {
     try {
-      const resultRaw = await generateCeilingImage(base[base.length - 1].image, text);
-      const result = await downscaleDataUrl(resultRaw);
-      const version: VisualizationVersion = { id: uuid(), image: result, prompt: text, createdAt: new Date().toISOString() };
-      persist({ versions: [...base, version] });
+      const raw = await generateCeilingImages(base[base.length - 1].image, text, VARIANTS, layout);
+      const images = await Promise.all(raw.map(img => downscaleDataUrl(img)));
+      setPending({ base, prompt: text, images, selected: 0 });
       setPrompt('');
     } catch (e) {
       setPrompt(text);
@@ -127,9 +141,13 @@ const RoomVisualize: React.FC = () => {
     try {
       let sketch: VisualizationVersion;
       let text: string;
+      let layout: LayoutBox[];
       try {
         const { renderRoomScene, drawingPrompt } = await import('../lib/roomScene');
-        const image = await downscaleDataUrl(await renderRoomScene(room));
+        const scene = await renderRoomScene(room);
+        // boxes are in 0–1000 frame units, so downscaling doesn't move them
+        const image = await downscaleDataUrl(scene.image);
+        layout = scene.layout;
         sketch = { id: uuid(), image, prompt: '', createdAt: new Date().toISOString() };
         text = drawingPrompt(room);
       } catch {
@@ -137,10 +155,25 @@ const RoomVisualize: React.FC = () => {
         return;
       }
       persist({ versions: [sketch] });
-      await generateFrom([sketch], text);
+      await generateFrom([sketch], text, layout);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleApplyVariant = () => {
+    if (!pending) return;
+    const version: VisualizationVersion = {
+      id: uuid(), image: pending.images[pending.selected], prompt: pending.prompt, createdAt: new Date().toISOString(),
+    };
+    persist({ versions: [...pending.base, version] });
+    setPending(null);
+  };
+
+  const handleDiscardVariants = () => {
+    if (!pending) return;
+    setPrompt(pending.prompt);
+    setPending(null);
   };
 
   const handleUndo = () => { if (versions.length > 1) persist({ versions: versions.slice(0, -1) }); };
@@ -173,33 +206,59 @@ const RoomVisualize: React.FC = () => {
             <div className="viz-empty__title">{t('viz.emptyTitle')}</div>
             <div className="viz-empty__subtitle">{t('viz.emptySubtitle')}</div>
             <div className="viz-empty__actions">
-              <ActionButton icon={cameraOutline} solid onClick={() => cameraInputRef.current?.click()}>
+              <ActionButton icon={cubeOutline} solid disabled={!hasDrawing || busy} onClick={handleFromDrawing}>
+                {busy ? t('viz.generating') : t('viz.fromDrawing')}
+              </ActionButton>
+              {!hasDrawing && <div className="viz-empty__hint">{t('viz.needDrawing')}</div>}
+              <ActionButton icon={cameraOutline} onClick={() => cameraInputRef.current?.click()}>
                 {t('viz.takePhoto')}
               </ActionButton>
               <ActionButton icon={imagesOutline} onClick={() => photoInputRef.current?.click()}>
                 {t('viz.uploadPhoto')}
               </ActionButton>
-              <ActionButton icon={cubeOutline} disabled={!hasDrawing || busy} onClick={handleFromDrawing}>
-                {busy ? t('viz.generating') : t('viz.fromDrawing')}
-              </ActionButton>
-              {!hasDrawing && <div className="viz-empty__hint">{t('viz.needDrawing')}</div>}
             </div>
           </div>
         ) : (
           <div className="viz-workspace">
             <div className="viz-photo">
-              <img src={current.image} alt="" />
+              <img src={pending ? pending.images[pending.selected] : current.image} alt="" />
               {busy && (
                 <div className="viz-photo__overlay">
                   <IonSpinner name="crescent" />
                   <span>{t('viz.generating')}</span>
                 </div>
               )}
-              <button className="viz-photo__delete" onClick={() => setDeleteConfirmOpen(true)}>
-                <IonIcon icon={trashOutline} />
-              </button>
+              {!pending && (
+                <button className="viz-photo__delete" onClick={() => setDeleteConfirmOpen(true)}>
+                  <IonIcon icon={trashOutline} />
+                </button>
+              )}
             </div>
 
+            {pending ? (
+              <div className="viz-variants">
+                <div className="viz-presets__label">{t('viz.pickVariant')}</div>
+                <div className="viz-history">
+                  {pending.images.map((img, i) => (
+                    <img
+                      key={i}
+                      src={img}
+                      alt=""
+                      className={`viz-history__thumb viz-variants__thumb${i === pending.selected ? ' viz-history__thumb--active' : ''}`}
+                      onClick={() => setPending({ ...pending, selected: i })}
+                    />
+                  ))}
+                </div>
+                <div className="viz-toolbar">
+                  <button className="viz-toolbar__btn" onClick={handleDiscardVariants}>
+                    <IonIcon icon={closeOutline} />{t('common.cancel')}
+                  </button>
+                  <ActionButton icon={checkmarkOutline} solid expand={false} className="viz-variants__apply" onClick={handleApplyVariant}>
+                    {t('viz.applyVariant')}
+                  </ActionButton>
+                </div>
+              </div>
+            ) : (<>
             {versions.length > 1 && (
               <div className="viz-history">
                 {versions.map((v, i) => (
@@ -264,6 +323,7 @@ const RoomVisualize: React.FC = () => {
                 {busy ? t('viz.generating') : t('viz.generate')}
               </ActionButton>
             </div>
+            </>)}
           </div>
         )}
 
