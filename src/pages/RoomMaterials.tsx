@@ -16,20 +16,22 @@ import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
 import {
   edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE, CM_PER_GRID,
-  edgeLen, pointOnArc, splitBulge, totalFabricCorners, dist, Point, vertexLabels, nextVertexLabel,
+  edgeLen, pointOnArc, splitBulge, dist, Point, vertexLabels, nextVertexLabel,
 } from '../lib/geometry';
 import { useT } from '../lib/i18n';
+import { roomItems, lineTotal, ItemKind } from '../lib/pricing';
 import RoomPreview from '../components/RoomPreview';
 import WallSplitScreen from '../components/WallSplitScreen';
 import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm, makePointMapper } from '../lib/diagonals';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
-// A room's first 4 corners (a plain rectangle) are free; the fabric's
-// per-corner price only applies past that.
-const FREE_FABRIC_CORNERS = 4;
-
 type Section = 'diagonals' | 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
+
+const SECTION_KIND: Partial<Record<Section, ItemKind>> = {
+  fabric: 'fabric', profile: 'profile', lighting: 'lighting',
+  niche: 'niche', accessories: 'accessory', services: 'service',
+};
 
 const SECTION_META: Record<Section, { titleKey: string; icon: string }> = {
   diagonals:   { titleKey: 'sec.diagonals',    icon: resizeOutline },
@@ -310,8 +312,6 @@ const RoomMaterials: React.FC = () => {
   const removeAccessory = (id: string) =>
     updateRoom({ selectedAccessories: roomAccessories.filter(a => a.id !== id) });
 
-  const accessoryTotal = roomAccessories.reduce((s, a) => s + a.accessory.price * a.quantity, 0);
-  const accessoryInstallTotal = roomAccessories.reduce((s, a) => s + a.accessory.priceInstall * a.quantity, 0);
 
   // ── Niches ──
   // 'pcs'-unit niches are added here with a quantity stepper; 'perimeter'-unit
@@ -346,8 +346,6 @@ const RoomMaterials: React.FC = () => {
   const removeNiche = (id: string) =>
     updateRoom({ selectedNiches: roomNiches.filter(n => n.id !== id) });
 
-  const nicheTotal = roomNiches.reduce((s, n) => s + n.niche.price * (n.kind === 'count' ? n.quantity : n.lengthM), 0);
-  const nicheInstallTotal = roomNiches.reduce((s, n) => s + n.niche.priceInstall * (n.kind === 'count' ? n.quantity : n.lengthM), 0);
 
   // ── Services ──
   const roomServices = room.selectedServices ?? [];
@@ -381,27 +379,10 @@ const RoomMaterials: React.FC = () => {
   const removeService = (id: string) =>
     updateRoom({ selectedServices: roomServices.filter(s => s.id !== id) });
 
-  const serviceTotal = roomServices.reduce((s, a) => s + a.service.price * a.quantity, 0);
-  const serviceInstallTotal = roomServices.reduce((s, a) => s + a.service.priceInstall * a.quantity, 0);
 
   // ── Derived ──
-  // Splitting a wall (e.g. to assign it two different profiles) adds a point
-  // without adding a real corner, so bill off the geometric corner count —
-  // not the raw point count. A niche drawn as a routed box also welds in its
-  // own corners, on top of the room's — unless it wraps an existing room
-  // corner, in which case that corner isn't counted twice. The first 4
-  // corners total are free.
-  const nichePaths = roomNiches.filter((n): n is RoomNichePath => n.kind === 'path').map(n => n.points);
-  const billableCorners = Math.max(0, totalFabricCorners(room.points, nichePaths) - FREE_FABRIC_CORNERS);
   const segments = room.profileSegments ?? [];
   const lighting = room.lighting ?? [];
-
-  const profileGroups = segments.reduce((acc, seg) => {
-    if (!acc[seg.profileId]) acc[seg.profileId] = { profile: seg.profile, totalLengthM: 0, count: 0 };
-    acc[seg.profileId].totalLengthM += seg.lengthM;
-    acc[seg.profileId].count += 1;
-    return acc;
-  }, {} as Record<string, { profile: CatalogItem; totalLengthM: number; count: number }>);
 
   const lightingGroups = lighting.reduce((acc, e) => {
     const key = e.catalogItemId;
@@ -419,34 +400,10 @@ const RoomMaterials: React.FC = () => {
       return acc;
     }, {} as Record<string, { item: NicheItem; elements: RoomNichePath[] }>);
 
-  const fabricTotal = room.fabric ? room.fabric.price * room.areaSqm + room.fabric.priceCorner * billableCorners : 0;
-  const profileTotal = Object.values(profileGroups).reduce(
-    (s, { profile, totalLengthM, count }) => s + profile.price * totalLengthM + profile.priceCorner * count, 0,
-  );
-  const lightingTotal = lighting.reduce((s, e) =>
-    s + (e.kind === 'point' ? e.catalogItem.price : e.catalogItem.price * (e as RoomLightingPath).lengthM), 0);
-  const workerFabric = room.fabric ? room.fabric.priceInstall * room.areaSqm + room.fabric.priceInstallCorner * billableCorners : 0;
-  const workerProfile = Object.values(profileGroups).reduce(
-    (s, { profile, totalLengthM }) => s + profile.priceInstall * totalLengthM, 0,
-  );
-  const workerLighting = lighting.reduce((s, e) =>
-    s + (e.kind === 'point' ? e.catalogItem.priceInstall : e.catalogItem.priceInstall * (e as RoomLightingPath).lengthM), 0);
-
-  const sectionTotal =
-    section === 'fabric' ? fabricTotal :
-    section === 'profile' ? profileTotal :
-    section === 'lighting' ? lightingTotal :
-    section === 'niche' ? nicheTotal :
-    section === 'accessories' ? accessoryTotal :
-    section === 'services' ? serviceTotal : 0;
-
-  const sectionWorker =
-    section === 'fabric' ? workerFabric :
-    section === 'profile' ? workerProfile :
-    section === 'lighting' ? workerLighting :
-    section === 'niche' ? nicheInstallTotal :
-    section === 'accessories' ? accessoryInstallTotal :
-    section === 'services' ? serviceInstallTotal : 0;
+  // Totals go through the shared estimate so they include the project's prices
+  const sectionItems = roomItems(room, project.pricing).filter(i => i.kind === SECTION_KIND[section as Section]);
+  const sectionTotal = sectionItems.reduce((s, i) => s + lineTotal(i, 'client'), 0);
+  const sectionWorker = sectionItems.reduce((s, i) => s + lineTotal(i, 'worker'), 0);
 
   const showTotalsBar =
     (section === 'fabric' && room.fabric != null && room.areaSqm > 0) ||

@@ -8,7 +8,7 @@ import {
 } from '@ionic/react';
 import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, createOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
-import { calcRoomClientPrice } from '../lib/pricing';
+import { projectEstimate } from '../lib/pricing';
 import { Project, Room } from '../types';
 import ActionButton from '../components/ActionButton';
 import RoomThumb from '../components/RoomThumb';
@@ -18,7 +18,7 @@ import './ProjectList.css';
 const isDrawn = (r: Room) => r.points.length >= 3 && r.areaSqm > 0;
 
 const projectArea = (p: Project) => p.rooms.reduce((s, r) => s + r.areaSqm, 0);
-const projectPrice = (p: Project) => p.rooms.reduce((s, r) => s + calcRoomClientPrice(r), 0);
+const projectPrice = (p: Project) => projectEstimate(p).clientTotal;
 
 const formatRub = (v: number) => `${Math.round(v).toLocaleString('ru')} ₽`;
 

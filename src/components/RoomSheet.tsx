@@ -2,9 +2,9 @@ import React, { useRef, useState } from 'react';
 import { IonIcon } from '@ionic/react';
 import {
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
-  resizeOutline, checkmarkCircle, alertCircle, addOutline, chevronForwardOutline, calculatorOutline,
+  resizeOutline, checkmarkCircle, alertCircle, addOutline, chevronForwardOutline,
 } from 'ionicons/icons';
-import { Room } from '../types';
+import { ProjectPricing, Room } from '../types';
 import { roomDiagonals, diagonalCm } from '../lib/diagonals';
 import { countRealCorners } from '../lib/geometry';
 import { calcRoomClientPrice } from '../lib/pricing';
@@ -35,11 +35,19 @@ const readExpanded = () => {
 
 interface Props {
   room: Room;
+  /** the project's prices, so the room total matches the estimate */
+  pricing?: ProjectPricing;
   onOpenSection: (section: SheetSection) => void;
   onOpenEstimate: () => void;
 }
 
-const RoomSheet: React.FC<Props> = ({ room, onOpenSection, onOpenEstimate }) => {
+// The room total is plain text that opens this room in the project estimate
+const totalButtonStyle: React.CSSProperties = {
+  flexShrink: 0, border: 'none', background: 'none', color: '#fff', padding: '4px 0',
+  display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.2, cursor: 'pointer',
+};
+
+const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstimate }) => {
   const { t } = useT();
   const [expanded, setExpandedState] = useState(readExpanded);
   const touchY = useRef<number | null>(null);
@@ -118,14 +126,15 @@ const RoomSheet: React.FC<Props> = ({ room, onOpenSection, onOpenEstimate }) => 
   ];
 
   const missing = rows.filter(r => r.status === 'need').map(r => r.title.toLowerCase());
-  const total = calcRoomClientPrice(room);
+  const total = calcRoomClientPrice(room, pricing);
   const totalText = `≈ ${Math.round(total).toLocaleString('ru')} ₽`;
 
+  // Nothing to say once everything required is chosen
   const hint = !drawn
     ? { text: t('rs.drawFirst'), color: 'rgba(255,255,255,0.45)' }
     : missing.length > 0
       ? { text: t('rs.left', { list: missing.join(', ') }), color: '#ff6b66' }
-      : { text: t('rs.allSet'), color: '#2dd36f' };
+      : null;
 
   // Swipe up/down on the grab area toggles the sheet; a plain tap toggles too.
   const grabHandlers = {
@@ -155,24 +164,24 @@ const RoomSheet: React.FC<Props> = ({ room, onOpenSection, onOpenEstimate }) => 
               </span>
             </div>
           )}
-          <div style={{
-            fontSize: 12, marginTop: drawn ? 3 : 0, color: hint.color,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {hint.text}
-          </div>
+          {hint && (
+            <div style={{
+              fontSize: 12, marginTop: drawn ? 3 : 0, color: hint.color,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {hint.text}
+            </div>
+          )}
         </div>
         <button
           onClick={e => { e.stopPropagation(); onOpenEstimate(); }}
-          style={{
-            flexShrink: 0, border: 'none', cursor: 'pointer',
-            background: '#1E88E5', color: '#fff', borderRadius: 14,
-            padding: '8px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center',
-            lineHeight: 1.15,
-          }}
+          style={totalButtonStyle}
         >
-          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.8 }}>{t('rs.estimate')}</span>
-          <span style={{ fontSize: 15, fontWeight: 800 }}>{totalText}</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{t('rs.total')}</span>
+          <span style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 2 }}>
+            {totalText}
+            <IonIcon icon={chevronForwardOutline} style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)' }} />
+          </span>
         </button>
       </div>
     </div>
@@ -294,22 +303,17 @@ const RoomSheet: React.FC<Props> = ({ room, onOpenSection, onOpenEstimate }) => 
           display: 'flex', alignItems: 'center', gap: 12,
           padding: '12px 16px 4px', borderTop: '1px solid rgba(255,255,255,0.07)',
         }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              {t('rs.total')}
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{totalText}</div>
-          </div>
           <button
             onClick={onOpenEstimate}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: '#1E88E5', color: '#fff', border: 'none', borderRadius: 14,
-              padding: '11px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
-            }}
+            style={{ ...totalButtonStyle, flex: 1, alignItems: 'flex-start' }}
           >
-            <IonIcon icon={calculatorOutline} style={{ fontSize: 18 }} />
-            {t('rs.estimate')}
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {t('rs.total')}
+            </span>
+            <span style={{ fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {totalText}
+              <IonIcon icon={chevronForwardOutline} style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)' }} />
+            </span>
           </button>
         </div>
       </div>

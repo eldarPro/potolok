@@ -22,6 +22,7 @@ import RoomEditor from './pages/RoomEditor';
 import RoomMaterials from './pages/RoomMaterials';
 import RoomVisualize from './pages/RoomVisualize';
 import Summary from './pages/Summary';
+import ProjectPrices from './pages/ProjectPrices';
 import CatalogList from './pages/price-list/CatalogList';
 import CatalogForm from './pages/price-list/CatalogForm';
 import LightingList from './pages/price-list/LightingList';
@@ -47,6 +48,7 @@ const App: React.FC = () => (
         <Route exact path="/project/:projectId/room/:roomId/materials/:section" component={RoomMaterials} />
         <Route exact path="/project/:projectId/room/:roomId/visualize" component={RoomVisualize} />
         <Route exact path="/project/:id/summary" component={Summary} />
+        <Route exact path="/project/:id/prices" component={ProjectPrices} />
         <Route exact path="/project/:id" component={ProjectDetail} />
 
         <Route exact path="/price-list/fabrics" render={p => <CatalogList {...p} category="fabrics" />} />

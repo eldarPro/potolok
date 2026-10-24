@@ -21,6 +21,16 @@
 
   /* Semantic */
   --color-danger: #EF4444;
+  --color-success: #16A34A;
+
+  /* Crew side of the estimate */
+  --color-worker: #11635F;
+  --color-worker-dark: #0F3D3E;
+  --color-worker-light: #E0F2EF;
+
+  /* A project price that differs from the price list */
+  --color-changed: #D97706;
+  --color-changed-light: #FEF3C7;
 
   /* Radius */
   --radius-card: 16px;

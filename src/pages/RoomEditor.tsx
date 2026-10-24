@@ -465,8 +465,9 @@ const RoomEditor: React.FC = () => {
           {!placingLighting && !placingNiche ? (
             <RoomSheet
               room={room}
+              pricing={project.pricing}
               onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
-              onOpenEstimate={() => router.push(`/project/${projectId}/summary`)}
+              onOpenEstimate={() => router.push(`/project/${projectId}/summary?room=${roomId}`)}
             />
           ) : (
           <div style={{

@@ -1,4 +1,4 @@
-import { Project, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile } from '../types';
+import { Project, ProjectPricing, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile } from '../types';
 import { uuid } from './uuid';
 import { CM_PER_GRID } from './geometry';
 
@@ -54,6 +54,13 @@ export function upsertProject(project: Project): void {
   if (idx >= 0) all[idx] = project;
   else all.unshift(project);
   saveProjects(all);
+}
+
+/** Saves the project's pricing and returns the updated project */
+export function saveProjectPricing(project: Project, pricing: ProjectPricing): Project {
+  const updated = { ...project, pricing, updatedAt: new Date().toISOString() };
+  upsertProject(updated);
+  return updated;
 }
 
 export function deleteProject(id: string): void {

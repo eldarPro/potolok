@@ -15,7 +15,7 @@ import { Capacitor } from '@capacitor/core';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
 import { Project } from '../types';
-import { calcRoomClientPrice } from '../lib/pricing';
+import { calcRoomClientPrice, projectEstimate, projectPricing } from '../lib/pricing';
 import ActionButton from '../components/ActionButton';
 import RoomThumb from '../components/RoomThumb';
 import { useT } from '../lib/i18n';
@@ -111,7 +111,8 @@ const ProjectDetail: React.FC = () => {
 
   const totalSqm = project.rooms.reduce((s, r) => s + r.areaSqm, 0);
   const totalPerimeterM = project.rooms.reduce((s, r) => s + r.perimeterM, 0);
-  const totalPrice = project.rooms.reduce((s, r) => s + calcRoomClientPrice(r), 0);
+  const pricing = projectPricing(project);
+  const totalPrice = projectEstimate(project).clientTotal;
   const drawnCount = project.rooms.filter(r => r.areaSqm > 0).length;
   const tel = (project.phone ?? '').replace(/[^\d+]/g, '');
   const menuRoom = project.rooms.find(r => r.id === roomMenuId);
@@ -204,7 +205,7 @@ const ProjectDetail: React.FC = () => {
 
         <div className="project-detail-rooms">
           {project.rooms.map(room => {
-            const roomPrice = calcRoomClientPrice(room);
+            const roomPrice = calcRoomClientPrice(room, pricing);
             const drawn = room.areaSqm > 0;
             return (
               <div

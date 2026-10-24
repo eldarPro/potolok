@@ -159,6 +159,31 @@ export interface Room {
   showDiagonals?: boolean;
 }
 
+// --- Project pricing (layered over the price list) ---
+
+/** Project-wide price for one price-list item; unset fields keep the price-list value */
+export interface PriceOverride {
+  price?: number;
+  priceCorner?: number;
+  priceInstall?: number;
+  priceInstallCorner?: number;
+}
+
+/** A free-form estimate line: positive adds, negative subtracts */
+export interface EstimateAdjustment {
+  id: string;
+  title: string;
+  amount: number;
+}
+
+export interface ProjectPricing {
+  /** keyed by price-list item id */
+  overrides: Record<string, PriceOverride>;
+  discountPct: number;
+  clientLines: EstimateAdjustment[];
+  workerLines: EstimateAdjustment[];
+}
+
 export interface Project {
   id: string;
   clientName: string;
@@ -168,6 +193,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   rooms: Room[];
+  pricing?: ProjectPricing;
 }
 
 export interface MasterProfile {
