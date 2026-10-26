@@ -23,9 +23,6 @@ const s: Record<string, string> = {
   'proj.noAddress': 'Brak adresu',
   'proj.deleteConfirm': 'Usunąć projekt?',
   'proj.deleteMsg': 'Wszystkie pomieszczenia i dane zostaną trwale usunięte.',
-  'proj.kpiProjects': 'w toku',
-  'proj.kpiArea': 'm² razem',
-  'proj.kpiSum': 'w kosztorysach',
   'proj.today': 'dziś',
   'proj.yesterday': 'wczoraj',
   'proj.newEmpty': 'Nowy · brak pomieszczeń',
@@ -268,6 +265,8 @@ const s: Record<string, string> = {
 
   'unit.pcs': 'szt.',
   'unit.m': 'm',
+  'unit.sqm': 'm²',
+  'unit.corner': 'narożnik',
 
   'af.unit': 'Jednostka',
   'af.clientPrice': 'Cena klienta (₽ / {unit})',

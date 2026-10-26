@@ -47,7 +47,7 @@ const AccessoryForm: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/price-list/accessories" />
@@ -56,8 +56,9 @@ const AccessoryForm: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
-        <IonList inset>
+      <IonContent className="blue-page">
+        <div className="blue-hero" />
+        <IonList inset className="blue-hero-overlap">
           <IonItem>
             <IonLabel position="stacked">{t('cf.name')}</IonLabel>
             <IonInput value={form.title} onIonInput={e => set('title', e.detail.value ?? '')} clearInput />

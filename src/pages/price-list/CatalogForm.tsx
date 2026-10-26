@@ -55,7 +55,7 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/price-list/${category}`} />
@@ -64,8 +64,9 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent>
-        <IonList inset>
+      <IonContent className="blue-page">
+        <div className="blue-hero" />
+        <IonList inset className="blue-hero-overlap">
           <IonItem>
             <IonLabel position="stacked">{t('cf.name')}</IonLabel>
             <IonInput

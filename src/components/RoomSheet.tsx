@@ -299,23 +299,6 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
             <IonIcon icon={chevronForwardOutline} style={{ fontSize: 16, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
           </button>
         ))}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '12px 16px 4px', borderTop: '1px solid rgba(255,255,255,0.07)',
-        }}>
-          <button
-            onClick={onOpenEstimate}
-            style={{ ...totalButtonStyle, flex: 1, alignItems: 'flex-start' }}
-          >
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              {t('rs.total')}
-            </span>
-            <span style={{ fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {totalText}
-              <IonIcon icon={chevronForwardOutline} style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)' }} />
-            </span>
-          </button>
-        </div>
       </div>
     </>
   );

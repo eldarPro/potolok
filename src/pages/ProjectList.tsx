@@ -6,51 +6,55 @@ import {
   IonSearchbar, IonButtons, IonButton,
   useIonViewWillEnter,
 } from '@ionic/react';
-import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, createOutline } from 'ionicons/icons';
+import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, personOutline, callOutline, locationOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
 import { projectEstimate } from '../lib/pricing';
-import { Project, Room } from '../types';
+import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
-import RoomThumb from '../components/RoomThumb';
 import { useT } from '../lib/i18n';
 import './ProjectList.css';
-
-const isDrawn = (r: Room) => r.points.length >= 3 && r.areaSqm > 0;
 
 const projectArea = (p: Project) => p.rooms.reduce((s, r) => s + r.areaSqm, 0);
 const projectPrice = (p: Project) => projectEstimate(p).clientTotal;
 
 const formatRub = (v: number) => `${Math.round(v).toLocaleString('ru')} ₽`;
 
-/** Up to four room outlines; a single room fills the whole tile */
-const ProjectPreview: React.FC<{ rooms: Room[] }> = ({ rooms }) => {
-  const drawn = rooms.filter(isDrawn);
-  if (rooms.length === 0) {
+/** Soft background / strong text pairs; picked by name so a client keeps one color */
+const AVATAR_COLORS: [string, string][] = [
+  ['#E3F2FD', '#1565C0'],
+  ['#E0F2EF', '#11635F'],
+  ['#FEF3C7', '#B45309'],
+  ['#FCE7F3', '#BE185D'],
+  ['#EDE9FE', '#6D28D9'],
+  ['#DCFCE7', '#15803D'],
+  ['#FFEDD5', '#C2410C'],
+  ['#E0E7FF', '#4338CA'],
+];
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map(w => w.match(/\p{L}|\p{N}/u)?.[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+const ClientAvatar: React.FC<{ name: string }> = ({ name }) => {
+  const letters = initials(name);
+  if (!letters) {
     return (
-      <div className="project-preview project-preview--empty">
-        <IonIcon icon={add} />
+      <div className="client-avatar client-avatar--empty">
+        <IonIcon icon={personOutline} />
       </div>
     );
   }
-  if (drawn.length === 0) {
-    return (
-      <div className="project-preview project-preview--undrawn">
-        <IonIcon icon={createOutline} />
-      </div>
-    );
-  }
-  if (drawn.length === 1) {
-    return (
-      <div className="project-preview">
-        <RoomThumb points={drawn[0].points} size={76} pad={14} strokeWidth={2} />
-      </div>
-    );
-  }
+  let hash = 0;
+  for (const ch of name.trim().toLowerCase()) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
+  const [bg, fg] = AVATAR_COLORS[hash % AVATAR_COLORS.length];
   return (
-    <div className="project-preview project-preview--grid">
-      {drawn.slice(0, 4).map(r => (
-        <RoomThumb key={r.id} points={r.points} size={30} pad={3} strokeWidth={1.4} />
-      ))}
+    <div className="client-avatar" style={{ background: bg, color: fg }}>
+      {letters}
     </div>
   );
 };
@@ -90,12 +94,6 @@ const ProjectList: React.FC = () => {
     return d.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
   };
 
-  const totalArea = projects.reduce((s, p) => s + projectArea(p), 0);
-  const totalPrice = projects.reduce((s, p) => s + projectPrice(p), 0);
-  const totalPriceText = totalPrice >= 1_000_000
-    ? new Intl.NumberFormat(lang, { notation: 'compact', maximumFractionDigits: 1 }).format(totalPrice) + ' ₽'
-    : formatRub(totalPrice);
-
   const q = query.trim().toLowerCase();
   const filtered = q
     ? projects.filter(p =>
@@ -107,7 +105,7 @@ const ProjectList: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader className="project-list-header">
+      <IonHeader className="blue-header">
         <IonToolbar>
           {searchOpen ? (
             <>
@@ -158,24 +156,9 @@ const ProjectList: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="project-list-hero">
-              <div className="project-list-kpis">
-                <div className="project-list-kpi">
-                  <b>{projects.length}</b>
-                  <small>{t('proj.kpiProjects')}</small>
-                </div>
-                <div className="project-list-kpi">
-                  <b>{totalArea.toFixed(1)}</b>
-                  <small>{t('proj.kpiArea')}</small>
-                </div>
-                <div className="project-list-kpi">
-                  <b>{totalPriceText}</b>
-                  <small>{t('proj.kpiSum')}</small>
-                </div>
-              </div>
-            </div>
+            <div className="blue-hero" />
 
-            <div className="card-list project-list-cards">
+            <div className="card-list project-list-cards blue-hero-overlap">
               {filtered.length === 0 && searchOpen ? (
                 <div className="project-list-no-results card">
                   <IonIcon icon={searchOutline} />
@@ -194,15 +177,22 @@ const ProjectList: React.FC = () => {
                       className="project-list-item"
                     >
                       <div className="project-card card">
-                        <ProjectPreview rooms={p.rooms} />
+                        <ClientAvatar name={p.clientName} />
 
                         <div className="project-card__body">
                           <div className="project-card__top">
                             <div className="project-card__name">{p.clientName || t('proj.noName')}</div>
                             <div className="project-card__date">{relDate(p.updatedAt || p.createdAt)}</div>
                           </div>
-                          <div className={`project-card__address${p.address ? '' : ' project-card__address--empty'}`}>
-                            {p.address || t('proj.noAddress')}
+                          {p.phone && (
+                            <div className="project-card__line">
+                              <IonIcon icon={callOutline} />
+                              <span>{p.phone}</span>
+                            </div>
+                          )}
+                          <div className={`project-card__line${p.address ? '' : ' project-card__line--empty'}`}>
+                            <IonIcon icon={locationOutline} />
+                            <span>{p.address || t('proj.noAddress')}</span>
                           </div>
 
                           {p.rooms.length > 0 ? (

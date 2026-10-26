@@ -112,7 +112,7 @@ const Statistics: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/cabinet" />
@@ -129,9 +129,8 @@ const Statistics: React.FC = () => {
             <div className="stats-empty-sub">{t('stat.emptySub')}</div>
           </div>
         ) : (
-          <div className="card-list" style={{ paddingBottom: 32 }}>
-
-            {/* Hero */}
+          <>
+          <div className="blue-hero">
             <div className="stats-hero">
               <div className="stats-hero-item">
                 <div className="stats-hero-value">{totalProjects}</div>
@@ -148,6 +147,8 @@ const Statistics: React.FC = () => {
                 <div className="stats-hero-label">м²</div>
               </div>
             </div>
+          </div>
+          <div className="card-list blue-hero-overlap" style={{ paddingBottom: 32 }}>
 
             {/* Volume */}
             {totalRooms > 0 && (
@@ -267,6 +268,7 @@ const Statistics: React.FC = () => {
             )}
 
           </div>
+          </>
         )}
       </IonContent>
     </IonPage>

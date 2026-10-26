@@ -34,10 +34,8 @@
 
 /* Hero */
 .stats-hero {
-  background: var(--color-primary);
-  border-radius: var(--radius-card);
   display: flex;
-  padding: 20px 0 18px;
+  padding: 8px 0 4px;
   color: #fff;
 }
 

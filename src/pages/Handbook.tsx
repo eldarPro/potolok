@@ -7,6 +7,7 @@ import {
 import {
   folderOutline, pricetagOutline, calculatorOutline,
   personOutline, barChartOutline, addCircleOutline,
+  chevronBackOutline,
 } from 'ionicons/icons';
 import { useT } from '../lib/i18n';
 
@@ -23,16 +24,18 @@ const Handbook: React.FC = () => {
   const { t } = useT();
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
-            <IonBackButton defaultHref="/tabs/cabinet" />
+            <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/cabinet" />
           </IonButtons>
           <IonTitle>{t('hb.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen>
+      <IonContent className="blue-page">
+        <div className="blue-hero" />
+        <div className="card blue-hero-overlap" style={{ marginLeft: 16, marginRight: 16, overflow: 'hidden' }}>
         <IonAccordionGroup multiple>
           {SECTIONS.map((s, i) => (
             <IonAccordion key={i} value={String(i)}>
@@ -46,6 +49,7 @@ const Handbook: React.FC = () => {
             </IonAccordion>
           ))}
         </IonAccordionGroup>
+        </div>
       </IonContent>
     </IonPage>
   );

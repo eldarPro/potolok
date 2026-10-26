@@ -23,9 +23,6 @@ const s: Record<string, string> = {
   'proj.noAddress': 'Adres belirtilmemiş',
   'proj.deleteConfirm': 'Proje silinsin mi?',
   'proj.deleteMsg': 'Tüm odalar ve veriler kalıcı olarak silinecek.',
-  'proj.kpiProjects': 'aktif',
-  'proj.kpiArea': 'm² toplam',
-  'proj.kpiSum': 'tekliflerde',
   'proj.today': 'bugün',
   'proj.yesterday': 'dün',
   'proj.newEmpty': 'Yeni · oda yok',
@@ -268,6 +265,8 @@ const s: Record<string, string> = {
 
   'unit.pcs': 'adet',
   'unit.m': 'm',
+  'unit.sqm': 'm²',
+  'unit.corner': 'köşe',
 
   'af.unit': 'Birim',
   'af.clientPrice': 'Müşteri fiyatı (₽ / {unit})',

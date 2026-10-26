@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle,
+  IonPage, IonHeader, IonToolbar,
   IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
   useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
-import { chevronBackOutline, closeOutline, ellipsisVerticalOutline } from 'ionicons/icons';
+import {
+  chevronBackOutline, closeOutline, ellipsisVerticalOutline,
+  createOutline, colorPaletteOutline, refreshOutline, trashOutline,
+} from 'ionicons/icons';
 import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches } from '../lib/storage';
 import { uuid } from '../lib/uuid';
@@ -15,6 +18,7 @@ import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
 import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
 import { useT } from '../lib/i18n';
+import './RoomEditor.css';
 
 const RoomEditor: React.FC = () => {
   const { t } = useT();
@@ -398,12 +402,15 @@ const RoomEditor: React.FC = () => {
 
   return (
     <IonPage style={{ display: 'flex', flexDirection: 'column' }}>
-      <IonHeader>
+      <IonHeader className="editor-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${projectId}`} />
           </IonButtons>
-          <IonTitle>{room.name}</IonTitle>
+          <div className="editor-header__title">
+            <div className="editor-header__name">{room.name}</div>
+            {project.clientName && <div className="editor-header__sub">{project.clientName}</div>}
+          </div>
           <IonButtons slot="end">
             <IonButton fill="clear" onClick={() => setMenuOpen(true)}>
               <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
@@ -634,55 +641,17 @@ const RoomEditor: React.FC = () => {
         </div>
       )}
 
-      {/* ── Bottom sheet menu ── */}
+      {/* ── Room menu ── */}
       {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', alignItems: 'flex-end' }}>
-          <div
-            onClick={() => setMenuOpen(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}
-          />
-          <div style={{
-            position: 'relative', zIndex: 1,
-            width: '100%',
-            background: '#16182a',
-            boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
-            borderRadius: '20px 20px 0 0',
-            display: 'flex', flexDirection: 'column',
-            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
-            </div>
-            <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                {t('pd.room')}
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 4 }}>{room.name}</div>
-            </div>
-            <div style={{ paddingTop: 8 }}>
-              <MenuAction
-                label={t('re.editName')}
-                color="#1E88E5"
-                onClick={() => { setMenuOpen(false); setRenameOpen(true); }}
-              />
-              <MenuAction
-                label={t('viz.menuItem')}
-                color="#8E24AA"
-                onClick={() => { setMenuOpen(false); router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push'); }}
-              />
-              <MenuAction
-                label={t('re.clearDraft')}
-                color="#F9A825"
-                onClick={() => { setMenuOpen(false); clearDrawing(); }}
-              />
-              <MenuAction
-                label={t('re.deleteRoom')}
-                color="#E53935"
-                onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }}
-              />
-            </div>
-          </div>
-        </div>
+        <RoomMenu
+          onClose={() => setMenuOpen(false)}
+          actions={[
+            { icon: colorPaletteOutline, label: t('viz.menuItem'), onClick: () => router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push') },
+            { icon: createOutline, label: t('re.editName'), onClick: () => setRenameOpen(true) },
+            { icon: refreshOutline, label: t('re.clearDraft'), onClick: clearDrawing },
+            { icon: trashOutline, label: t('re.deleteRoom'), danger: true, onClick: () => setDeleteConfirmOpen(true) },
+          ]}
+        />
       )}
 
       {/* ── Rename alert ── */}
@@ -751,17 +720,35 @@ const RoomEditor: React.FC = () => {
   );
 };
 
-const MenuAction: React.FC<{ label: string; color: string; onClick: () => void }> = ({ label, color, onClick }) => (
-  <button
-    onClick={onClick}
-    style={{
-      display: 'block', width: '100%', padding: '16px 24px',
-      background: 'none', border: 'none', cursor: 'pointer',
-      textAlign: 'left', fontSize: 16, fontWeight: 600, color,
-    }}
-  >
-    {label}
-  </button>
-);
+interface RoomMenuAction {
+  icon: string;
+  label: string;
+  danger?: boolean;
+  onClick: () => void;
+}
+
+/** Popover under the ⋮ button */
+const RoomMenu: React.FC<{
+  actions: RoomMenuAction[];
+  onClose: () => void;
+}> = ({ actions, onClose }) => {
+  const run = (a: RoomMenuAction) => { onClose(); a.onClick(); };
+  return (
+    <div className="room-menu">
+      <div className="room-menu__backdrop" onClick={onClose} />
+      <div className="room-menu__panel">
+        {actions.map(a => (
+          <React.Fragment key={a.label}>
+            {a.danger && <div className="room-menu__sep" />}
+            <button className={`room-menu__item${a.danger ? ' room-menu__item--danger' : ''}`} onClick={() => run(a)}>
+              <span className="room-menu__icon"><IonIcon icon={a.icon} /></span>
+              <span>{a.label}</span>
+            </button>
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default RoomEditor;

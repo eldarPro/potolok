@@ -32,14 +32,15 @@ const PriceList: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonTitle>{t('tab.prices')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
       <IonContent className="price-list-content">
-        <div className="price-list-grid">
+        <div className="blue-hero" />
+        <div className="price-list-grid blue-hero-overlap">
           {CATEGORIES.map(cat => (
             <button key={cat.key} className="price-cat-card" onClick={() => router.push(cat.href)}>
               <div className="price-cat-icon-wrap" style={{ background: cat.bg }}>

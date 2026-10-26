@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
 import { arrowUndoOutline, arrowRedoOutline, trashOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
-import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text, Group, Rect } from 'react-konva';
 import Konva from 'konva';
 import {
   Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, vertexLabels,
@@ -764,6 +764,43 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const diagonals: DiagonalHint[] = [...closedDiagonals, ...cursorDiagonal, ...dragDiagonal];
 
+  // Diagonals usually cross near their midpoints (always, in a quad), so
+  // labels parked at the middle pile up on each other. Slide each label along
+  // its own diagonal, away from crossings and labels already placed, but no
+  // further than it takes to clear them — stays centred when nothing's near.
+  const diagonalLabels = (() => {
+    const crossings: Point[] = [];
+    for (let i = 0; i < diagonals.length; i++) {
+      for (let j = i + 1; j < diagonals.length; j++) {
+        const { a: p, b: p2 } = diagonals[i], { a: q, b: q2 } = diagonals[j];
+        const rx = p2.x - p.x, ry = p2.y - p.y, sx = q2.x - q.x, sy = q2.y - q.y;
+        const den = rx * sy - ry * sx;
+        if (Math.abs(den) < 1e-9) continue;
+        const t = ((q.x - p.x) * sy - (q.y - p.y) * sx) / den;
+        const u = ((q.x - p.x) * ry - (q.y - p.y) * rx) / den;
+        if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) crossings.push({ x: p.x + rx * t, y: p.y + ry * t });
+      }
+    }
+    const placed: { p: Point; halfW: number }[] = [];
+    return diagonals.map(d => {
+      const text = `${d.labelI}–${d.labelJ} ${fmtCm(pxToCm(dist(d.a, d.b)))}`;
+      const w = text.length * 5.4 + 8;
+      let best = { t: 0.5, score: -Infinity };
+      for (let t = 0.25; t <= 0.751; t += 0.025) {
+        const p = { x: d.a.x + (d.b.x - d.a.x) * t, y: d.a.y + (d.b.y - d.a.y) * t };
+        const clear = Math.min(
+          ...crossings.map(c => dist(p, c) / (w / 2 + 6)),
+          ...placed.map(o => dist(p, o.p) / (w / 2 + o.halfW + 4)),
+        );
+        const score = Math.min(clear, 1) - Math.abs(t - 0.5) * 0.01;
+        if (score > best.score) best = { t, score };
+      }
+      const p = { x: d.a.x + (d.b.x - d.a.x) * best.t, y: d.a.y + (d.b.y - d.a.y) * best.t };
+      placed.push({ p, halfW: w / 2 });
+      return { ...d, text, w, p };
+    });
+  })();
+
   const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
     ? dist(cursor, points[0]) * viewport.scale < CLOSE_THRESHOLD
     : false;
@@ -819,13 +856,21 @@ const CeilingCanvas: React.FC<Props> = ({
         style={{ cursor: placingNiche ? 'crosshair' : placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
       >
         <Layer>
-          {/* Grid */}
-          {Array.from({ length: Math.ceil(width / GRID_SIZE) + 2 }).map((_, i) => (
-            <Line key={`gv${i}`} points={[i * GRID_SIZE, -height, i * GRID_SIZE, height * 2]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-          ))}
-          {Array.from({ length: Math.ceil(height / GRID_SIZE) + 2 }).map((_, i) => (
-            <Line key={`gh${i}`} points={[-width, i * GRID_SIZE, width * 2, i * GRID_SIZE]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-          ))}
+          {/* Grid — spans the visible area for the current pan/zoom */}
+          {(() => {
+            const x0 = Math.floor(-viewport.x / viewport.scale / GRID_SIZE) * GRID_SIZE - GRID_SIZE;
+            const y0 = Math.floor(-viewport.y / viewport.scale / GRID_SIZE) * GRID_SIZE - GRID_SIZE;
+            const x1 = (width - viewport.x) / viewport.scale + GRID_SIZE;
+            const y1 = (height - viewport.y) / viewport.scale + GRID_SIZE;
+            const lines = [];
+            for (let x = x0; x <= x1; x += GRID_SIZE) {
+              lines.push(<Line key={`gv${x}`} points={[x, y0, x, y1]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} listening={false} />);
+            }
+            for (let y = y0; y <= y1; y += GRID_SIZE) {
+              lines.push(<Line key={`gh${y}`} points={[x0, y, x1, y]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} listening={false} />);
+            }
+            return lines;
+          })()}
 
           {/* Everything below is the drawing — rotated as one, the grid above is not */}
           <Group x={rotation.x} y={rotation.y} rotation={rotation.angle}>
@@ -876,17 +921,9 @@ const CeilingCanvas: React.FC<Props> = ({
           )}
 
           {/* Diagonals with lengths */}
-          {diagonals.map(({ a, b, labelI, labelJ, key }) => {
-            const lx = (a.x + b.x) / 2;
-            const ly = (a.y + b.y) / 2;
-            const dx = b.x - a.x, dy = b.y - a.y;
-            const segLen = Math.hypot(dx, dy) || 1;
-            const angle = uprightDeg(Math.atan2(dy, dx) * 180 / Math.PI); // keep text upright, never upside-down
-            // Nudge the label to the upper side (on screen) of the diagonal, same as wall labels
-            let nx = -dy / segLen, ny = dx / segLen;
-            if (rotatePt({ x: nx, y: ny }, rotation.angle).y > 0) { nx = -nx; ny = -ny; }
-            const margin = 7;
-            const label = `${labelI}–${labelJ} ${fmtCm(pxToCm(dist(a, b)))}`;
+          {diagonalLabels.map(({ a, b, key, text, w, p }) => {
+            const angle = uprightDeg(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); // keep text upright, never upside-down
+            const h = 13;
             return (
               <Group key={key} listening={false}>
                 <Line
@@ -896,12 +933,16 @@ const CeilingCanvas: React.FC<Props> = ({
                   dash={[8, 6]}
                   opacity={0.85}
                 />
-                <Group x={lx + nx * margin} y={ly + ny * margin} rotation={angle}>
+                {/* Pill sits right on the line so the dashes never run through the text */}
+                <Group x={p.x} y={p.y} rotation={angle}>
+                  <Rect
+                    x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2}
+                    fill="rgba(18,22,38,0.88)" stroke="rgba(249,168,37,0.5)" strokeWidth={0.75}
+                  />
                   <Text
-                    text={label}
+                    text={text} x={-w / 2} y={-h / 2} width={w} height={h}
+                    align="center" verticalAlign="middle"
                     fontSize={9} fontStyle="bold" fill="#F9A825"
-                    offsetX={label.length * 2.7} offsetY={7}
-                    shadowColor="rgba(0,0,0,0.9)" shadowBlur={4} shadowOffsetX={1} shadowOffsetY={1}
                   />
                 </Group>
               </Group>

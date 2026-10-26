@@ -9,7 +9,7 @@ import {
 import {
   chevronBackOutline, addOutline,
   documentTextOutline, ellipsisVerticalOutline, readerOutline,
-  callOutline, locationOutline, chatbubbleOutline, navigateOutline, createOutline,
+  callOutline, locationOutline, chatbubbleOutline, navigateOutline, createOutline, trashOutline,
 } from 'ionicons/icons';
 import { Capacitor } from '@capacitor/core';
 import { useParams } from 'react-router-dom';
@@ -42,7 +42,6 @@ const ProjectDetail: React.FC = () => {
   const [newRoomError, setNewRoomError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [showMenu, setShowMenu] = useState(false);
   const [roomMenuId, setRoomMenuId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -119,14 +118,18 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader className="project-detail-header">
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/" />
           </IonButtons>
+          <div className="project-detail-header__name">{project.clientName || t('pd.project')}</div>
           <IonButtons slot="end">
-            <IonButton fill="clear" onClick={() => setShowMenu(true)}>
-              <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
+            <IonButton fill="clear" onClick={handleOpenEdit} aria-label={t('common.edit')}>
+              <IonIcon slot="icon-only" icon={createOutline} />
+            </IonButton>
+            <IonButton fill="clear" onClick={() => setShowDeleteConfirm(true)} aria-label={t('common.delete')}>
+              <IonIcon slot="icon-only" icon={trashOutline} />
             </IonButton>
           </IonButtons>
         </IonToolbar>
@@ -134,8 +137,7 @@ const ProjectDetail: React.FC = () => {
 
       <IonContent className="project-detail-content">
         {/* ── Client ── */}
-        <div className="project-detail-hero">
-          <div className="project-detail-hero__name">{project.clientName || t('pd.project')}</div>
+        <div className="blue-hero project-detail-hero">
           {(project.phone || project.address) && (
             <div className="project-detail-hero__info">
               {project.phone && <span><IonIcon icon={callOutline} />{project.phone}</span>}
@@ -314,16 +316,6 @@ const ProjectDetail: React.FC = () => {
         buttons={[
           { text: t('viz.menuItem'), handler: () => { if (menuRoom) router.push(`/project/${id}/room/${menuRoom.id}/visualize`, 'forward', 'push'); } },
           { text: t('common.delete'), role: 'destructive', handler: () => { if (menuRoom) handleDeleteRoom(menuRoom.id); } },
-          { text: t('common.cancel'), role: 'cancel' },
-        ]}
-      />
-
-      <IonActionSheet
-        isOpen={showMenu}
-        onDidDismiss={() => setShowMenu(false)}
-        buttons={[
-          { text: t('common.edit'), handler: () => handleOpenEdit() },
-          { text: t('common.delete'), role: 'destructive', handler: () => setShowDeleteConfirm(true) },
           { text: t('common.cancel'), role: 'cancel' },
         ]}
       />

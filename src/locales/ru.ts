@@ -26,9 +26,6 @@ const s: Record<string, string> = {
   'proj.noAddress': 'Адрес не указан',
   'proj.deleteConfirm': 'Удалить проект?',
   'proj.deleteMsg': 'Все помещения и данные будут удалены без возможности восстановления.',
-  'proj.kpiProjects': 'в работе',
-  'proj.kpiArea': 'м² всего',
-  'proj.kpiSum': 'по сметам',
   'proj.today': 'сегодня',
   'proj.yesterday': 'вчера',
   'proj.newEmpty': 'Новый · нет помещений',
@@ -297,6 +294,8 @@ const s: Record<string, string> = {
   // Units
   'unit.pcs': 'шт',
   'unit.m': 'м',
+  'unit.sqm': 'м²',
+  'unit.corner': 'угол',
 
   // Accessory form
   'af.unit': 'Единица измерения',

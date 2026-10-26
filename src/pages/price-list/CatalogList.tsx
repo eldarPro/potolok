@@ -4,11 +4,12 @@ import {
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline, settingsOutline, trashOutline, layersOutline, reorderThreeOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, layersOutline, reorderThreeOutline } from 'ionicons/icons';
 import ActionButton from '../../components/ActionButton';
 import { CatalogItem } from '../../types';
 import { loadFabrics, deleteFabric, loadProfiles, deleteProfile } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
+import PriceItemCard from './PriceItemCard';
 import './ItemCard.css';
 
 interface Props {
@@ -42,7 +43,7 @@ const CatalogList: React.FC<Props> = ({ category }) => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
@@ -52,6 +53,7 @@ const CatalogList: React.FC<Props> = ({ category }) => {
       </IonHeader>
 
       <IonContent className="price-items-content">
+        {items.length > 0 && <div className="blue-hero" />}
         {items.length === 0 ? (
           <div className="price-items-empty">
             <div className="empty-state">
@@ -64,45 +66,25 @@ const CatalogList: React.FC<Props> = ({ category }) => {
             </div>
           </div>
         ) : (
-          <div className="price-items-list">
+          <div className="price-items-list blue-hero-overlap">
             {items.map(item => (
-              <div className="price-item-card" key={item.id}>
-                <div className="price-item-card__header">
-                  <div className="price-item-card__dot" style={{ background: item.color }} />
-                  <span className="price-item-card__title">{item.title}</span>
-                  {item.isDefault && <span className="price-item-card__badge">{t('cf.default')}</span>}
-                  <div className="price-item-card__actions">
-                    <button className="price-item-card__action-btn" onClick={() => router.push(`${basePath}/${item.id}/edit`)}>
-                      <IonIcon icon={settingsOutline} />
-                    </button>
-                    <button className="price-item-card__action-btn price-item-card__action-btn--danger" onClick={() => setDeleteId(item.id)}>
-                      <IonIcon icon={trashOutline} />
-                    </button>
-                  </div>
-                </div>
-                <div className="price-item-card__divider" />
-                <div className="price-item-card__prices">
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.price} ₽</span>
-                    <span className="price-item-card__price-label">{t('mf.clientPerSqm')}</span>
-                  </div>
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.priceCorner} ₽</span>
-                    <span className="price-item-card__price-label">{t('mf.clientPerCorner')}</span>
-                  </div>
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
-                    <span className="price-item-card__price-label">{t('mf.installPerSqm')}</span>
-                  </div>
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.priceInstallCorner} ₽</span>
-                    <span className="price-item-card__price-label">{t('mf.installPerCorner')}</span>
-                  </div>
-                </div>
-                {item.description ? (
-                  <p className="price-item-card__desc">{item.description}</p>
-                ) : null}
-              </div>
+              <PriceItemCard
+                key={item.id}
+                title={item.title}
+                swatch={<div className="price-item-card__dot" style={{ background: item.color }} />}
+                tags={item.isDefault && <span className="price-item-card__badge">{t('cf.default')}</span>}
+                client={[
+                  { value: item.price, unit: t('unit.sqm') },
+                  { value: item.priceCorner, unit: t('unit.corner') },
+                ]}
+                worker={[
+                  { value: item.priceInstall, unit: t('unit.sqm') },
+                  { value: item.priceInstallCorner, unit: t('unit.corner') },
+                ]}
+                description={item.description}
+                onEdit={() => router.push(`${basePath}/${item.id}/edit`)}
+                onDelete={() => setDeleteId(item.id)}
+              />
             ))}
           </div>
         )}

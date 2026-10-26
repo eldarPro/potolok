@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonList, IonItem, IonLabel, IonText, IonIcon, IonActionSheet,
+  IonList, IonItem, IonLabel, IonIcon, IonActionSheet,
   useIonViewWillEnter,
 } from '@ionic/react';
 import {
@@ -32,14 +32,14 @@ const Cabinet: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonTitle>{t('cab.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="cabinet-content">
-        <div className="cabinet-profile">
+      <IonContent className="cabinet-content">
+        <div className="blue-hero cabinet-hero">
           <div className="cabinet-profile-header">
             <div className={`cabinet-avatar${isEmpty ? ' cabinet-avatar--empty' : ''}`}>
               {initial || <IonIcon icon={personOutline} style={{ fontSize: 26 }} />}
@@ -51,14 +51,10 @@ const Cabinet: React.FC = () => {
             </div>
           </div>
 
-          {isEmpty && (
-            <IonText color="medium">
-              <p style={{ fontSize: 14, margin: '4px 0 0' }}>
-                {t('cab.fillData')}
-              </p>
-            </IonText>
-          )}
+          {isEmpty && <p className="cabinet-fill-hint">{t('cab.fillData')}</p>}
+        </div>
 
+        <div className="cabinet-profile blue-hero-overlap">
           <IonList className="cabinet-menu">
             <IonItem button detail onClick={() => history.push('/tabs/cabinet/profile')} lines="full">
               <IonIcon icon={personOutline} slot="start" className="cabinet-menu-icon" />

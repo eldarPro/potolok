@@ -178,3 +178,48 @@
 .add-btn-dashed:active {
   opacity: 0.7;
 }
+
+/* ── Blue page header: toolbar + gradient hero that content cards overlap ── */
+.blue-header {
+  --ion-toolbar-color: #fff;
+  border-bottom: none !important;
+}
+
+.blue-header ion-toolbar {
+  --background: var(--color-primary);
+  --color: #fff;
+  --border-width: 0;
+}
+
+.blue-header ion-title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.blue-header ion-back-button,
+.blue-header ion-button {
+  --color: #fff;
+}
+
+.blue-hero {
+  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: #fff;
+  padding: 4px 16px 60px;
+}
+
+/* Content placed right after .blue-hero rides up over it */
+.blue-hero + .blue-hero-overlap {
+  margin-top: -48px;
+  position: relative;
+}
+
+/* Inset ion-list after the hero: beat Ionic's .list-inset margin */
+.blue-hero + ion-list.blue-hero-overlap {
+  margin-top: -48px;
+  border-radius: var(--radius-card);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+.blue-page {
+  --background: var(--color-bg);
+}

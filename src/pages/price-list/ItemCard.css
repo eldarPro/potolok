@@ -14,40 +14,50 @@
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.price-item-card:active {
+  background: #FAFBFC;
 }
 
 .price-item-card__header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 13px 12px 11px 14px;
+  padding: 12px 6px 10px 14px;
 }
 
 .price-item-card__dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
 }
 
+.price-item-card__tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .price-item-card__symbol {
-  font-size: 20px;
-  width: 24px;
-  text-align: center;
-  flex-shrink: 0;
+  font-size: 17px;
   line-height: 1;
 }
 
 .price-item-card__line {
-  width: 24px;
-  height: 4px;
+  width: 16px;
+  height: 3px;
   border-radius: 2px;
-  flex-shrink: 0;
+  background: currentColor;
 }
 
 .price-item-card__title {
   flex: 1;
+  min-width: 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text);
@@ -66,20 +76,14 @@
 
 .price-item-card__chip {
   font-size: 11px;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   background: #F3F4F6;
   border-radius: 6px;
   padding: 2px 7px;
   flex-shrink: 0;
 }
 
-.price-item-card__actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.price-item-card__action-btn {
+.price-item-card__menu-btn {
   border: none;
   background: transparent;
   padding: 6px;
@@ -87,65 +91,79 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 18px;
   color: var(--color-text-muted);
   cursor: pointer;
+  flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
 
-.price-item-card__action-btn:active {
+.price-item-card__menu-btn:active {
   background: #F3F4F6;
 }
 
-.price-item-card__action-btn--danger {
-  color: var(--color-danger);
-}
-
-.price-item-card__divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 0;
-}
-
-.price-item-card__prices {
+.price-item-card__cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0;
+  gap: 8px;
+  padding: 0 12px 12px;
 }
 
-.price-item-card__price-cell {
-  padding: 9px 14px 11px;
+.price-item-card__col {
+  border-radius: 12px;
+  padding: 8px 11px 9px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.price-item-card__price-cell:nth-child(odd) {
-  border-right: 1px solid var(--color-border);
+.price-item-card__col--client {
+  background: #F2F8FE;
 }
 
-.price-item-card__price-cell + .price-item-card__price-cell + .price-item-card__price-cell {
-  border-top: 1px solid var(--color-border);
+.price-item-card__col--worker {
+  background: #EFF8F6;
 }
 
-.price-item-card__price-cell + .price-item-card__price-cell + .price-item-card__price-cell + .price-item-card__price-cell {
-  border-top: 1px solid var(--color-border);
-  border-right: none;
+.price-item-card__col-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.price-item-card__col--client .price-item-card__col-label {
+  color: var(--color-primary);
+}
+
+.price-item-card__col--worker .price-item-card__col-label {
+  color: var(--color-worker);
+}
+
+.price-item-card__line-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.55;
 }
 
 .price-item-card__price-val {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
 }
 
-.price-item-card__price-label {
-  font-size: 11px;
+.price-item-card__price-unit {
+  font-size: 12px;
+  font-weight: 500;
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .price-item-card__desc {
-  padding: 0 14px 10px;
+  margin: -2px 0 0;
+  padding: 0 14px 12px;
   font-size: 13px;
   color: var(--color-text-secondary);
   line-height: 1.4;
@@ -164,9 +182,12 @@
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  padding: 10px 10px;
-  background: var(--color-border);
-  border-radius: 8px;
-  display: inline-block;
-  margin: 4px 0 2px;
+  padding: 0 4px;
+  margin: 10px 0 0;
+}
+
+/* First group label sits on the blue hero */
+.price-items-list.blue-hero-overlap > .price-items-section-label:first-child {
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 0;
 }

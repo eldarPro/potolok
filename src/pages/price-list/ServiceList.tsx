@@ -4,11 +4,12 @@ import {
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
   IonAlert, useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
-import { addOutline, chevronBackOutline, settingsOutline, trashOutline, briefcaseOutline } from 'ionicons/icons';
+import { addOutline, chevronBackOutline, briefcaseOutline } from 'ionicons/icons';
 import ActionButton from '../../components/ActionButton';
 import { AdditionalService } from '../../types';
 import { loadServices, deleteService } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
+import PriceItemCard from './PriceItemCard';
 import './ItemCard.css';
 
 const ServiceList: React.FC = () => {
@@ -29,7 +30,7 @@ const ServiceList: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/prices" />
@@ -39,6 +40,7 @@ const ServiceList: React.FC = () => {
       </IonHeader>
 
       <IonContent className="price-items-content">
+        {items.length > 0 && <div className="blue-hero" />}
         {items.length === 0 ? (
           <div className="price-items-empty">
             <div className="empty-state">
@@ -51,35 +53,17 @@ const ServiceList: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="price-items-list">
+          <div className="price-items-list blue-hero-overlap">
             {items.map(item => (
-              <div className="price-item-card" key={item.id}>
-                <div className="price-item-card__header">
-                  <span className="price-item-card__title">{item.title}</span>
-                  <div className="price-item-card__actions">
-                    <button className="price-item-card__action-btn" onClick={() => router.push(`/price-list/services/${item.id}/edit`)}>
-                      <IonIcon icon={settingsOutline} />
-                    </button>
-                    <button className="price-item-card__action-btn price-item-card__action-btn--danger" onClick={() => setDeleteId(item.id)}>
-                      <IonIcon icon={trashOutline} />
-                    </button>
-                  </div>
-                </div>
-                <div className="price-item-card__divider" />
-                <div className="price-item-card__prices">
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.price} ₽</span>
-                    <span className="price-item-card__price-label">{t('ms.client')}</span>
-                  </div>
-                  <div className="price-item-card__price-cell">
-                    <span className="price-item-card__price-val">{item.priceInstall} ₽</span>
-                    <span className="price-item-card__price-label">{t('ms.install')}</span>
-                  </div>
-                </div>
-                {item.description ? (
-                  <p className="price-item-card__desc">{item.description}</p>
-                ) : null}
-              </div>
+              <PriceItemCard
+                key={item.id}
+                title={item.title}
+                client={[{ value: item.price }]}
+                worker={[{ value: item.priceInstall }]}
+                description={item.description}
+                onEdit={() => router.push(`/price-list/services/${item.id}/edit`)}
+                onDelete={() => setDeleteId(item.id)}
+              />
             ))}
           </div>
         )}

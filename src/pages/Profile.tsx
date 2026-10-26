@@ -7,6 +7,7 @@ import {
 import {
   personOutline, callOutline, businessOutline,
   locationOutline, mailOutline,
+  chevronBackOutline,
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import { MasterProfile } from '../types';
@@ -42,23 +43,23 @@ const Profile: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
-            <IonBackButton defaultHref="/tabs/cabinet" text="" />
+            <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/cabinet" />
           </IonButtons>
           <IonTitle>{t('prof.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="cabinet-content">
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 16px 8px' }}>
+      <IonContent className="cabinet-content">
+        <div className="blue-hero profile-hero">
           <div className={`cabinet-avatar${!form.name.trim() ? ' cabinet-avatar--empty' : ''}`} style={{ width: 72, height: 72, fontSize: 30 }}>
             {form.name.trim()[0]?.toUpperCase() || <IonIcon icon={personOutline} style={{ fontSize: 34 }} />}
           </div>
         </div>
 
-        <IonList inset>
+        <IonList inset className="blue-hero-overlap">
           <IonItem>
             <IonIcon icon={personOutline} slot="start" color="medium" />
             <IonLabel position="stacked">{t('prof.fullName')}</IonLabel>

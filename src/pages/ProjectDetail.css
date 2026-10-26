@@ -2,35 +2,25 @@
   --background: var(--color-bg);
 }
 
-/* ── Blue header: toolbar + client hero ── */
-.project-detail-header {
-  --ion-toolbar-color: #fff;
-  border-bottom: none !important;
-}
-
-.project-detail-header ion-toolbar {
-  --background: var(--color-primary);
-  --color: #fff;
-  --border-width: 0;
-}
-
-.project-detail-header ion-back-button,
-.project-detail-header ion-button {
-  --color: #fff;
+/* ── Client hero (header/gradient from .blue-header/.blue-hero) ── */
+.project-detail-header__name {
+  padding: 0 4px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-detail-hero {
-  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-  color: #fff;
-  padding: 0 20px 68px;
+  padding: 2px 20px 68px;
 }
 
-.project-detail-hero__name {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.3px;
-  overflow-wrap: anywhere;
+/* Toolbar already spaces the hero; padding (not margin) avoids collapsing a light gap */
+.project-detail-hero > :first-child {
+  margin-top: 0;
 }
 
 .project-detail-hero__info {
