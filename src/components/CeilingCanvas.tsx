@@ -1,11 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, trashOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group, Rect } from 'react-konva';
 import Konva from 'konva';
 import {
   Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, vertexLabels,
-  pointInPolygon, edgeLengthM, relevantDiagonalPartner, GRID_SIZE,
+  pointInPolygon, relevantDiagonalPartner, GRID_SIZE,
   edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom,
   nearestPointOnOutline,
 } from '../lib/geometry';
@@ -17,6 +17,22 @@ import { roomDiagonals } from '../lib/diagonals';
 // around a shared corner without technically crossing a wall segment.
 const MAX_WALL_BULGE = 1;
 import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
+
+/** What a tap on the finished drawing picked — the element card acts on it */
+export type CanvasSelection =
+  | { kind: 'corner'; index: number }
+  | { kind: 'wall'; index: number }
+  | { kind: 'diagonal'; i: number; j: number }
+  | { kind: 'light'; id: string }
+  | { kind: 'niche'; id: string }
+  | { kind: 'fabric' };
+
+export const selectionKey = (s: CanvasSelection | null) => !s ? '' : s.kind === 'corner' || s.kind === 'wall' ? `${s.kind}:${s.index}`
+  : s.kind === 'diagonal' ? `diagonal:${s.i}-${s.j}` : s.kind === 'fabric' ? 'fabric' : `${s.kind}:${s.id}`;
+
+// A finger that travels further than this between down and up was panning, not tapping
+const TAP_SLOP_PX = 8;
+const SEL = '#F9A825';
 
 const CLOSE_THRESHOLD = 24;
 const MIN_POINTS = 3;
@@ -71,6 +87,10 @@ interface Props {
   onOpenTemplates?: () => void;
   onOpenBluetooth?: () => void;
   onOpenManualMeasure?: () => void;
+  selection?: CanvasSelection | null;
+  onSelect?: (s: CanvasSelection | null) => void;
+  /** Height of the canvas bottom covered by the element card — the selection is kept above it */
+  obscuredBottom?: number;
 }
 
 type Tool = 'draw' | 'move';
@@ -103,6 +123,9 @@ const CeilingCanvas: React.FC<Props> = ({
   onOpenTemplates,
   onOpenBluetooth,
   onOpenManualMeasure,
+  selection = null,
+  onSelect,
+  obscuredBottom = 0,
 }) => {
   const [points, setPoints] = useState<Point[]>(room.points);
   const [closed, setClosed] = useState(room.points.length >= MIN_POINTS);
@@ -123,9 +146,17 @@ const CeilingCanvas: React.FC<Props> = ({
   const prevRoomId = useRef(room.id);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
-  const [selectedLighting, setSelectedLighting] = useState<string | null>(null);
-  const [selectedNicheEl, setSelectedNicheEl] = useState<string | null>(null);
+  const selKey = selectionKey(selection);
+  const selectedPoint = selection?.kind === 'corner' ? selection.index : null;
+  const selectedWall = selection?.kind === 'wall' ? selection.index : null;
+  const selectedLighting = selection?.kind === 'light' ? selection.id : null;
+  const selectedNicheEl = selection?.kind === 'niche' ? selection.id : null;
+  const selectedDiag = selection?.kind === 'diagonal' ? selection : null;
+  const fabricSelected = selection?.kind === 'fabric';
+  // Where the current pointer gesture started and whether it has turned into
+  // a pan/pinch — a tap that travelled isn't a selection.
+  const gestureStart = useRef<Point | null>(null);
+  const gestureMoved = useRef(false);
   const [nicheHoverOnWall, setNicheHoverOnWall] = useState(false);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
@@ -213,9 +244,16 @@ const CeilingCanvas: React.FC<Props> = ({
   }, []);
 
   // Clear cursor when switching lighting item
-  useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedLighting(null); }, [placingLighting?.id]);
-  useEffect(() => { setCursor(null); setSelectedPoint(null); setSelectedNicheEl(null); }, [placingNiche?.id]);
-  useEffect(() => { if (!closed) setSelectedPoint(null); }, [closed]);
+  useEffect(() => { setCursor(null); if (placingLighting) onSelect?.(null); }, [placingLighting?.id]);
+  useEffect(() => { setCursor(null); if (placingNiche) onSelect?.(null); }, [placingNiche?.id]);
+  useEffect(() => { if (!closed) onSelect?.(null); }, [closed]);
+
+  // Select on a real tap only; tapping the selected element again lets go of it.
+  const pick = (e: Konva.KonvaEventObject<Event>, s: CanvasSelection) => {
+    e.cancelBubble = true;
+    if (gestureMoved.current || placingLighting || placingNiche || !closed) return;
+    onSelect?.(selectionKey(s) === selKey ? null : s);
+  };
 
   // Container-relative screen px → world (room) coordinates, undoing both the
   // viewport pan/zoom and the drawing's rotation.
@@ -245,38 +283,6 @@ const CeilingCanvas: React.FC<Props> = ({
     const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
     const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
     return { areaSqm, perimeterM };
-  };
-
-  const deletePoint = (i: number) => {
-    if (points.length <= 3) return;
-    const n = points.length;
-    const newPts = [...points.slice(0, i), ...points.slice(i + 1)];
-    const prevEdgeIdx = (i - 1 + n) % n;
-    // Deleting a vertex merges its two adjacent edges into one straight edge —
-    // a single arc can't represent the combined shape, so drop any curvature.
-    const mergedIdx = i === 0 ? n - 2 : i - 1;
-    if (newPts[mergedIdx]?.bulge) newPts[mergedIdx] = { ...newPts[mergedIdx], bulge: 0 };
-    const existingSegs = room.profileSegments ?? [];
-    const updatedSegs = existingSegs
-      .filter(s => s.edgeIndex !== i)
-      .map(s => {
-        let newIdx = s.edgeIndex;
-        if (s.edgeIndex === prevEdgeIdx) {
-          newIdx = i === 0 ? n - 2 : i - 1;
-        } else if (s.edgeIndex > i) {
-          newIdx = s.edgeIndex - 1;
-        }
-        return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
-      })
-      .sort((a, b) => a.edgeIndex - b.edgeIndex);
-    const areaPx = polygonArea(newPts);
-    const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
-    setPoints(newPts);
-    setSelectedPoint(null);
-    setDrawRedoStack([]);
-    onChange({ points: newPts, profileSegments: updatedSegs, areaSqm, perimeterM });
   };
 
   const finishPolygon = (pts: Point[]) => {
@@ -718,7 +724,8 @@ const CeilingCanvas: React.FC<Props> = ({
     let nx = -dy / segLen, ny = dx / segLen;
     if ((mid.x - labelCentroid.x) * nx + (mid.y - labelCentroid.y) * ny < 0) { nx = -nx; ny = -ny; }
     const margin = 7;
-    return { mx: mid.x + nx * margin, my: mid.y + ny * margin, label: fmtCm(cm), key: i, angle };
+    const wall = closed && i === 0 ? points.length - 1 : i - 1;
+    return { mx: mid.x + nx * margin, my: mid.y + ny * margin, label: fmtCm(cm), key: i, angle, wall };
   }).filter(Boolean);
 
   // Invisible wide hit-lines along each wall of the closed room — grab and drag
@@ -735,10 +742,10 @@ const CeilingCanvas: React.FC<Props> = ({
   // just the one diagonal relevant to whichever point is actively moving,
   // the same corner-pairing the closed quad case already uses.
   const labels = vertexLabels(points);
-  type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string };
+  type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string; i?: number; j?: number };
   const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
     ? roomDiagonals(points).map(d => ({
-        a: points[d.i], b: points[d.j], labelI: labels[d.i], labelJ: labels[d.j], key: `diag-${d.key}`,
+        a: points[d.i], b: points[d.j], labelI: labels[d.i], labelJ: labels[d.j], key: `diag-${d.key}`, i: d.i, j: d.j,
       }))
     : [];
 
@@ -822,6 +829,53 @@ const CeilingCanvas: React.FC<Props> = ({
     ? cursor
     : null;
 
+  // Screen point the selection is about — kept clear of the element card
+  const selectionAnchor = (): Point | null => {
+    if (!selection) return null;
+    if (selection.kind === 'corner') return points[selection.index] ?? null;
+    if (selection.kind === 'wall') {
+      const a = points[selection.index], b = points[(selection.index + 1) % points.length];
+      return a && b ? arcHandlePoint(a, b, a.bulge) : null;
+    }
+    if (selection.kind === 'diagonal') {
+      const a = points[selection.i], b = points[selection.j];
+      return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+    }
+    const centre = (ps: Point[]) => ({ x: ps.reduce((s, q) => s + q.x, 0) / ps.length, y: ps.reduce((s, q) => s + q.y, 0) / ps.length });
+    if (selection.kind === 'light') {
+      const el = (room.lighting ?? []).find(e => e.id === selection.id);
+      return !el ? null : el.kind === 'point' ? el : centre(el.points);
+    }
+    if (selection.kind === 'niche') {
+      const el = (room.selectedNiches ?? []).find(e => e.id === selection.id);
+      return el?.kind === 'path' ? centre(el.points) : null;
+    }
+    return points.length ? centre(points) : null;
+  };
+
+  // Pan just enough that the picked element isn't hidden under the card
+  // (or the floating buttons at the top) — the zoom stays as it is.
+  useEffect(() => {
+    const anchor = selectionAnchor();
+    if (!anchor) return;
+    const sp = worldToScreen(anchor);
+    const bottom = height - obscuredBottom - 70;
+    const top = 80;
+    const shift = sp.y > bottom ? bottom - sp.y : sp.y < top ? top - sp.y : 0;
+    if (shift !== 0 && bottom > top) setViewport(v => ({ ...v, y: v.y + shift }));
+  }, [selKey, obscuredBottom]);
+
+  const trackGestureStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    // A second finger makes it a pinch — never a tap
+    if (gestureStart.current && e.isPrimary === false) { gestureMoved.current = true; return; }
+    gestureStart.current = { x: e.clientX, y: e.clientY };
+    gestureMoved.current = false;
+  };
+  const trackGestureMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = gestureStart.current;
+    if (g && e.isPrimary && Math.hypot(e.clientX - g.x, e.clientY - g.y) > TAP_SLOP_PX) gestureMoved.current = true;
+  };
+
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (tool !== 'draw' || points.length === 0 || closed || placingLighting || isDraggingPoint.current) return;
     if (e.pointerType === 'touch' && pinchRef.current) return; // ignore during pinch
@@ -834,7 +888,9 @@ const CeilingCanvas: React.FC<Props> = ({
   return (
     <div
       style={{ position: 'relative', background: '#1a1a2e', overflow: 'hidden' }}
-      onPointerMove={handlePointerMove}
+      onPointerMove={e => { trackGestureMove(e); handlePointerMove(e); }}
+      onPointerDownCapture={trackGestureStart}
+      onPointerUpCapture={e => { if (e.isPrimary) gestureStart.current = null; }}
     >
       <Stage
         ref={stageRef}
@@ -851,8 +907,8 @@ const CeilingCanvas: React.FC<Props> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={() => { setSelectedPoint(null); setSelectedLighting(null); setSelectedNicheEl(null); }}
-        onTap={() => { setSelectedPoint(null); setSelectedLighting(null); setSelectedNicheEl(null); }}
+        onClick={() => { if (!gestureMoved.current) onSelect?.(null); }}
+        onTap={() => { if (!gestureMoved.current) onSelect?.(null); }}
         style={{ cursor: placingNiche ? 'crosshair' : placingLighting ? 'crosshair' : tool === 'draw' ? 'crosshair' : 'grab' }}
       >
         <Layer>
@@ -877,13 +933,20 @@ const CeilingCanvas: React.FC<Props> = ({
 
           {/* Filled polygon */}
           {closed && points.length > 2 && (
-            <Line
-              points={outlinePoints(points)}
-              closed
-              fill="rgba(56,128,255,0.18)"
-              stroke="#3880ff"
-              strokeWidth={2}
-            />
+            <>
+              <Line
+                points={outlinePoints(points)}
+                closed
+                fill={fabricSelected ? 'rgba(249,168,37,0.16)' : 'rgba(56,128,255,0.18)'}
+                stroke="#3880ff"
+                strokeWidth={2}
+                onClick={e => pick(e, { kind: 'fabric' })}
+                onTap={e => pick(e, { kind: 'fabric' })}
+              />
+              {fabricSelected && (
+                <Line points={outlinePoints(points)} closed stroke={SEL} strokeWidth={3} dash={[10, 6]} listening={false} />
+              )}
+            </>
           )}
 
           {/* In-progress polygon */}
@@ -921,20 +984,30 @@ const CeilingCanvas: React.FC<Props> = ({
           )}
 
           {/* Diagonals with lengths */}
-          {diagonalLabels.map(({ a, b, key, text, w, p }) => {
+          {diagonalLabels.map(({ a, b, key, text, w, p, i, j }) => {
             const angle = uprightDeg(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); // keep text upright, never upside-down
             const h = 13;
+            const isSel = selectedDiag != null && selectedDiag.i === i && selectedDiag.j === j;
+            const tappable = closed && i != null && j != null;
             return (
-              <Group key={key} listening={false}>
+              <Group key={key}>
                 <Line
                   points={[a.x, a.y, b.x, b.y]}
                   stroke="#F9A825"
-                  strokeWidth={1.5}
+                  strokeWidth={isSel ? 4 : 1.5}
                   dash={[8, 6]}
-                  opacity={0.85}
+                  opacity={isSel ? 1 : 0.85}
+                  shadowColor={isSel ? SEL : undefined}
+                  shadowBlur={isSel ? 10 : 0}
+                  listening={false}
                 />
                 {/* Pill sits right on the line so the dashes never run through the text */}
-                <Group x={p.x} y={p.y} rotation={angle}>
+                <Group
+                  x={p.x} y={p.y} rotation={angle}
+                  listening={tappable}
+                  onClick={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
+                  onTap={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
+                >
                   <Rect
                     x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2}
                     fill="rgba(18,22,38,0.88)" stroke="rgba(249,168,37,0.5)" strokeWidth={0.75}
@@ -944,6 +1017,8 @@ const CeilingCanvas: React.FC<Props> = ({
                     align="center" verticalAlign="middle"
                     fontSize={9} fontStyle="bold" fill="#F9A825"
                   />
+                  {/* wider invisible target than the pill itself */}
+                  <Rect x={-w / 2 - 6} y={-h / 2 - 8} width={w + 12} height={h + 16} fill="transparent" />
                 </Group>
               </Group>
             );
@@ -951,10 +1026,27 @@ const CeilingCanvas: React.FC<Props> = ({
 
           {/* Segment dimension labels */}
           {segmentLabels.map(seg => seg && (
-            <Group key={seg.key} x={seg.mx} y={seg.my} rotation={seg.angle}>
-              <Text text={seg.label} fontSize={9} fill="#fff" offsetX={seg.label.length * 2.7} offsetY={7} padding={3} />
+            <Group
+              key={seg.key} x={seg.mx} y={seg.my} rotation={seg.angle}
+              onClick={e => pick(e, { kind: 'wall', index: seg.wall })}
+              onTap={e => pick(e, { kind: 'wall', index: seg.wall })}
+            >
+              <Text text={seg.label} fontSize={9} fill={seg.wall === selectedWall ? SEL : '#fff'} fontStyle={seg.wall === selectedWall ? 'bold' : 'normal'} offsetX={seg.label.length * 2.7} offsetY={7} padding={3} />
             </Group>
           ))}
+
+          {/* Selected wall glow */}
+          {selectedWall != null && points.length > selectedWall && (() => {
+            const a = points[selectedWall], b = points[(selectedWall + 1) % points.length];
+            return (
+              <Line
+                points={[a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(q => [q.x, q.y])]}
+                stroke={SEL} strokeWidth={5} lineCap="round" lineJoin="round"
+                shadowColor={SEL} shadowBlur={10}
+                listening={false}
+              />
+            );
+          })()}
 
           {/* Wall drag-to-curve — invisible wide hit band along each wall, laid
               down before the vertices so a corner still wins the hit-test over
@@ -971,11 +1063,12 @@ const CeilingCanvas: React.FC<Props> = ({
               hitStrokeWidth={28}
               draggable
               x={0} y={0}
+              onClick={e => pick(e, { kind: 'wall', index: w.i })}
+              onTap={e => pick(e, { kind: 'wall', index: w.i })}
               onTouchStart={() => { isDraggingPoint.current = true; lastTouch.current = null; }}
               onDragStart={e => {
                 if (pinchRef.current) { e.target.stopDrag(); return; }
                 onVertexDragStart?.();
-                setSelectedPoint(null);
                 setCursor(null);
                 lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
                 wallDragOrigin.current = getPointerPos(e);
@@ -1017,8 +1110,8 @@ const CeilingCanvas: React.FC<Props> = ({
                   <Circle
                     x={p.x} y={p.y}
                     radius={baseRadius + 7}
-                    fill="rgba(229,57,53,0.25)"
-                    stroke="#E53935"
+                    fill="rgba(249,168,37,0.25)"
+                    stroke={SEL}
                     strokeWidth={2}
                     listening={false}
                   />
@@ -1027,12 +1120,12 @@ const CeilingCanvas: React.FC<Props> = ({
                   x={p.x} y={p.y}
                   radius={baseRadius}
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
-                  stroke={isSelected ? '#E53935' : (i === 0 ? '#3880ff' : '#fff')}
+                  stroke={isSelected ? SEL : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 2 : 1}
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
-                  onDragStart={e => { if (pinchRef.current) { e.target.stopDrag(); return; } onVertexDragStart?.(); setSelectedPoint(null); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; setDraggingPoint(i); }}
+                  onDragStart={e => { if (pinchRef.current) { e.target.stopDrag(); return; } onVertexDragStart?.(); setCursor(null); lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true; setDraggingPoint(i); }}
                   onDragMove={e => {
                     if (pinchRef.current) return;
                     const newPts = [...points];
@@ -1049,20 +1142,8 @@ const CeilingCanvas: React.FC<Props> = ({
                     }
                   }}
                   onDragEnd={() => { isDraggingPoint.current = false; setDraggingPoint(null); onVertexDragEnd?.(); }}
-                  onClick={e => {
-                    if (closed && !placingLighting) {
-                      e.cancelBubble = true;
-                      setSelectedLighting(null);
-                      setSelectedPoint(prev => prev === i ? null : i);
-                    }
-                  }}
-                  onTap={e => {
-                    if (closed && !placingLighting) {
-                      e.cancelBubble = true;
-                      setSelectedLighting(null);
-                      setSelectedPoint(prev => prev === i ? null : i);
-                    }
-                  }}
+                  onClick={e => { if (closed) pick(e, { kind: 'corner', index: i }); }}
+                  onTap={e => { if (closed) pick(e, { kind: 'corner', index: i }); }}
                 />
                 <Text
                   x={p.x} y={p.y}
@@ -1088,7 +1169,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 {isSel && (
                   <Circle
                     x={el.x} y={el.y} radius={18}
-                    fill="rgba(229,57,53,0.2)" stroke="#E53935" strokeWidth={2}
+                    fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2}
                     listening={false}
                   />
                 )}
@@ -1096,8 +1177,8 @@ const CeilingCanvas: React.FC<Props> = ({
                   x={el.x} y={el.y} radius={16}
                   fill="transparent"
                   listening={!placingLighting && !placingNiche}
-                  onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
-                  onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
+                  onClick={e => pick(e, { kind: 'light', id: el.id })}
+                  onTap={e => pick(e, { kind: 'light', id: el.id })}
                 />
                 <Text
                   x={el.x} y={el.y}
@@ -1125,12 +1206,12 @@ const CeilingCanvas: React.FC<Props> = ({
                 strokeWidth={isSel ? 9 : 5}
                 lineCap="round"
                 lineJoin="round"
-                shadowColor={isSel ? '#E53935' : undefined}
+                shadowColor={isSel ? SEL : undefined}
                 shadowBlur={isSel ? 12 : 0}
                 listening={!placingLighting && !placingNiche}
                 hitStrokeWidth={20}
-                onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
-                onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedLighting(isSel ? null : el.id); }}
+                onClick={e => pick(e, { kind: 'light', id: el.id })}
+                onTap={e => pick(e, { kind: 'light', id: el.id })}
               />
             );
           })}
@@ -1176,12 +1257,12 @@ const CeilingCanvas: React.FC<Props> = ({
                 lineCap="round"
                 lineJoin="round"
                 dash={[14, 6]}
-                shadowColor={isSel ? '#E53935' : undefined}
+                shadowColor={isSel ? SEL : undefined}
                 shadowBlur={isSel ? 12 : 0}
                 listening={!placingNiche && !placingLighting}
                 hitStrokeWidth={20}
-                onClick={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedNicheEl(isSel ? null : el.id); }}
-                onTap={e => { e.cancelBubble = true; setSelectedPoint(null); setSelectedNicheEl(isSel ? null : el.id); }}
+                onClick={e => pick(e, { kind: 'niche', id: el.id })}
+                onTap={e => pick(e, { kind: 'niche', id: el.id })}
               />
             );
           })}
@@ -1258,109 +1339,6 @@ const CeilingCanvas: React.FC<Props> = ({
           </>
         )}
       </div>
-
-      {/* Delete point button */}
-      {selectedPoint !== null && points.length > 3 && (() => {
-        const p = points[selectedPoint];
-        const { x: sx, y: sy } = worldToScreen(p);
-        return (
-          <button
-            onClick={() => deletePoint(selectedPoint)}
-            style={{
-              position: 'absolute',
-              left: sx - 18,
-              top: sy - 58,
-              width: 36, height: 36,
-              borderRadius: '50%',
-              background: '#E53935',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
-              zIndex: 100,
-              pointerEvents: 'auto',
-            }}
-          >
-            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
-          </button>
-        );
-      })()}
-
-      {/* Delete lighting button */}
-      {selectedLighting && !placingLighting && (() => {
-        const el = (room.lighting ?? []).find(e => e.id === selectedLighting);
-        if (!el) return null;
-        let wx: number, wy: number;
-        if (el.kind === 'point') {
-          wx = (el as RoomLightingPoint).x;
-          wy = (el as RoomLightingPoint).y;
-        } else {
-          const pts = (el as RoomLightingPath).points;
-          wx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-          wy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-        }
-        const { x: sx, y: sy } = worldToScreen({ x: wx, y: wy });
-        return (
-          <button
-            onClick={() => {
-              onChange({ lighting: (room.lighting ?? []).filter(e => e.id !== selectedLighting) });
-              setSelectedLighting(null);
-            }}
-            style={{
-              position: 'absolute',
-              left: sx - 18,
-              top: sy - 58,
-              width: 36, height: 36,
-              borderRadius: '50%',
-              background: '#E53935',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
-              zIndex: 100,
-              pointerEvents: 'auto',
-            }}
-          >
-            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
-          </button>
-        );
-      })()}
-
-      {/* Delete niche button */}
-      {selectedNicheEl && !placingNiche && (() => {
-        const el = (room.selectedNiches ?? []).find(e => e.id === selectedNicheEl && e.kind === 'path') as RoomNichePath | undefined;
-        if (!el) return null;
-        const wx = el.points.reduce((s, p) => s + p.x, 0) / el.points.length;
-        const wy = el.points.reduce((s, p) => s + p.y, 0) / el.points.length;
-        const { x: sx, y: sy } = worldToScreen({ x: wx, y: wy });
-        return (
-          <button
-            onClick={() => {
-              onChange({ selectedNiches: (room.selectedNiches ?? []).filter(e => e.id !== selectedNicheEl) });
-              setSelectedNicheEl(null);
-            }}
-            style={{
-              position: 'absolute',
-              left: sx - 18,
-              top: sy - 58,
-              width: 36, height: 36,
-              borderRadius: '50%',
-              background: '#E53935',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(229,57,53,0.55)',
-              zIndex: 100,
-              pointerEvents: 'auto',
-            }}
-          >
-            <IonIcon icon={trashOutline} style={{ fontSize: 18 }} />
-          </button>
-        );
-      })()}
 
       {/* Empty state overlay — choose how to create the outline */}
       {points.length === 0 && !manualStarted && (

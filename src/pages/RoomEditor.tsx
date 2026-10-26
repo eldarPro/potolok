@@ -9,14 +9,18 @@ import {
   createOutline, colorPaletteOutline, refreshOutline, trashOutline,
 } from 'ionicons/icons';
 import { useParams, useHistory } from 'react-router-dom';
-import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches } from '../lib/storage';
+import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches, loadFabrics } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
-import CeilingCanvas from '../components/CeilingCanvas';
+import CeilingCanvas, { CanvasSelection, selectionKey } from '../components/CeilingCanvas';
+import ElementCard from '../components/ElementCard';
+import WallSplitScreen from '../components/WallSplitScreen';
 import RoomSheet from '../components/RoomSheet';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
 import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
+import { roomDiagonals, diagonalKey } from '../lib/diagonals';
+import { splitEdge } from '../lib/roomEdit';
 import { useT } from '../lib/i18n';
 import './RoomEditor.css';
 
@@ -30,6 +34,14 @@ const RoomEditor: React.FC = () => {
   const [room, setRoom] = useState<Room | null>(null);
   const [profiles, setProfiles] = useState<CatalogItem[]>([]);
   const [lightings, setLightings] = useState<LightingCatalogItem[]>([]);
+  const [fabrics, setFabrics] = useState<CatalogItem[]>([]);
+  const [niches, setNiches] = useState<NicheItem[]>([]);
+
+  // The element picked on the drawing — its card replaces the room panel
+  const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  const [cardHeight, setCardHeight] = useState(0);
+  const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const [undoStack, setUndoStack] = useState<Room[]>([]);
   const [redoStack, setRedoStack] = useState<Room[]>([]);
@@ -64,6 +76,8 @@ const RoomEditor: React.FC = () => {
     setRoom(p.rooms.find(r => r.id === roomId) ?? null);
     setProfiles(loadProfiles());
     setLightings(loadLightings());
+    setFabrics(loadFabrics());
+    setNiches(loadNiches());
   };
 
   useEffect(() => {
@@ -125,6 +139,24 @@ const RoomEditor: React.FC = () => {
   });
 
   if (!project || !room) return null;
+
+  // A selection outlives what it points at after undo, delete or a redraw — drop it then
+  const liveSelection = ((): CanvasSelection | null => {
+    const s = selection;
+    if (!s || room.areaSqm === 0 || placingLighting || placingNiche) return null;
+    const n = room.points.length;
+    if (s.kind === 'corner' || s.kind === 'wall') return s.index < n ? s : null;
+    if (s.kind === 'diagonal') {
+      const key = diagonalKey(s.i, s.j);
+      return room.showDiagonals !== false && roomDiagonals(room.points).some(d => d.key === key) ? s : null;
+    }
+    if (s.kind === 'light') return (room.lighting ?? []).some(e => e.id === s.id) ? s : null;
+    if (s.kind === 'niche') return (room.selectedNiches ?? []).some(e => e.id === s.id && e.kind === 'path') ? s : null;
+    return s;
+  })();
+  // Part of the canvas the card hides: everything above the room panel it covers
+  const panelHeight = (bodyRef.current?.clientHeight ?? 0) - canvasSize.height;
+  const obscuredBottom = liveSelection ? Math.max(0, cardHeight - panelHeight) : 0;
 
   // ── Room templates ──────────────────────────────────────────────────────────
 
@@ -419,7 +451,7 @@ const RoomEditor: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, position: 'relative' }}>
+      <div ref={bodyRef} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, position: 'relative' }}>
 
           {/* ── Canvas ── */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
@@ -461,6 +493,9 @@ const RoomEditor: React.FC = () => {
                 onOpenTemplates={() => setTemplatesOpen(true)}
                 onOpenBluetooth={() => setBluetoothOpen(true)}
                 onOpenManualMeasure={() => setManualMeasureOpen(true)}
+                selection={liveSelection}
+                onSelect={setSelection}
+                obscuredBottom={obscuredBottom}
               />
             )}
 
@@ -579,7 +614,45 @@ const RoomEditor: React.FC = () => {
 
           </div>
           )}
+
+          {liveSelection && (
+            <ElementCard
+              key={selectionKey(liveSelection)}
+              room={room}
+              selection={liveSelection}
+              pricing={project.pricing}
+              fabrics={fabrics}
+              profiles={profiles}
+              lightings={lightings}
+              niches={niches}
+              onChange={updateRoom}
+              onSelect={setSelection}
+              onSplitWall={setSplitEdgeIdx}
+              onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
+              onPlaceLighting={setPlacingLighting}
+              onPlaceNiche={setPlacingNiche}
+              onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
+              onHeight={setCardHeight}
+            />
+          )}
         </div>
+
+      {splitEdgeIdx !== null && splitEdgeIdx < room.points.length && (
+        <WallSplitScreen
+          points={room.points}
+          edgeIndex={splitEdgeIdx}
+          profiles={profiles}
+          current={room.profileSegments?.find(s => s.edgeIndex === splitEdgeIdx)?.profile ?? null}
+          wallColors={room.points.map((_, i) => room.profileSegments?.find(s => s.edgeIndex === i)?.profile.color ?? null)}
+          onCancel={() => setSplitEdgeIdx(null)}
+          onSplit={(distCm, first, second) => {
+            const r = splitEdge(room, splitEdgeIdx, distCm, first, second);
+            if (r) updateRoom(r);
+            setSelection({ kind: 'wall', index: splitEdgeIdx });
+            setSplitEdgeIdx(null);
+          }}
+        />
+      )}
 
       {/* ── Templates sheet ── */}
       {templatesOpen && (

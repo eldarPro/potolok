@@ -13,16 +13,14 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
 import { uuid } from '../lib/uuid';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
-import {
-  edgeLengthM, edgeLengthCm, edgeLabel, polygonArea, polygonPerimeter, pxToMeters, GRID_SIZE, CM_PER_GRID,
-  edgeLen, pointOnArc, splitBulge, dist, Point, vertexLabels, nextVertexLabel,
-} from '../lib/geometry';
+import { Project, Room, CatalogItem, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
+import { edgeLengthM, edgeLengthCm, edgeLabel, Point } from '../lib/geometry';
 import { useT } from '../lib/i18n';
 import { roomItems, lineTotal, ItemKind } from '../lib/pricing';
 import RoomPreview from '../components/RoomPreview';
 import WallSplitScreen from '../components/WallSplitScreen';
-import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm, makePointMapper } from '../lib/diagonals';
+import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm } from '../lib/diagonals';
+import { reshapedRoom as reshapedRoomOf, resizedPoints, splitEdge, bendEdge, setWallProfile, setAllProfiles } from '../lib/roomEdit';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
@@ -155,125 +153,23 @@ const RoomMaterials: React.FC = () => {
   };
 
   // ── Profile ──
-  const assignProfile = (edgeIndex: number, item: CatalogItem) => {
-    const newSeg: RoomProfileSegment = {
-      edgeIndex, profileId: item.id, profile: { ...item },
-      lengthM: edgeLengthM(room.points, edgeIndex),
-    };
-    const updated = [
-      ...(room.profileSegments ?? []).filter(s => s.edgeIndex !== edgeIndex),
-      newSeg,
-    ].sort((a, b) => a.edgeIndex - b.edgeIndex);
-    updateRoom({ profileSegments: updated });
-  };
+  const assignProfile = (edgeIndex: number, item: CatalogItem) => updateRoom(setWallProfile(room, edgeIndex, item));
 
-  const clearProfile = (edgeIndex: number) =>
-    updateRoom({ profileSegments: (room.profileSegments ?? []).filter(s => s.edgeIndex !== edgeIndex) });
+  const clearProfile = (edgeIndex: number) => updateRoom(setWallProfile(room, edgeIndex, null));
 
-  const applyToAll = (item: CatalogItem) =>
-    updateRoom({
-      profileSegments: room.points.map((_, i) => ({
-        edgeIndex: i, profileId: item.id, profile: { ...item },
-        lengthM: edgeLengthM(room.points, i),
-      })),
-    });
+  const applyToAll = (item: CatalogItem) => updateRoom(setAllProfiles(room, item));
 
-  // Outline after setting wall `edgeIndex` to `newLenCm`: its end corner slides
-  // along the wall and the next wall follows. Arc length scales linearly with
-  // chord length for a fixed bulge (the arc's included angle stays the same),
-  // so scaling the chord by the same ratio as a straight edge keeps a curved
-  // wall's shape and reaches the new length.
-  const resizedPoints = (pts: Point[], edgeIndex: number, newLenCm: number) => {
-    const n = pts.length;
-    const a = pts[edgeIndex % n];
-    const b = pts[(edgeIndex + 1) % n];
-    const currentPx = edgeLen(a, b, a.bulge);
-    if (!(newLenCm > 0) || currentPx === 0) return null;
-    const ratio = ((newLenCm * GRID_SIZE) / CM_PER_GRID) / currentPx;
-    const newPts = [...pts];
-    newPts[(edgeIndex + 1) % n] = { ...b, x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio };
-    return newPts;
-  };
+  const reshapedRoom = (newPts: Point[], diags?: Parameters<typeof reshapedRoomOf>[2]) => reshapedRoomOf(room, newPts, diags);
 
-  // Everything that follows a change of outline (same corners, new positions):
-  // area, perimeter, profile lengths — and lights and niche lines carried
-  // along with the walls around them.
-  const reshapedRoom = (newPts: Point[], diags = shapeDiagonals(room.points)): Partial<Room> => {
-    const move = makePointMapper(room.points, newPts, diags);
-    const pathM = (ps: { x: number; y: number }[]) =>
-      pxToMeters(ps.slice(1).reduce((sum, p, i) => sum + dist(ps[i], p), 0));
-    return {
-      points: newPts,
-      areaSqm: parseFloat((pxToMeters(Math.sqrt(polygonArea(newPts))) ** 2).toFixed(2)),
-      perimeterM: parseFloat(pxToMeters(polygonPerimeter(newPts)).toFixed(2)),
-      profileSegments: (room.profileSegments ?? []).map(s => ({ ...s, lengthM: edgeLengthM(newPts, s.edgeIndex) })),
-      lighting: (room.lighting ?? []).map(e => {
-        if (e.kind === 'point') return { ...e, ...move(e) };
-        const ps = e.points.map(move);
-        return { ...e, points: ps, lengthM: pathM(ps) };
-      }),
-      selectedNiches: (room.selectedNiches ?? []).map(n => {
-        if (n.kind !== 'path') return n;
-        const ps = n.points.map(move);
-        return { ...n, points: ps, lengthM: pathM(ps) };
-      }),
-    };
-  };
-
-  // Split a wall `distCm` from its start. Every corner keeps its letter and the
-  // new point takes the next free one; each part gets its own profile.
   const splitEdgeAt = (edgeIndex: number, distCm: number, first: CatalogItem | null, second: CatalogItem | null) => {
-    const pts = room.points;
-    const a = pts[edgeIndex];
-    const b = pts[(edgeIndex + 1) % pts.length];
-    const edgeTotalCm = edgeLengthCm(pts, edgeIndex);
-    if (edgeTotalCm === 0 || distCm <= 0 || distCm >= edgeTotalCm) return;
-    // Split fraction along the edge's length (arc-length fraction for a curved wall).
-    const t = distCm / edgeTotalCm;
-    const splitPt = pointOnArc(a, b, a.bulge, t);
-    const [bulgeBefore, bulgeAfter] = splitBulge(a.bulge ?? 0, t);
-    const labels = vertexLabels(pts);
-    const lettered = pts.map((p, k) => ({ ...p, label: labels[k] }));
-    const newPts = [
-      ...lettered.slice(0, edgeIndex),
-      { ...lettered[edgeIndex], bulge: bulgeBefore },
-      { x: splitPt.x, y: splitPt.y, bulge: bulgeAfter, label: nextVertexLabel(pts) },
-      ...lettered.slice(edgeIndex + 1),
-    ];
-    const part = (edgeIdx: number, item: CatalogItem | null): RoomProfileSegment[] => item
-      ? [{ edgeIndex: edgeIdx, profileId: item.id, profile: { ...item }, lengthM: edgeLengthM(newPts, edgeIdx) }]
-      : [];
-    const updatedSegs = [
-      ...(room.profileSegments ?? [])
-        .filter(s => s.edgeIndex !== edgeIndex)
-        .map(s => {
-          const newIdx = s.edgeIndex > edgeIndex ? s.edgeIndex + 1 : s.edgeIndex;
-          return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
-        }),
-      ...part(edgeIndex, first),
-      ...part(edgeIndex + 1, second),
-    ].sort((x, y) => x.edgeIndex - y.edgeIndex);
-    updateRoom({
-      points: newPts,
-      areaSqm: parseFloat((pxToMeters(Math.sqrt(polygonArea(newPts))) ** 2).toFixed(2)),
-      perimeterM: parseFloat(pxToMeters(polygonPerimeter(newPts)).toFixed(2)),
-      profileSegments: updatedSegs,
-    });
+    const r = splitEdge(room, edgeIndex, distCm, first, second);
+    if (r) updateRoom(r);
   };
 
   const straightenEdge = (edgeIndex: number) => {
-    const n = room.points.length;
-    const pts = room.points;
-    if (!pts[edgeIndex % n]?.bulge) return;
-    const newPts = pts.map((p, i) => i === edgeIndex % n ? { ...p, bulge: 0 } : p);
-    const areaPx = polygonArea(newPts);
-    const perimPx = polygonPerimeter(newPts);
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(areaPx)) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(perimPx).toFixed(2));
-    const updatedSegments = (room.profileSegments ?? []).map(s => ({
-      ...s, lengthM: edgeLengthM(newPts, s.edgeIndex),
-    }));
-    updateRoom({ points: newPts, areaSqm, perimeterM, profileSegments: updatedSegments });
+    if (!room.points[edgeIndex % room.points.length]?.bulge) return;
+    const r = bendEdge(room, edgeIndex, 0);
+    if (r) updateRoom(r);
   };
 
   // ── Lighting delete ──
