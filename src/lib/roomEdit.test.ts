@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Room } from '../types';
-import { cornerAngle, squareCorner, deleteVertex, resizedPoints, wallCm, roundEdge, nudgeVertex, cmToPx } from './roomEdit';
+import { cornerAngle, squareCorner, cornerPointsAtAngle, deleteVertex, resizedPoints, wallCm, roundEdge, nudgeVertex, cmToPx } from './roomEdit';
 
 const room = (points: { x: number; y: number }[]): Room => ({
   id: 'r', name: 'r', points, fabricId: null, fabric: null, profileSegments: [], lighting: [],
@@ -29,6 +29,43 @@ describe('squareCorner', () => {
     // neighbours stay put
     expect(r.points![1]).toMatchObject({ x: 400, y: 0 });
     expect(r.points![3]).toMatchObject({ x: 0, y: 300 });
+  });
+});
+
+describe('cornerPointsAtAngle', () => {
+  const rect = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 0, y: 300 }];
+
+  it('sets any angle, moving only that corner', () => {
+    for (const deg of [60, 89.5, 120, 150]) {
+      const p = cornerPointsAtAngle(rect, 2, deg)!;
+      expect(cornerAngle(p, 2)).toBeCloseTo(deg, 5);
+      expect(p.filter((q, k) => k !== 2)).toEqual(rect.filter((_, k) => k !== 2));
+    }
+  });
+
+  it('works for either winding', () => {
+    const rev = [...rect].reverse();
+    expect(cornerAngle(cornerPointsAtAngle(rev, 1, 120)!, 1)).toBeCloseTo(120, 5);
+  });
+
+  it('matches squareCorner at 90°', () => {
+    const skew = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 410, y: 300 }, { x: 0, y: 300 }];
+    expect(cornerPointsAtAngle(skew, 2, 90)![2].x).toBeCloseTo(squareCorner(room(skew), 2)!.points![2].x, 6);
+    expect(cornerPointsAtAngle(skew, 2, 90)![2].y).toBeCloseTo(squareCorner(room(skew), 2)!.points![2].y, 6);
+  });
+
+  it('changes an inner corner, and turns a corner inside out through 180°', () => {
+    expect(cornerAngle(cornerPointsAtAngle(L, 3, 240)!, 3)).toBeCloseTo(240, 5);
+    const flat = cornerPointsAtAngle(L, 3, 180)!;
+    expect(cornerAngle(flat, 3)).toBeCloseTo(180, 5);
+    const pent = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 200, y: 400 }, { x: 0, y: 300 }];
+    expect(cornerAngle(cornerPointsAtAngle(pent, 3, 200)!, 3)).toBeCloseTo(200, 5);
+  });
+
+  it('refuses angles that would make walls cross', () => {
+    expect(cornerPointsAtAngle(L, 0, 300)).toBeNull();
+    expect(cornerPointsAtAngle(rect, 2, 0)).toBeNull();
+    expect(cornerPointsAtAngle(rect, 2, 360)).toBeNull();
   });
 });
 

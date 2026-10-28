@@ -261,6 +261,39 @@ export function dist(a: Point, b: Point): number {
 }
 
 /**
+ * Inner angle at corner `v` between walls prev→v and v→next. `winding` is the
+ * outline's signed shoelace sum — its sign says which side is inside, so a
+ * 270° corner reads as 270°, not 90°. `start`/`sweep` (degrees, canvas y-down,
+ * clockwise) span that inner side, ready for a Konva Wedge/Arc.
+ */
+export function cornerWedge(prev: Point, v: Point, next: Point, winding: number): { deg: number; start: number; sweep: number } {
+  const inX = v.x - prev.x, inY = v.y - prev.y;
+  const outX = next.x - v.x, outY = next.y - v.y;
+  const turn = Math.atan2(inX * outY - inY * outX, inX * outX + inY * outY) * 180 / Math.PI;
+  const sign = winding < 0 ? -1 : 1;
+  const deg = 180 - turn * sign;
+  const toPrev = Math.atan2(prev.y - v.y, prev.x - v.x) * 180 / Math.PI;
+  const toNext = Math.atan2(outY, outX) * 180 / Math.PI;
+  return { deg, start: sign > 0 ? toNext : toPrev, sweep: deg };
+}
+
+/**
+ * Inner angle at the last placed point of an unfinished outline, between the
+ * last wall and the one being drawn to `cursor`. The winding comes from the
+ * outline so far, cursor included, closed back to the first point.
+ */
+export function liveCornerAngle(pts: Point[], cursor: Point): { deg: number; start: number; sweep: number } | null {
+  if (pts.length < 2) return null;
+  const all = [...pts, cursor];
+  let s = 0;
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i], b = all[(i + 1) % all.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  return cornerWedge(pts[pts.length - 2], pts[pts.length - 1], cursor, s);
+}
+
+/**
  * Snap angle to nearest 45° increment if within threshold degrees.
  * Returns snapped end point.
  */
@@ -393,22 +426,6 @@ export function polygonDiagonals(pts: Point[]): [number, number][] {
     if (!clipped) break; // self-intersecting/degenerate polygon — keep what we have
   }
   return diags;
-}
-
-/**
- * The single most relevant diagonal partner for vertex `i` while a shape of
- * `len` vertices is still being drawn or nudged — the "skip one neighbour"
- * corner, same pairing as the convex-quad case in polygonDiagonals
- * ([[0,2],[1,3]]), so the live hint lines up with the diagonals shown once
- * the room closes. A full ear-clipping triangulation isn't meaningful yet
- * here: the shape isn't closed, so there's no wrap-around edge to reason
- * about and the vertex being dragged may make it self-intersecting.
- */
-export function relevantDiagonalPartner(i: number, len: number): number | null {
-  if (len < 4) return null;
-  if (i - 2 >= 0) return i - 2;
-  if (i + 2 <= len - 1) return i + 2;
-  return null;
 }
 
 /** Closest point on segment a–b to p, plus the squared distance to it. */

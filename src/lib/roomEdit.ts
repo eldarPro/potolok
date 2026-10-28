@@ -193,6 +193,49 @@ export function squareCorner(room: Room, i: number): Partial<Room> | null {
   return reshapedRoom(room, newPts);
 }
 
+/**
+ * Set the inside angle at corner i to `deg`. Every point that sees both
+ * neighbours under that angle lies on one arc over them (inscribed angle),
+ * so the corner moves to the nearest point of it: only its two walls change,
+ * and as little as possible — squareCorner() is the 90° case. Null when the
+ * angle can't be had without walls crossing.
+ */
+export function cornerPointsAtAngle(pts: Point[], i: number, deg: number): Point[] | null {
+  const n = pts.length;
+  if (n < 3 || !(deg > 0 && deg < 360)) return null;
+  const prev = pts[(i - 1 + n) % n], curr = pts[i], next = pts[(i + 1) % n];
+  const L = dist(prev, next);
+  if (L < 1e-6) return null;
+  const m = { x: (prev.x + next.x) / 2, y: (prev.y + next.y) / 2 };
+  // Unit normal to the chord on the side a convex corner sits on: the left
+  // normal n gives n·(c − prev) = cross(next − prev, c − prev), whose sign is
+  // opposite to the winding's there.
+  const flip = (signedArea(pts) > 0 ? -1 : 1) * (deg < 180 ? 1 : -1);
+  const sx = -(next.y - prev.y) / L * flip, sy = (next.x - prev.x) / L * flip; // the side the corner must end up on
+  const phi = (deg < 180 ? deg : 360 - deg) * Math.PI / 180;
+  let target: Point;
+  if (Math.abs(deg - 180) < 1e-9) {
+    target = m;
+  } else {
+    const R = L / (2 * Math.sin(phi));
+    const h = L / (2 * Math.tan(phi));           // centre's offset from the chord, towards the corner
+    const o = { x: m.x + sx * h, y: m.y + sy * h };
+    // Corner on the wrong side (crossing 180°) — mirror it over the chord first
+    const off = (curr.x - m.x) * sx + (curr.y - m.y) * sy;
+    const c = off >= 0 ? curr : { x: curr.x - 2 * off * sx, y: curr.y - 2 * off * sy };
+    const d = dist(c, o);
+    target = d < 1e-6 ? { x: o.x + sx * R, y: o.y + sy * R } : { x: o.x + (c.x - o.x) * R / d, y: o.y + (c.y - o.y) * R / d };
+    // the nearest circle point may fall on the other arc — take the arc's apex
+    if ((target.x - m.x) * sx + (target.y - m.y) * sy <= 0) target = { x: o.x + sx * R, y: o.y + sy * R };
+  }
+  const newPts = pts.map((p, k) => k === i ? { ...p, x: target.x, y: target.y } : p);
+  const before = (i - 1 + n) % n;
+  if (edgeWouldCrossRoom(newPts, before, newPts[before].bulge ?? 0) || edgeWouldCrossRoom(newPts, i, newPts[i].bulge ?? 0)) return null;
+  // walls folding back over each other without a proper crossing turn the outline inside out
+  if (Math.sign(signedArea(newPts)) !== Math.sign(signedArea(pts))) return null;
+  return newPts;
+}
+
 /** Shift corner i by (dx, dy) cm in drawing axes. */
 export function nudgeVertex(room: Room, i: number, dxCm: number, dyCm: number): Partial<Room> {
   const newPts = room.points.map((p, k) => k === i ? { ...p, x: p.x + cmToPx(dxCm), y: p.y + cmToPx(dyCm) } : p);

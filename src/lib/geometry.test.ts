@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners, vertexLabels, nextVertexLabel, edgeLabel } from './geometry';
+import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners, vertexLabels, nextVertexLabel, edgeLabel, liveCornerAngle, pointInPolygon } from './geometry';
 
 const pts = (arr: [number, number][]): Point[] => arr.map(([x, y]) => ({ x, y }));
 
@@ -169,5 +169,39 @@ describe('vertexLabels', () => {
   it('fills unlettered points with unused letters', () => {
     expect(vertexLabels([{ label: 'a' }, {}, { label: 'b' }])).toEqual(['a', 'c', 'b']);
     expect(nextVertexLabel([{ label: 'a' }, { label: 'b' }, { label: 'c' }, { label: 'e' }])).toBe('d');
+  });
+});
+
+// The wedge must open into the room: a point along its bisector sits inside
+// the outline the angle was measured on.
+describe('liveCornerAngle', () => {
+  const insideAlongBisector = (p: Point[], c: Point) => {
+    const r = liveCornerAngle(p, c)!;
+    const mid = (r.start + r.sweep / 2) * Math.PI / 180;
+    const v = p[p.length - 1];
+    return pointInPolygon({ x: v.x + Math.cos(mid) * 0.1, y: v.y + Math.sin(mid) * 0.1 }, [...p, c]);
+  };
+
+  it('needs two placed points', () => {
+    expect(liveCornerAngle(pts([[0, 0]]), { x: 1, y: 1 })).toBeNull();
+  });
+
+  it('reads a square corner as 90° in either winding', () => {
+    expect(liveCornerAngle(pts([[0, 0], [4, 0]]), { x: 4, y: 3 })!.deg).toBeCloseTo(90);
+    expect(liveCornerAngle(pts([[0, 0], [4, 0]]), { x: 4, y: -3 })!.deg).toBeCloseTo(90);
+    expect(insideAlongBisector(pts([[0, 0], [4, 0]]), { x: 4, y: 3 })).toBe(true);
+    expect(insideAlongBisector(pts([[0, 0], [4, 0]]), { x: 4, y: -3 })).toBe(true);
+  });
+
+  it('reads an L-shaped inner corner as 270°', () => {
+    // 0,0 → 6,0 → 6,3 → 3,3 → (cursor) 3,6 : the corner at 3,3 is reflex
+    const p = pts([[0, 6], [0, 0], [6, 0], [6, 3], [3, 3]]);
+    const c = { x: 3, y: 6 };
+    expect(liveCornerAngle(p, c)!.deg).toBeCloseTo(270);
+    expect(insideAlongBisector(p, c)).toBe(true);
+  });
+
+  it('reads an obtuse corner', () => {
+    expect(liveCornerAngle(pts([[0, 0], [4, 0]]), { x: 8, y: 4 })!.deg).toBeCloseTo(135);
   });
 });

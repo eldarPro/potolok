@@ -15,7 +15,7 @@ import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon,
 import { diagonalCm, diagonalKey, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm } from '../lib/diagonals';
 import {
   reshapedRoom, resizedPoints, wallCm, roundEdge, bendEdge, setWallProfile,
-  deleteVertex, cornerAngle, squareCorner, nudgeVertex,
+  deleteVertex, cornerAngle, squareCorner, cornerPointsAtAngle, nudgeVertex,
 } from '../lib/roomEdit';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
@@ -42,6 +42,8 @@ interface Props {
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 const rub = (n: number) => `${Math.round(n).toLocaleString('ru')} ₽`;
 const NICHE_COLOR = '#00ACC1';
+// A sharper corner sends the point far off along a near-flat arc
+const MIN_ANGLE = 30;
 
 /** One choice in the picker list: a colour mark, its unit price and what it'd cost here */
 interface PickOption {
@@ -116,24 +118,25 @@ const ElementCard: React.FC<Props> = props => {
   );
 
   /** Size field: − [value] + ✓ — typing doesn't touch the drawing until ✓ / Enter */
-  const sizeField = (current: number, apply: (cm: number) => void, error: boolean, step = true) => {
-    const typed = draft == null ? current : Math.round(parseFloat(draft));
+  const sizeField = (current: number, apply: (cm: number) => void, error: boolean, step = true, unit = t('re.cm'), decimals = 0) => {
+    const k = 10 ** decimals;
+    const typed = draft == null ? current : Math.round(parseFloat(draft) * k) / k;
     const dirty = draft != null && typed > 0 && typed !== current;
     const commit = () => { if (dirty && !error) { apply(typed); setDraft(null); inputRef.current?.blur(); } };
-    const bump = (d: number) => setDraft(String(Math.max(1, (typed > 0 ? typed : current) + d)));
+    const bump = (d: number) => setDraft(String(Math.max(1, Math.round(((typed > 0 ? typed : current) + d) * k) / k)));
     return (
       <div className="ecard__row">
         {step && <button className="ecard__btn" onClick={() => bump(-1)}>−</button>}
         <label className={`ecard__field${error ? ' ecard__field--error' : dirty ? ' ecard__field--active' : ''}`}>
           <input
             ref={inputRef}
-            type="number" inputMode="numeric" min="1" step="1"
+            type="number" inputMode={decimals ? 'decimal' : 'numeric'} min="1" step={decimals ? 1 / k : 1}
             value={draft ?? String(current)}
             onChange={e => setDraft(e.target.value)}
             onFocus={e => e.target.select()}
             onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setDraft(null); }}
           />
-          <span className="ecard__unit">{t('re.cm')}</span>
+          <span className="ecard__unit">{unit}</span>
         </label>
         {step && <button className="ecard__btn" onClick={() => bump(1)}>+</button>}
         <button className="ecard__btn ecard__btn--primary" disabled={!dirty || error} onClick={commit}>
@@ -219,22 +222,29 @@ const ElementCard: React.FC<Props> = props => {
     const prevWall = edgeLabel(pts, (i - 1 + n) % n).replace(/ /g, '');
     const nextWall = edgeLabel(pts, i).replace(/ /g, '');
     const nudge = (dx: number, dy: number) => onChange(nudgeVertex(room, i, dx, dy));
+    // Typed angle → where the corner would go; null when the walls would cross
+    const typed = draft == null ? NaN : Math.round(parseFloat(draft) * 10) / 10;
+    const target = typed > 0 && typed !== shown ? typed : null;
+    const inRange = target == null || (target >= MIN_ANGLE && target <= 360 - MIN_ANGLE);
+    const moved = target == null ? pts : inRange ? cornerPointsAtAngle(pts, i, target) : null;
     body = <>
       {head(gitCommitOutline, '#4C9AFF', `${t('ec.corner')} ${labels[i]}`,
         `${prevWall} ${wallCm(pts, (i - 1 + n) % n)} ${t('re.cm')} · ${nextWall} ${wallCm(pts, i)} ${t('re.cm')}`)}
       <div className="ecard__label">{t('ec.angle')}</div>
-      <div className="ecard__row">
-        <div className="ecard__field">
-          <span style={{ fontSize: 20, fontWeight: 800 }}>{shown}°</span>
-        </div>
-        <button
-          className="ecard__btn ecard__btn--primary ecard__btn--wide"
-          disabled={offSquare < 0.05 || offSquare > 30}
-          onClick={() => { const r = squareCorner(room, i); if (r) onChange(r); }}
-        >
-          {t('ec.makeSquare', { deg: angle > 180 ? 270 : 90 })}
-        </button>
+      {sizeField(shown, () => { if (moved && moved !== pts) onChange(reshapedRoom(room, moved)); }, moved == null, true, '°', 1)}
+      <div className={`ecard__hint${moved == null ? ' ecard__hint--error' : ''}`}>
+        {!inRange ? t('ec.angleRange', { min: MIN_ANGLE, max: 360 - MIN_ANGLE })
+          : moved == null ? t('ec.angleError')
+          : moved !== pts ? `${prevWall} ${wallCm(pts, (i - 1 + n) % n)} → ${wallCm(moved, (i - 1 + n) % n)} · ${nextWall} ${wallCm(pts, i)} → ${wallCm(moved, i)} ${t('re.cm')}`
+          : t('ec.angleHint', { a: prevWall, b: nextWall })}
       </div>
+      <button
+        className="ecard__btn ecard__btn--wide ecard__btn--block"
+        disabled={offSquare < 0.05 || offSquare > 30}
+        onClick={() => { const r = squareCorner(room, i); if (r) { setDraft(null); onChange(r); } }}
+      >
+        {t('ec.makeSquare', { deg: angle > 180 ? 270 : 90 })}
+      </button>
       <div className="ecard__label">{t('ec.nudge')}</div>
       <div className="ecard__row">
         <button className="ecard__btn" onClick={() => nudge(-1, 0)}><IonIcon icon={arrowBackOutline} /></button>
@@ -243,7 +253,6 @@ const ElementCard: React.FC<Props> = props => {
         <button className="ecard__btn" onClick={() => nudge(1, 0)}><IonIcon icon={arrowForwardOutline} /></button>
       </div>
       {actions([
-        { icon: resizeOutline, label: t('sec.diagonals'), onClick: () => props.onOpenSection('diagonals') },
         {
           icon: trashOutline, label: t('common.delete'), danger: true, disabled: n <= 3,
           onClick: () => { const r = deleteVertex(room, i); if (r) { onChange(r); close(); } },

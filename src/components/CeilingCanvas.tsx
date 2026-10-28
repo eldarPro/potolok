@@ -1,12 +1,12 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
 import { arrowUndoOutline, arrowRedoOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
-import { Stage, Layer, Line, Circle, Text, Group, Rect } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text, Group, Rect, Wedge, Arc } from 'react-konva';
 import Konva from 'konva';
 import {
-  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, pointLabel, vertexLabels,
-  pointInPolygon, relevantDiagonalPartner, GRID_SIZE,
-  edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom,
+  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, vertexLabels,
+  pointInPolygon, GRID_SIZE,
+  edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom, liveCornerAngle, cornerWedge,
   nearestPointOnOutline,
 } from '../lib/geometry';
 import { roomDiagonals } from '../lib/diagonals';
@@ -710,6 +710,52 @@ const CeilingCanvas: React.FC<Props> = ({
     cursor,
   ] : null;
 
+  // Angle mark at a corner: a wedge into the room with the number, green once
+  // it's a right angle. Drawn at the last placed corner while the next wall is
+  // being drawn, and at the dragged or selected corner of the finished room.
+  type AngleMark = ReturnType<typeof angleMark>;
+  const angleMark = (prev: Point, v: Point, next: Point, a: { deg: number; start: number; sweep: number }, selected: boolean) => {
+    const shortest = Math.min(dist(prev, v), dist(v, next));
+    if (shortest < 4) return null;
+    const r = Math.min(selected ? 34 : 24, shortest * 0.4);
+    const mid = (a.start + a.sweep / 2) * Math.PI / 180;
+    // same rounding as the corner card when selected; green only when the
+    // number itself reads 90, so a 90.6° corner shown as «91°» stays blue
+    const shown = selected ? Math.round(a.deg * 10) / 10 : Math.round(a.deg);
+    const right = shown === 90;
+    const ux = Math.cos(a.start * Math.PI / 180), uy = Math.sin(a.start * Math.PI / 180);
+    const wx = Math.cos((a.start + a.sweep) * Math.PI / 180), wy = Math.sin((a.start + a.sweep) * Math.PI / 180);
+    const q = r * 0.75;
+    const color = right ? '#2dd36f' : '#3880ff';
+    return {
+      ...a, v, r, right, color,
+      textColor: right ? color : '#fff',
+      square: [v.x + ux * q, v.y + uy * q, v.x + (ux + wx) * q, v.y + (uy + wy) * q, v.x + wx * q, v.y + wy * q],
+      labelX: v.x + Math.cos(mid) * (r + 12),
+      labelY: v.y + Math.sin(mid) * (r + 12),
+      text: `${shown}°`,
+    };
+  };
+
+  const liveCorner = (() => {
+    if (!previewLine || closed || points.length < 2) return null;
+    const a = liveCornerAngle(points, previewLine[1]);
+    return a && angleMark(points[points.length - 2], previewLine[0], previewLine[1], a, false);
+  })();
+
+  // At the corner being dragged, or else the selected one, of the finished
+  // room. Matches cornerAngle() in the card: walls measured along their chords
+  const cornerMark = (() => {
+    const i = draggingPoint ?? selectedPoint;
+    if (!closed || i == null || points.length < 3 || !points[i]) return null;
+    const n = points.length;
+    const prev = points[(i - 1 + n) % n], v = points[i], next = points[(i + 1) % n];
+    const winding = points.reduce((s, p, k) => { const q = points[(k + 1) % n]; return s + p.x * q.y - q.x * p.y; }, 0);
+    return angleMark(prev, v, next, cornerWedge(prev, v, next, winding), i === selectedPoint);
+  })();
+
+  const angleMarks = [liveCorner, cornerMark].filter((m): m is NonNullable<AngleMark> => m != null);
+
   const labelCentroid = points.length > 0 ? {
     x: points.reduce((s, q) => s + q.x, 0) / points.length,
     y: points.reduce((s, q) => s + q.y, 0) / points.length,
@@ -741,12 +787,9 @@ const CeilingCanvas: React.FC<Props> = ({
     return { i, a, b, points: [a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(p => [p.x, p.y])] };
   }) : [];
 
-  // Once the room is closed, show every diagonal the triangulation needs to
-  // fix the shape. While still drawing (or nudging a vertex before closing),
-  // a full triangulation isn't meaningful — there's no wrap-around edge yet,
-  // and the point being dragged can make the shape self-intersect — so show
-  // just the one diagonal relevant to whichever point is actively moving,
-  // the same corner-pairing the closed quad case already uses.
+  // Diagonals only once the room is closed — every one the triangulation
+  // needs to fix the shape. While drawing they'd just be noise: the wall
+  // length and the live angle are what matter then.
   const labels = vertexLabels(points);
   type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string; i?: number; j?: number };
   const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
@@ -755,27 +798,7 @@ const CeilingCanvas: React.FC<Props> = ({
       }))
     : [];
 
-  const cursorDiagPartner = showDiagonals && !closed && !placingLighting && !placingNiche && cursor
-    ? relevantDiagonalPartner(points.length, points.length + 1)
-    : null;
-  const cursorDiagonal: DiagonalHint[] = cursorDiagPartner != null && cursor
-    ? [{
-        a: points[cursorDiagPartner], b: cursor,
-        labelI: labels[cursorDiagPartner], labelJ: pointLabel(points.length), key: 'diag-cursor',
-      }]
-    : [];
-
-  const dragDiagPartner = showDiagonals && !closed && draggingPoint != null
-    ? relevantDiagonalPartner(draggingPoint, points.length)
-    : null;
-  const dragDiagonal: DiagonalHint[] = dragDiagPartner != null && draggingPoint != null
-    ? [{
-        a: points[dragDiagPartner], b: points[draggingPoint],
-        labelI: labels[dragDiagPartner], labelJ: labels[draggingPoint], key: 'diag-drag',
-      }]
-    : [];
-
-  const diagonals: DiagonalHint[] = [...closedDiagonals, ...cursorDiagonal, ...dragDiagonal];
+  const diagonals: DiagonalHint[] = closedDiagonals;
 
   // Diagonals usually cross near their midpoints (always, in a quad), so
   // labels parked at the middle pile up on each other. Slide each label along
@@ -1099,6 +1122,41 @@ const CeilingCanvas: React.FC<Props> = ({
                 e.target.position({ x: 0, y: 0 }); // reset so the next drag's delta starts fresh
               }}
             />
+          ))}
+
+          {/* Corner angle marks — live while drawing, at the dragged or selected corner — above the
+              diagonal and wall labels so the number is never covered */}
+          {angleMarks.map((m, k) => (
+            <Group key={`angle-${k}`} listening={false}>
+              <Wedge
+                x={m.v.x} y={m.v.y}
+                radius={m.r} angle={m.sweep} rotation={m.start}
+                fill={m.color} opacity={0.18}
+              />
+              {m.right ? (
+                <Line points={m.square} stroke={m.color} strokeWidth={1.5} />
+              ) : (
+                <Arc
+                  x={m.v.x} y={m.v.y}
+                  innerRadius={m.r} outerRadius={m.r}
+                  angle={m.sweep} rotation={m.start}
+                  stroke={m.color} strokeWidth={1.5}
+                />
+              )}
+              <Text
+                x={m.labelX} y={m.labelY}
+                width={48} offsetX={24} offsetY={6} align="center"
+                rotation={-rotation.angle}
+                text={m.text}
+                fontSize={12}
+                fontStyle="bold"
+                fill={m.textColor}
+                shadowColor="rgba(0,0,0,0.9)"
+                shadowBlur={4}
+                shadowOffsetX={1}
+                shadowOffsetY={1}
+              />
+            </Group>
           ))}
 
           {/* Vertices */}
