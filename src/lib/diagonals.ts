@@ -1,4 +1,4 @@
-import { Point, polygonDiagonals, vertexLabels, cornerIndices, pxToCm, dist, GRID_SIZE, CM_PER_GRID } from './geometry';
+import { Point, polygonDiagonals, vertexLabels, cornerIndices, pointInPolygon, pxToCm, dist, GRID_SIZE, CM_PER_GRID } from './geometry';
 
 // Points on a straight wall (where a wall was split to change profile) aren't
 // corners: no diagonals run to them, and reshaping keeps them on their wall.
@@ -44,12 +44,54 @@ function crossDiagonals(pts: Point[], base: Pair[]): Map<string, { cross: Pair; 
   return out;
 }
 
-/** Diagonals shown for a room, vertex pair always in ascending order (a–c, not c–a). */
+/** Corner pairs whose straight segment runs inside the room, touching no wall on the way. */
+function interiorDiagonals(pts: Point[]): Pair[] {
+  const c = cornerIndices(pts);
+  const m = c.length;
+  const poly = c.map(i => pts[i]);
+  const out: Pair[] = [];
+  for (let x = 0; x < m; x++)
+    for (let y = x + 2; y < m; y++) {
+      if (x === 0 && y === m - 1) continue; // neighbours across the wrap — a wall
+      const P = poly[x], Q = poly[y];
+      const hitsWall = poly.some((A, k) => {
+        const k2 = (k + 1) % m;
+        if (k === x || k === y || k2 === x || k2 === y) return false;
+        const B = poly[k2];
+        return cross(P, Q, A) * cross(P, Q, B) < 0 && cross(A, B, P) * cross(A, B, Q) < 0;
+      });
+      if (hitsWall || !pointInPolygon({ x: (P.x + Q.x) / 2, y: (P.y + Q.y) / 2 }, poly)) continue;
+      out.push([c[x], c[y]]);
+    }
+  return out;
+}
+
+/**
+ * Diagonals shown for a room, vertex pair always in ascending order (a–c, not
+ * c–a): the triangulation and its cross checks first, then every other corner
+ * pair that can be measured inside the room.
+ */
 export function roomDiagonals(pts: Point[]): DiagonalInfo[] {
   const labels = vertexLabels(pts);
   const base = baseDiagonals(pts);
   const crosses = [...crossDiagonals(pts, base).values()].map(c => c.cross);
-  return [...base, ...crosses].map(([i, j]) => ({ i, j, key: diagonalKey(i, j), label: `${labels[i]}–${labels[j]}` }));
+  const shown = new Set([...base, ...crosses].map(d => diagonalKey(...d)));
+  const rest = interiorDiagonals(pts).filter(d => !shown.has(diagonalKey(...d)));
+  return [...base, ...crosses, ...rest].map(([i, j]) => ({ i, j, key: diagonalKey(i, j), label: `${labels[i]}–${labels[j]}` }));
+}
+
+/** A triangulation of the corner outline that includes the diagonal i–j: each side of it triangulated on its own. */
+function triangulationThrough(pts: Point[], i: number, j: number): Pair[] {
+  const c = cornerIndices(pts);
+  const x = c.indexOf(i), y = c.indexOf(j);
+  const half = (from: number, to: number) => {
+    const ids: number[] = [];
+    for (let k = from; ; k = (k + 1) % c.length) { ids.push(c[k]); if (k === to) break; }
+    return polygonDiagonals(ids.map(v => pts[v]))
+      .slice(0, Math.max(0, ids.length - 3))
+      .map(([p, q]) => [Math.min(ids[p], ids[q]), Math.max(ids[p], ids[q])] as Pair);
+  };
+  return [[Math.min(i, j), Math.max(i, j)], ...half(x, y), ...half(y, x)];
 }
 
 export const diagonalCm = (pts: Point[], i: number, j: number) => Math.round(pxToCm(dist(pts[i], pts[j])));
@@ -60,13 +102,20 @@ const cmToPx = (cm: number) => (cm * GRID_SIZE) / CM_PER_GRID;
 
 /**
  * The diagonals that, together with the walls, pin down the shape: exactly
- * n − 3 of them. Each cross diagonal follows from the one it crosses, so only
- * one of the pair can be set freely — `driverKey` picks which.
+ * n − 3 of them. The rest follow from these, so `driverKey` swaps in the one
+ * being typed: a cross diagonal in place of the one it crosses, any other by
+ * triangulating around it.
  */
 export function shapeDiagonals(pts: Point[], driverKey?: string | null): Pair[] {
   const base = baseDiagonals(pts);
-  const flip = driverKey ? crossDiagonals(pts, base).get(driverKey) : undefined;
-  if (!flip) return base;
+  if (!driverKey || base.some(d => diagonalKey(...d) === driverKey)) return base;
+  const flip = crossDiagonals(pts, base).get(driverKey);
+  if (!flip) {
+    // any other diagonal: re-triangulate around it
+    const [i, j] = driverKey.split('-').map(Number);
+    if (!interiorDiagonals(pts).some(d => diagonalKey(...d) === driverKey)) return base;
+    return triangulationThrough(pts, i, j);
+  }
   const baseKey = diagonalKey(...flip.base);
   return base.map(d => (diagonalKey(...d) === baseKey ? flip.cross : d));
 }

@@ -374,10 +374,16 @@ const CeilingCanvas: React.FC<Props> = ({
       lastMouse.current = { x: e.evt.clientX, y: e.evt.clientY };
       return;
     }
-    if (e.target !== stageRef.current && tool === 'draw') return;
+    // Pressing a placed vertex drags it; anything else — open canvas, a wall's
+    // bow-drag hit band, the preview line under the cursor — places a point,
+    // same as handleTouchStart.
+    if (tool === 'draw' && e.target.name() === 'vertex') return;
     if (tool === 'draw') {
       const pos = getPointerPos(e);
       if (pos) handleTap(pos);
+      // This press placed a point (or closed the room) — its click mustn't
+      // then select the wall under the cursor.
+      gestureMoved.current = true;
     }
   };
 
@@ -1122,6 +1128,7 @@ const CeilingCanvas: React.FC<Props> = ({
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? SEL : (i === 0 ? '#3880ff' : '#fff')}
                   strokeWidth={isSelected ? 2 : 1}
+                  name="vertex"
                   listening={canDragVertex}
                   draggable={canDragVertex}
                   onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}

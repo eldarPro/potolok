@@ -114,8 +114,10 @@ describe('cross diagonals', () => {
 
   it('shows both diagonals of every convex quad of the triangulation', () => {
     const labels = roomDiagonals(u).map(d => d.label);
-    expect(labels).toHaveLength(8);
     expect(labels).toEqual(expect.arrayContaining(['a–c', 'c–g', 'e–g']));
+    // nothing through the notch
+    expect(labels).not.toContain('b–e');
+    expect(labels).not.toContain('a–f');
   });
 
   it('a cross diagonal drives in place of the one it crosses', () => {
@@ -125,5 +127,24 @@ describe('cross diagonals', () => {
     const out = reshapeByDiagonals(u, fixing, { '0-2': diagonalCm(u, 0, 2) - 10 })!;
     expect(wallsCm(out)).toEqual(wallsCm(u));
     expect(diagonalCm(out, 0, 2)).toBe(diagonalCm(u, 0, 2) - 10);
+  });
+});
+
+describe('every diagonal of a pentagon', () => {
+  const pent = [cm(0, 0), cm(240, -30), cm(300, 230), cm(170, 330), cm(40, 230)];
+
+  it('shows all five', () => {
+    expect(roomDiagonals(pent).map(d => d.label).sort()).toEqual(['a–c', 'a–d', 'b–d', 'b–e', 'c–e']);
+  });
+
+  it('any of them can drive the reshape', () => {
+    for (const { key, i, j } of roomDiagonals(pent)) {
+      const fixing = shapeDiagonals(pent, key);
+      expect(fixing).toHaveLength(2);
+      expect(fixing).toContainEqual([i, j]);
+      const out = reshapeByDiagonals(pent, fixing, { [key]: diagonalCm(pent, i, j) - 10 })!;
+      expect(wallsCm(out)).toEqual(wallsCm(pent));
+      expect(diagonalCm(out, i, j)).toBe(diagonalCm(pent, i, j) - 10);
+    }
   });
 });

@@ -37,10 +37,8 @@ Room shape: see `createRoom()` in `src/lib/storage.ts` (empty `points`, `scale: 
   pick a template by its Russian name («Прямоугольник», «Г-образная», …).
 - Drawing by mouse clicks: grid snap is 40 px; with an empty room the viewport
   is identity, so world coords = client coords − canvas bbox origin.
-- **Closing a polygon with the mouse: do NOT click exactly on the first
-  vertex.** The dashed preview Line is `listening` and swallows the mousedown
-  (desktop-only quirk; touch is unaffected). Click ~20 px off the vertex but
-  inside the 24 px close threshold, off the preview line's axis.
+- Mouse clicks in draw mode place a point on anything but a placed vertex
+  (wall hit bands, the preview line); closing = click within 24 px of point 0.
 - After a committed polygon exists, vertex screen position = replicate
   `fitView`: `scale = min(4, (W−120)/bw, (H−120)/bh)`, centre the bbox.
 - Clear the drawing via the ⋮ toolbar menu → «Очистить чертёж» (remounts the
