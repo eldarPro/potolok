@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { IonIcon } from '@ionic/react';
 import { chevronBackOutline, closeOutline } from 'ionicons/icons';
-import { polygonArea, polygonPerimeter, pxToMeters, fmtCm, pointLabel } from '../lib/geometry';
+import { polygonArea, polygonPerimeter, pxToMeters, pointLabel } from '../lib/geometry';
 import {
   Direction, WallEntry, turnRight, turnLeft, mToPx,
   wallPathCm, SHAPE_TEMPLATES, ShapeTemplate, rotatePts, mirrorPts,
@@ -21,7 +21,9 @@ interface Props {
 
 const ACCENT = '#1E88E5';
 const GREEN = '#43A047';
-const DIAG = '#F9A825'; // diagonal colour on the drawing (CeilingCanvas)
+// Same colours as on the drawing (CeilingCanvas): walls and diagonals
+const WALL = '#3880ff';
+const DIAG = '#F9A825';
 
 const parseNum = (s: string): number => parseFloat(s.replace(',', '.'));
 
@@ -33,6 +35,31 @@ const signedAreaCm = (pts: Pt[]) => {
     s += a.x * b.y - b.x * a.y;
   }
   return s / 2;
+};
+
+// Closed outline with no wall crossing, touching or running over another one
+const isSimpleRing = (pts: Pt[]) => {
+  const n = pts.length;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const onSeg = (p: Pt, a: Pt, b: Pt) =>
+    Math.min(a.x, b.x) - 0.5 <= p.x && p.x <= Math.max(a.x, b.x) + 0.5 && Math.min(a.y, b.y) - 0.5 <= p.y && p.y <= Math.max(a.y, b.y) + 0.5;
+  const hits = (a: Pt, b: Pt, c: Pt, d: Pt) => {
+    const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+    return (Math.abs(d1) < 1 && onSeg(a, c, d)) || (Math.abs(d2) < 1 && onSeg(b, c, d))
+      || (Math.abs(d3) < 1 && onSeg(c, a, b)) || (Math.abs(d4) < 1 && onSeg(d, a, b));
+  };
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    // the next wall must not fold back onto this one
+    const c = pts[(i + 2) % n];
+    if (Math.abs(cross(a, b, c)) < 1 && (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) return false;
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue; // first and last walls meet at the start
+      if (hits(a, b, pts[j], pts[(j + 1) % n])) return false;
+    }
+  }
+  return true;
 };
 
 const perimeterCm = (pts: Pt[]) =>
@@ -125,7 +152,7 @@ const ManualMeasureModal: React.FC<Props> = ({ canvasW, canvasH, onApply, onClos
               </ShapeTile>
             </div>
           )}
-          {step === 'custom' && <StepForm onApply={walls => applyOutline(closedRing(wallPathCm(walls)))} />}
+          {step === 'custom' && <StepForm onApply={applyOutline} />}
           {tpl && <TemplateForm key={tpl.id} tpl={tpl} onApply={applyOutline} />}
         </div>
       </div>
@@ -134,12 +161,6 @@ const ManualMeasureModal: React.FC<Props> = ({ canvasW, canvasH, onApply, onClos
 };
 
 const defaults = (t: ShapeTemplate) => Object.fromEntries(t.params.map(p => [p.key, p.def]));
-
-// Drop the end point when the path came back to the start
-const closedRing = (path: Pt[]) => {
-  const a = path[0], b = path[path.length - 1];
-  return Math.hypot(a.x - b.x, a.y - b.y) < 1 ? path.slice(0, -1) : path;
-};
 
 // ── Shared bits ───────────────────────────────────────────────────────────
 
@@ -191,7 +212,7 @@ const GhostButton: React.FC<{ children: React.ReactNode; onClick: () => void; di
 const WallBadge: React.FC<{ name: string; done?: boolean }> = ({ name, done }) => (
   <span style={{
     height: 26, padding: '0 8px', borderRadius: 8, flexShrink: 0,
-    background: done ? GREEN : 'rgba(255,255,255,0.1)', color: '#fff',
+    background: done ? WALL : 'rgba(255,255,255,0.1)', color: '#fff',
     fontSize: 13, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
   }}>{name}</span>
 );
@@ -238,7 +259,7 @@ const CustomThumb: React.FC<{ active?: boolean; size?: [number, number] }> = ({ 
   return (
     <svg width={size[0]} height={size[1]} viewBox="0 0 46 34" style={{ flexShrink: 0 }}>
       <path d="M7 29 V7 H27 V17" fill="none" stroke={c} strokeWidth={1.5} strokeDasharray="3 2.5" />
-      <circle cx={7} cy={29} r={3} fill={GREEN} />
+      <circle cx={7} cy={29} r={3} fill={WALL} />
       <circle cx={27} cy={17} r={3} fill={ACCENT} />
       <path d="M37 11 v10 M32 16 h10" stroke={c} strokeWidth={1.6} />
     </svg>
@@ -251,9 +272,9 @@ const CustomThumb: React.FC<{ active?: boolean; size?: [number, number] }> = ({ 
 const SLOTS = [-3, -2, -1, 0, 1, 2, 3].flatMap(ts => [0, 1, 2, 3].map(ns => [ts, ns]))
   .sort((p, q) => Math.abs(p[0]) + p[1] * 1.5 - (Math.abs(q[0]) + q[1] * 1.5));
 
-// input = size the user types (pill: green when entered, dashed «?» while empty);
+// input = size the user types (pill: filled when entered, dashed «?» while empty);
 // derived = computed from other sizes (shown once known); plain = just a number.
-// done → the wall turns green; focus → blue halo around the wall being typed.
+// done → the wall is drawn solid (as on the drawing), until then thin dashed; focus → blue halo around the wall being typed.
 interface EdgeLabel { text: string; kind?: 'input' | 'derived' | 'plain'; focus?: boolean; done?: boolean; num?: number }
 type DimLabel = { from: Pt; to: Pt; text: string; focus?: boolean; done?: boolean };
 
@@ -264,17 +285,23 @@ const PlanPreview: React.FC<{
   closed: boolean;
   labels: (EdgeLabel | null)[];   // per edge i → (pts[i], pts[i+1])
   ghost?: { to: Pt; text?: string };
-  closing?: { from: Pt; text: string };
+  closing?: { pts: Pt[]; texts: string[] }; // straight walls «Замкнуть» will add, ending at the start
   dims?: DimLabel[];              // dashed measurement lines between vertices (not walls)
   letters?: string[];             // vertex names, as on the drawing
   height: number;
   footer?: React.ReactNode;
-}> = ({ pts: path, closed, labels, ghost, closing, dims, letters, height, footer }) => {
+}> = ({ pts: path, closed, labels: rawLabels, ghost: rawGhost, closing: rawClosing, dims: rawDims, letters, height, footer }) => {
+  // Sizes come in as bare numbers — show them with units, like on the drawing
+  const cm = (t: string) => (/^\d+$/.test(t) ? `${t} см` : t);
+  const labels = rawLabels.map(l => l && { ...l, text: cm(l.text) });
+  const dims = rawDims?.map(d => ({ ...d, text: cm(d.text) }));
+  const ghost = rawGhost && { ...rawGhost, text: rawGhost.text && cm(rawGhost.text) };
+  const closing = rawClosing && { ...rawClosing, texts: rawClosing.texts.map(cm) };
   const pts = closed ? [...path, path[0]] : path;
   const [W, setW] = useState(360);
   const ref = (el: HTMLDivElement | null) => { if (el && el.clientWidth && el.clientWidth !== W) setW(el.clientWidth); };
 
-  const all = [...pts, ...(ghost ? [ghost.to] : [])];
+  const all = [...pts, ...(ghost ? [ghost.to] : []), ...(closing?.pts ?? [])];
   const xs = all.map(p => p.x), ys = all.map(p => p.y);
   const minX = Math.min(...xs), minY = Math.min(...ys);
   const bw = Math.max(Math.max(...xs) - minX, 1), bh = Math.max(Math.max(...ys) - minY, 1);
@@ -285,7 +312,7 @@ const PlanPreview: React.FC<{
   const P = pts.map(T);
 
   // outward normal = left of travel for clockwise outlines
-  const poly = closing || closed ? pts : [...pts, ...(ghost ? [ghost.to] : [])];
+  const poly = closed ? pts : [...pts, ...(ghost ? [ghost.to] : [])];
   const cw = poly.length < 3 || signedAreaCm(poly) >= 0;
   const normal = (a: Pt, b: Pt) => {
     const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -331,31 +358,33 @@ const PlanPreview: React.FC<{
       <svg width={W} height={height} style={{ position: 'absolute', inset: 0 }}>
         {closed && <polygon points={P.map(p => `${p.x},${p.y}`).join(' ')} fill="rgba(30,136,229,0.16)" />}
 
-        {closing && (() => {
-          const a = T(closing.from), b = P[0];
+        {closing && closing.pts.slice(1).map((p, i) => {
+          const a = T(closing.pts[i]), b = T(p);
           return (
-            <g>
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={DIAG} strokeWidth={2} strokeDasharray="6 5" />
-              <Pill x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} text={closing.text} bg={DIAG} fg="#1c1f33" />
+            <g key={'c' + i}>
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={WALL} strokeWidth={1.5} strokeDasharray="5 4" />
+              <Pill x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} text={closing.texts[i]} bg={WALL} />
             </g>
           );
-        })()}
+        })}
 
         {(dims ?? []).map((d, i) => {
           const a = T(d.from), b = T(d.to);
           return (
             <g key={'d' + i}>
-              {d.focus && <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={ACCENT} strokeWidth={9} strokeLinecap="round" opacity={0.45} />}
+              {d.focus && <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={ACCENT} strokeWidth={5} strokeLinecap="round" opacity={0.35} />}
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={d.done ? DIAG : 'rgba(255,255,255,0.5)'} strokeWidth={1.5} strokeDasharray="5 4" />
             </g>
           );
         })}
 
         {P.slice(1).map((b, i) => labels[i]?.focus && (
-          <line key={'h' + i} x1={P[i].x} y1={P[i].y} x2={b.x} y2={b.y} stroke={ACCENT} strokeWidth={11} strokeLinecap="round" opacity={0.45} />
+          <line key={'h' + i} x1={P[i].x} y1={P[i].y} x2={b.x} y2={b.y} stroke={ACCENT} strokeWidth={6} strokeLinecap="round" opacity={0.35} />
         ))}
         {P.slice(1).map((b, i) => (
-          <line key={i} x1={P[i].x} y1={P[i].y} x2={b.x} y2={b.y} stroke={labels[i]?.done ? GREEN : '#fff'} strokeWidth={3} strokeLinecap="round" />
+          labels[i]?.done
+            ? <line key={i} x1={P[i].x} y1={P[i].y} x2={b.x} y2={b.y} stroke={WALL} strokeWidth={2.5} strokeLinecap="round" />
+            : <line key={i} x1={P[i].x} y1={P[i].y} x2={b.x} y2={b.y} stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} strokeDasharray="5 4" />
         ))}
 
         {(dims ?? []).map((d, i) => <InputPill key={'dp' + i} {...dimPos[i]} text={d.text} done={d.done} focus={d.focus} color={DIAG} />)}
@@ -365,9 +394,12 @@ const PlanPreview: React.FC<{
           const ang = Math.atan2(b.y - last.y, b.x - last.x) * 180 / Math.PI;
           return (
             <g>
-              <line x1={last.x} y1={last.y} x2={b.x} y2={b.y} stroke={ACCENT} strokeWidth={3.5} strokeDasharray="8 6" strokeLinecap="round" />
-              <path d="M-2,-8 L10,0 L-2,8 z" fill={ACCENT} transform={`translate(${b.x},${b.y}) rotate(${ang})`} />
-              {ghostPill && <Pill x={ghostPill.x} y={ghostPill.y} text={ghost.text!} bg={ACCENT} />}
+              {/* solid as soon as the length is typed, dashed while it's still empty */}
+              {ghost.text
+                ? <line x1={last.x} y1={last.y} x2={b.x} y2={b.y} stroke={WALL} strokeWidth={2.5} strokeLinecap="round" />
+                : <line x1={last.x} y1={last.y} x2={b.x} y2={b.y} stroke={WALL} strokeWidth={1.5} strokeDasharray="5 4" />}
+              <path d="M-2,-6 L8,0 L-2,6 z" fill={WALL} transform={`translate(${b.x},${b.y}) rotate(${ang})`} />
+              {ghostPill && <Pill x={ghostPill.x} y={ghostPill.y} text={ghost.text!} bg={WALL} />}
             </g>
           );
         })()}
@@ -383,7 +415,7 @@ const PlanPreview: React.FC<{
               {l.kind === 'input' ? (
                 <InputPill x={x} y={y} text={l.text} done={l.done} focus={l.focus} />
               ) : (
-                <text x={x} y={y} fill={l.kind === 'derived' ? '#81c784' : 'rgba(255,255,255,0.85)'}
+                <text x={x} y={y} fill={l.kind === 'derived' ? '#8fb4ff' : 'rgba(255,255,255,0.85)'}
                   fontSize={12} fontWeight={700} textAnchor="middle" dominantBaseline="central">{l.text}</text>
               )}
               {l.num != null && (
@@ -399,17 +431,17 @@ const PlanPreview: React.FC<{
 
         {letters && P.slice(0, path.length).map((p, i) => (
           <g key={'v' + i}>
-            <circle cx={p.x} cy={p.y} r={9} fill={i === 0 && !closed ? GREEN : ACCENT} stroke="#fff" strokeWidth={1.5} />
+            <circle cx={p.x} cy={p.y} r={9} fill={WALL} stroke="#fff" strokeWidth={1.5} />
             <text x={p.x} y={p.y} fill="#fff" fontSize={11} fontWeight={800} textAnchor="middle" dominantBaseline="central">{letters[i]}</text>
           </g>
         ))}
         {!letters && P.map((p, i) => i === 0
-          ? <circle key={i} cx={p.x} cy={p.y} r={7} fill={GREEN} stroke="#0f1120" strokeWidth={2} />
+          ? <circle key={i} cx={p.x} cy={p.y} r={7} fill={WALL} stroke="#0f1120" strokeWidth={2} />
           : i === P.length - 1 && !closed
-            ? <circle key={i} cx={p.x} cy={p.y} r={6.5} fill={ACCENT} stroke="#fff" strokeWidth={2} />
+            ? <circle key={i} cx={p.x} cy={p.y} r={6.5} fill={WALL} stroke="#fff" strokeWidth={2} />
             : <circle key={i} cx={p.x} cy={p.y} r={4} fill="#fff" />)}
         {!closed && !letters && (
-          <text x={P[0].x - 10} y={P[0].y - 12} fill="#66bb6a" fontSize={10.5} fontWeight={700} textAnchor="end">старт</text>
+          <text x={P[0].x - 10} y={P[0].y - 12} fill="#8fb4ff" fontSize={10.5} fontWeight={700} textAnchor="end">старт</text>
         )}
       </svg>
       {footer && (
@@ -422,8 +454,8 @@ const PlanPreview: React.FC<{
   );
 };
 
-// Size to enter: dashed «?» while empty, green with the value once entered, blue ring while typing
-const InputPill: React.FC<{ x: number; y: number; text: string; done?: boolean; focus?: boolean; color?: string }> = ({ x, y, text, done, focus, color = GREEN }) => {
+// Size to enter: dashed «?» while empty, filled with the value once entered, blue ring while typing
+const InputPill: React.FC<{ x: number; y: number; text: string; done?: boolean; focus?: boolean; color?: string }> = ({ x, y, text, done, focus, color = WALL }) => {
   const w = pillW(text);
   return (
     <g>
@@ -431,7 +463,7 @@ const InputPill: React.FC<{ x: number; y: number; text: string; done?: boolean; 
         fill={done ? color : '#1c1f33'}
         stroke={focus ? ACCENT : done ? 'none' : 'rgba(255,255,255,0.35)'}
         strokeWidth={focus ? 2.5 : 1.2} strokeDasharray={done || focus ? undefined : '3 3'} />
-      <text x={x} y={y} fill={done ? (color === GREEN ? '#fff' : '#1c1f33') : 'rgba(255,255,255,0.6)'} fontSize={12.5} fontWeight={800}
+      <text x={x} y={y} fill={done ? (color === DIAG ? '#1c1f33' : '#fff') : 'rgba(255,255,255,0.6)'} fontSize={12.5} fontWeight={800}
         textAnchor="middle" dominantBaseline="central">{text}</text>
     </g>
   );
@@ -566,18 +598,18 @@ const TemplateForm: React.FC<{ tpl: ShapeTemplate; onApply: (pts: Pt[]) => void 
 
 // ── Step-by-step form (A) ─────────────────────────────────────────────────
 
-const ArrowLeftTurn = () => (
-  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 20V11a4 4 0 0 0-4-4H5" /><path d="M9 3 5 7l4 4" />
+// Arrow pointing where the next wall goes on screen (E = right)
+const DirArrow: React.FC<{ dir: Direction }> = ({ dir }) => (
+  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"
+    style={{ transform: `rotate(${{ E: 0, S: 90, W: 180, N: 270 }[dir]}deg)` }}>
+    <path d="M4 12h15" /><path d="M13 6l6 6-6 6" />
   </svg>
 );
-const ArrowRightTurn = () => (
-  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M7 20V11a4 4 0 0 1 4-4h8" /><path d="M15 3l4 4-4 4" />
-  </svg>
-);
+const SCREEN_DIR: Record<Direction, string> = { E: 'Направо', S: 'Вниз', W: 'Налево', N: 'Вверх' };
+// Screen order of the two buttons: left before right, up before down
+const SCREEN_ORDER: Direction[] = ['W', 'N', 'S', 'E'];
 
-const StepForm: React.FC<{ onApply: (walls: WallEntry[]) => void }> = ({ onApply }) => {
+const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
   const [walls, setWalls] = useState<WallEntry[]>([]);
   const [curDir, setCurDir] = useState<Direction>('E');
   const [input, setInput] = useState('');
@@ -614,11 +646,13 @@ const StepForm: React.FC<{ onApply: (walls: WallEntry[]) => void }> = ({ onApply
   const pending = typed ? [...walls, { lengthM: typedCm / 100, dir: curDir }] : walls;
   const path = wallPathCm(pending);
   const end = path[path.length - 1];
-  const gap = Math.hypot(end.x, end.y);
-  const meets = gap < 1;
+  // «Замкнуть» always runs one straight wall from the last point to a (none if they already meet),
+  // as long as the outline doesn't cross itself
+  const meets = Math.hypot(end.x, end.y) < 1;
   const ring = meets ? path.slice(0, -1) : path;
-  const canClose = pending.length >= 2 && ring.length >= 3 && Math.abs(signedAreaCm(ring)) > 100;
-  const diagonal = !meets && Math.abs(end.x) >= 1 && Math.abs(end.y) >= 1;
+  const closeLen = Math.round(Math.hypot(end.x, end.y));
+  const enough = ring.length >= 3 && Math.abs(signedAreaCm(ring)) > 100;
+  const canClose = enough && isSimpleRing(ring);
 
   const pts = wallPathCm(walls);
   const tip = pts[pts.length - 1];
@@ -660,10 +694,10 @@ const StepForm: React.FC<{ onApply: (walls: WallEntry[]) => void }> = ({ onApply
         height={210}
         labels={walls.map((x, i) => ({ text: String(Math.round(x.lengthM * 100)), done: true, focus: editIdx === i }))}
         ghost={editIdx == null ? { to: ghostTo, text: typed ? String(Math.round(typedCm)) : undefined } : undefined}
-        closing={editIdx == null && canClose && !meets ? { from: end, text: fmtCm(gap) } : undefined}
+        closing={editIdx == null && canClose && !meets ? { pts: [end, path[0]], texts: [String(closeLen)] } : undefined}
         footer={<span>
           {n === 0 ? 'Встаньте в угол и идите вдоль стен по часовой'
-            : canClose ? `≈ ${fmtArea(signedAreaCm(ring))} м² · периметр ${fmtM(perimeterCm(ring) + (meets ? 0 : gap))} м`
+            : canClose ? `≈ ${fmtArea(signedAreaCm(ring))} м² · периметр ${fmtM(perimeterCm(ring))} м`
               : `Стен: ${n}`}
         </span>}
       />
@@ -696,23 +730,22 @@ const StepForm: React.FC<{ onApply: (walls: WallEntry[]) => void }> = ({ onApply
           <Label style={{ margin: '14px 0 7px' }}>Стена {wallName(n)} — длина</Label>
           {lenField(input, setInput, () => commit(turnRight))}
 
-          <Label style={{ margin: '12px 0 7px' }}>В конце стены поворот</Label>
+          <Label style={{ margin: '12px 0 7px' }}>Следующая стена на схеме идёт</Label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-            <TurnButton onClick={() => commit(turnLeft)} disabled={!typed} icon={<ArrowLeftTurn />} title="Налево" sub="выступ / внешний угол" muted />
-            <TurnButton onClick={() => commit(turnRight)} disabled={!typed} icon={<ArrowRightTurn />} title="Направо" sub="обычный угол" />
+            {[turnLeft, turnRight]
+              .map(turn => ({ turn, dir: turn(curDir) }))
+              .sort((a, b) => SCREEN_ORDER.indexOf(a.dir) - SCREEN_ORDER.indexOf(b.dir))
+              .map(({ turn, dir }) => (
+                <TurnButton key={dir} onClick={() => commit(turn)} disabled={!typed} icon={<DirArrow dir={dir} />} title={SCREEN_DIR[dir]} />
+              ))}
           </div>
-
-          {diagonal && canClose && (
-            <div style={{ fontSize: 12, color: '#ffb74d', margin: '10px 2px 0', lineHeight: 1.35 }}>
-              Замыкающая стена пойдёт под углом — проверьте размеры, если в комнате все углы прямые.
-            </div>
-          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <GhostButton onClick={undo} disabled={n === 0}>↩ Отменить</GhostButton>
-            <BigButton onClick={() => onApply(pending)} color={GREEN} disabled={!canClose}>
+            <BigButton onClick={() => onApply(ring)} color={GREEN} disabled={!canClose}>
               Замкнуть
-              <Sub>{!canClose ? 'нужно ≥ 2 стены' : meets ? 'контур сошёлся' : `последняя стена ${fmtCm(gap)} — авто`}</Sub>
+              <Sub>{canClose ? (meets ? 'контур сошёлся' : `последняя стена ${closeLen} — до точки a`)
+                : enough ? 'стены пересекутся' : 'нужно ≥ 2 стены'}</Sub>
             </BigButton>
           </div>
         </>
@@ -722,21 +755,19 @@ const StepForm: React.FC<{ onApply: (walls: WallEntry[]) => void }> = ({ onApply
 };
 
 const TurnButton: React.FC<{
-  onClick: () => void; disabled: boolean; icon: React.ReactNode; title: string; sub: string; muted?: boolean;
-}> = ({ onClick, disabled, icon, title, sub, muted }) => (
+  onClick: () => void; disabled: boolean; icon: React.ReactNode; title: string;
+}> = ({ onClick, disabled, icon, title }) => (
   <button
     onClick={onClick}
     disabled={disabled}
     style={{
       height: 58, borderRadius: 14, border: 'none', cursor: disabled ? 'default' : 'pointer',
-      background: muted ? '#263a5c' : ACCENT, opacity: disabled ? 0.4 : 1,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#fff', textAlign: 'left',
+      background: ACCENT, opacity: disabled ? 0.4 : 1,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#fff',
     }}
   >
     {icon}
-    <span style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>
-      {title}<span style={{ display: 'block', fontSize: 10, fontWeight: 600, opacity: 0.75 }}>{sub}</span>
-    </span>
+    <span style={{ fontSize: 15, fontWeight: 800 }}>{title}</span>
   </button>
 );
 

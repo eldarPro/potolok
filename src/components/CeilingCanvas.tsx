@@ -1511,7 +1511,7 @@ const StartOption: React.FC<{
     onClick={onClick}
     style={{
       display: 'flex', alignItems: 'center', gap: 12,
-      width: '100%', padding: '10px 12px',
+      width: '100%', padding: '12px 12px',
       background: 'rgba(255,255,255,0.06)',
       border: '1px solid rgba(255,255,255,0.08)',
       borderRadius: 14, cursor: 'pointer', textAlign: 'left',
@@ -1525,8 +1525,8 @@ const StartOption: React.FC<{
       <IonIcon icon={icon} style={{ fontSize: 20, color }} />
     </div>
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{title}</div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11.5, marginTop: 1 }}>{subtitle}</div>
+      <div style={{ color: '#fff', fontWeight: 700, fontSize: 14, lineHeight: 1.25 }}>{title}</div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11.5, lineHeight: 1.35, marginTop: 4 }}>{subtitle}</div>
     </div>
     <IonIcon icon={chevronForwardOutline} style={{ fontSize: 16, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
   </button>
