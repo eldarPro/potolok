@@ -106,3 +106,24 @@ describe('a point splitting a straight wall', () => {
     expect(diagonalCm(out, 0, 2)).toBe(480);
   });
 });
+
+describe('cross diagonals', () => {
+  // П-shaped room like a b c d e f g h: notch between b–c and d–e
+  const u = [cm(0, 0), cm(150, 0), cm(150, 250), cm(250, 250), cm(250, 0), cm(400, 0), cm(400, 400), cm(0, 400)]
+    .map((p, i) => ({ ...p, label: 'abcdefgh'[i] }));
+
+  it('shows both diagonals of every convex quad of the triangulation', () => {
+    const labels = roomDiagonals(u).map(d => d.label);
+    expect(labels).toHaveLength(8);
+    expect(labels).toEqual(expect.arrayContaining(['a–c', 'c–g', 'e–g']));
+  });
+
+  it('a cross diagonal drives in place of the one it crosses', () => {
+    const fixing = shapeDiagonals(u, '0-2');
+    expect(fixing).toHaveLength(5);
+    expect(fixing).toContainEqual([0, 2]);
+    const out = reshapeByDiagonals(u, fixing, { '0-2': diagonalCm(u, 0, 2) - 10 })!;
+    expect(wallsCm(out)).toEqual(wallsCm(u));
+    expect(diagonalCm(out, 0, 2)).toBe(diagonalCm(u, 0, 2) - 10);
+  });
+});

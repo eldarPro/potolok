@@ -14,29 +14,61 @@ export interface DiagonalInfo {
   label: string;
 }
 
+/** Triangulation of the corner outline: n − 3 diagonals, in point indices. */
+function baseDiagonals(pts: Point[]): Pair[] {
+  const corners = cornerIndices(pts);
+  // a convex quad comes back with both diagonals — keep one, the other is its cross
+  return polygonDiagonals(corners.map(i => pts[i]))
+    .slice(0, Math.max(0, corners.length - 3))
+    .map(([p, q]) => [Math.min(corners[p], corners[q]), Math.max(corners[p], corners[q])] as Pair);
+}
+
+/**
+ * For each triangulation diagonal whose two triangles make a convex quad, the
+ * quad's other diagonal — measured as a check, like the second diagonal of a
+ * plain rectangular room. Maps the cross diagonal's key to the one it crosses.
+ */
+function crossDiagonals(pts: Point[], base: Pair[]): Map<string, { cross: Pair; base: Pair }> {
+  const tris = triangles(pts, base);
+  const out = new Map<string, { cross: Pair; base: Pair }>();
+  for (const [p, q] of base) {
+    const apex = tris.filter(t => t.includes(p) && t.includes(q)).map(t => t.find(v => v !== p && v !== q)!);
+    if (apex.length !== 2) continue;
+    const [r, s] = apex;
+    const P = pts[p], Q = pts[q], R = pts[r], S = pts[s];
+    const convex = cross(P, Q, R) * cross(P, Q, S) < 0 && cross(R, S, P) * cross(R, S, Q) < 0;
+    if (!convex) continue;
+    const pair: Pair = [Math.min(r, s), Math.max(r, s)];
+    out.set(diagonalKey(r, s), { cross: pair, base: [p, q] });
+  }
+  return out;
+}
+
 /** Diagonals shown for a room, vertex pair always in ascending order (a–c, not c–a). */
 export function roomDiagonals(pts: Point[]): DiagonalInfo[] {
   const labels = vertexLabels(pts);
-  const corners = cornerIndices(pts);
-  return polygonDiagonals(corners.map(i => pts[i])).map(([p, q]) => {
-    const i = Math.min(corners[p], corners[q]), j = Math.max(corners[p], corners[q]);
-    return { i, j, key: diagonalKey(i, j), label: `${labels[i]}–${labels[j]}` };
-  });
+  const base = baseDiagonals(pts);
+  const crosses = [...crossDiagonals(pts, base).values()].map(c => c.cross);
+  return [...base, ...crosses].map(([i, j]) => ({ i, j, key: diagonalKey(i, j), label: `${labels[i]}–${labels[j]}` }));
 }
 
 export const diagonalCm = (pts: Point[], i: number, j: number) => Math.round(pxToCm(dist(pts[i], pts[j])));
+
+const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 
 const cmToPx = (cm: number) => (cm * GRID_SIZE) / CM_PER_GRID;
 
 /**
  * The diagonals that, together with the walls, pin down the shape: exactly
- * n − 3 of them. A convex quad lists both crossing diagonals, but only one
- * can be set freely — `driverKey` picks which; the other follows from it.
+ * n − 3 of them. Each cross diagonal follows from the one it crosses, so only
+ * one of the pair can be set freely — `driverKey` picks which.
  */
 export function shapeDiagonals(pts: Point[], driverKey?: string | null): Pair[] {
-  const all = roomDiagonals(pts).map(d => [d.i, d.j] as Pair);
-  if (all.length <= cornerIndices(pts).length - 3) return all;
-  return [all.find(([i, j]) => diagonalKey(i, j) === driverKey) ?? all[0]];
+  const base = baseDiagonals(pts);
+  const flip = driverKey ? crossDiagonals(pts, base).get(driverKey) : undefined;
+  if (!flip) return base;
+  const baseKey = diagonalKey(...flip.base);
+  return base.map(d => (diagonalKey(...d) === baseKey ? flip.cross : d));
 }
 
 /** Triangles of the corner outline split by `diags` (corner-to-corner walls + diagonals as sides). */
@@ -55,8 +87,6 @@ function triangles(pts: Point[], diags: Pair[]): [number, number, number][] {
           if (has(c[x], c[z]) && has(c[y], c[z])) out.push([c[x], c[y], c[z]]);
   return out;
 }
-
-const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 
 /**
  * Rebuild the outline so the diagonals in `targetCm` get those lengths while
