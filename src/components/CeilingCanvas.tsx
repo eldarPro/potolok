@@ -10,6 +10,7 @@ import {
   nearestPointOnOutline, nicheFreeEnds,
 } from '../lib/geometry';
 import { roomDiagonals } from '../lib/diagonals';
+import { layoutLabels, calloutJoin, LABEL } from '../lib/canvasLabels';
 
 // A wall can bow at most into a full semicircle. Capping here (rather than
 // higher) keeps the arc's projection onto its own chord monotonic, so the
@@ -35,6 +36,9 @@ const TAP_SLOP_PX = 8;
 const SEL = '#F9A825';
 
 const CLOSE_THRESHOLD = 24;
+// Deep enough to pull apart corners a few cm apart — marks and text keep
+// their screen size at any zoom, so zooming in really does make room.
+const MAX_ZOOM = 20;
 const MIN_POINTS = 3;
 // A two-finger gesture is either a rotate or a zoom/pan, never both: it does
 // nothing until one movement clears its threshold, then stays locked to that
@@ -206,7 +210,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const bw = maxX - minX || 1;
     const bh = maxY - minY || 1;
     const padding = 60;
-    const scale = Math.min(4, (width - padding * 2) / bw, (height - padding * 2) / bh);
+    const scale = Math.min(MAX_ZOOM, (width - padding * 2) / bw, (height - padding * 2) / bh);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     setViewport({ scale, x: width / 2 - cx * scale, y: height / 2 - cy * scale });
@@ -274,6 +278,11 @@ const CeilingCanvas: React.FC<Props> = ({
     const onScreen = normDeg(deg + rotation.angle);
     return onScreen > 90 || onScreen < -90 ? deg + 180 : deg;
   };
+
+  // One screen pixel in drawing units: marks, strokes and text are sized in
+  // screen px times this, so they look the same at any zoom.
+  const px = 1 / viewport.scale;
+  const toStage = (p: Point): Point => ({ x: (p.x - viewport.x) * px, y: (p.y - viewport.y) * px });
 
   const computeMetrics = (pts: Point[]) => {
     const areaPx = polygonArea(pts);
@@ -442,11 +451,11 @@ const CeilingCanvas: React.FC<Props> = ({
     const mx = e.evt.clientX - rect.left;
     const my = e.evt.clientY - rect.top;
     const ratio = e.evt.deltaY < 0 ? 1.1 : 1 / 1.1;
-    setViewport(v => ({
-      scale: Math.min(8, Math.max(0.2, v.scale * ratio)),
-      x: mx - (mx - v.x) * ratio,
-      y: my - (my - v.y) * ratio,
-    }));
+    setViewport(v => {
+      // at a zoom limit, anchor what the clamp actually applied
+      const scale = Math.min(MAX_ZOOM, Math.max(0.2, v.scale * ratio)), r = scale / v.scale;
+      return { scale, x: mx - (mx - v.x) * r, y: my - (my - v.y) * r };
+    });
   };
 
   const handleTouchStart = (e: Konva.KonvaEventObject<TouchEvent>) => {
@@ -593,11 +602,10 @@ const CeilingCanvas: React.FC<Props> = ({
         // mode locks in, so the movement spent deciding isn't applied as a jump.
         const pdx = mx - pinch.mx;
         const pdy = my - pinch.my;
-        setViewport(v => ({
-          scale: Math.min(8, Math.max(0.2, v.scale * ratio)),
-          x: mx - (mx - v.x) * ratio + pdx,
-          y: my - (my - v.y) * ratio + pdy,
-        }));
+        setViewport(v => {
+          const scale = Math.min(MAX_ZOOM, Math.max(0.2, v.scale * ratio)), r = scale / v.scale;
+          return { scale, x: mx - (mx - v.x) * r + pdx, y: my - (my - v.y) * r + pdy };
+        });
       }
 
       pinchRef.current = { ...pinch, dist: newDist, mx, my, mode, lastAngle: angle, twist, twistOffset };
@@ -724,8 +732,8 @@ const CeilingCanvas: React.FC<Props> = ({
   type AngleMark = ReturnType<typeof angleMark>;
   const angleMark = (prev: Point, v: Point, next: Point, a: { deg: number; start: number; sweep: number }, selected: boolean) => {
     const shortest = Math.min(dist(prev, v), dist(v, next));
-    if (shortest < 4) return null;
-    const r = Math.min(selected ? 34 : 24, shortest * 0.4);
+    if (shortest < 4 * px) return null;
+    const r = Math.min((selected ? 34 : 24) * px, shortest * 0.4);
     const mid = (a.start + a.sweep / 2) * Math.PI / 180;
     // same rounding as the corner card when selected; green only when the
     // number itself reads 90, so a 90.6° corner shown as «91°» stays blue
@@ -739,8 +747,8 @@ const CeilingCanvas: React.FC<Props> = ({
       ...a, v, r, right, color,
       textColor: right ? color : '#fff',
       square: [v.x + ux * q, v.y + uy * q, v.x + (ux + wx) * q, v.y + (uy + wy) * q, v.x + wx * q, v.y + wy * q],
-      labelX: v.x + Math.cos(mid) * (r + 12),
-      labelY: v.y + Math.sin(mid) * (r + 12),
+      labelX: v.x + Math.cos(mid) * (r + 12 * px),
+      labelY: v.y + Math.sin(mid) * (r + 12 * px),
       text: `${shown}°`,
     };
   };
@@ -782,29 +790,16 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const angleMarks = [liveCorner, firstWallCorner, cornerMark].filter((m): m is NonNullable<AngleMark> => m != null);
 
-  const labelCentroid = points.length > 0 ? {
-    x: points.reduce((s, q) => s + q.x, 0) / points.length,
-    y: points.reduce((s, q) => s + q.y, 0) / points.length,
-  } : { x: 0, y: 0 };
-
-  const segmentLabels = points.map((p, i) => {
-    if (i === 0 && !closed) return null;
-    const prev = closed && i === 0 ? points[points.length - 1] : points[i - 1];
-    if (!prev) return null;
-    const mid = arcHandlePoint(prev, p, prev.bulge);
-    const d = edgeLen(prev, p, prev.bulge);
-    const cm = pxToCm(d);
-    const dx = p.x - prev.x, dy = p.y - prev.y;
-    const segLen = Math.hypot(dx, dy) || 1;
-    const angle = uprightDeg(Math.atan2(dy, dx) * 180 / Math.PI); // keep text upright, never upside-down
-    // Push the label out along the wall's normal, away from the room's
-    // centroid, so it floats outside the drawing instead of on the line.
-    let nx = -dy / segLen, ny = dx / segLen;
-    if ((mid.x - labelCentroid.x) * nx + (mid.y - labelCentroid.y) * ny < 0) { nx = -nx; ny = -ny; }
-    const margin = 7;
-    const wall = closed && i === 0 ? points.length - 1 : i - 1;
-    return { mx: mid.x + nx * margin, my: mid.y + ny * margin, label: fmtCm(cm), key: i, angle, wall };
-  }).filter(Boolean);
+  // Corner letters and wall lengths, laid out on screen
+  const labels = vertexLabels(points);
+  const screenPts = points.map(worldToScreen);
+  const wallTexts = points.map((a, i) => {
+    if (!closed && i === points.length - 1) return null;
+    const b = points[(i + 1) % points.length];
+    return { text: fmtCm(pxToCm(edgeLen(a, b, a.bulge))), midWorld: arcHandlePoint(a, b, a.bulge) };
+  });
+  const wallsIn = wallTexts.map(w => w && { text: w.text, mid: worldToScreen(w.midWorld) });
+  const labelLayout = layoutLabels(screenPts, closed, wallsIn);
 
   // Invisible wide hit-lines along each wall of the closed room — grab and drag
   // anywhere on a wall to bow it into an arc (no visible curvature handle).
@@ -816,7 +811,6 @@ const CeilingCanvas: React.FC<Props> = ({
   // Diagonals only once the room is closed — every one the triangulation
   // needs to fix the shape. While drawing they'd just be noise: the wall
   // length and the live angle are what matter then.
-  const labels = vertexLabels(points);
   type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string; i?: number; j?: number };
   const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
     ? roomDiagonals(points).filter(d => !room.hiddenDiagonals?.includes(d.key)).map(d => ({
@@ -846,13 +840,13 @@ const CeilingCanvas: React.FC<Props> = ({
     const placed: { p: Point; halfW: number }[] = [];
     return diagonals.map(d => {
       const text = `${d.labelI}–${d.labelJ} ${fmtCm(pxToCm(dist(d.a, d.b)))}`;
-      const w = text.length * 5.4 + 8;
+      const w = (text.length * 6 + 10) * px;
       let best = { t: 0.5, score: -Infinity };
       for (let t = 0.25; t <= 0.751; t += 0.025) {
         const p = { x: d.a.x + (d.b.x - d.a.x) * t, y: d.a.y + (d.b.y - d.a.y) * t };
         const clear = Math.min(
-          ...crossings.map(c => dist(p, c) / (w / 2 + 6)),
-          ...placed.map(o => dist(p, o.p) / (w / 2 + o.halfW + 4)),
+          ...crossings.map(c => dist(p, c) / (w / 2 + 6 * px)),
+          ...placed.map(o => dist(p, o.p) / (w / 2 + o.halfW + 4 * px)),
         );
         const score = Math.min(clear, 1) - Math.abs(t - 0.5) * 0.01;
         if (score > best.score) best = { t, score };
@@ -879,7 +873,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const capBar = (end: Point, toward: Point): number[] => {
     const dx = toward.x - end.x, dy = toward.y - end.y;
     const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len * 10, ny = dx / len * 10;
+    const nx = -dy / len * 10 * px, ny = dx / len * 10 * px;
     return [end.x + nx, end.y + ny, end.x - nx, end.y - ny];
   };
 
@@ -981,10 +975,10 @@ const CeilingCanvas: React.FC<Props> = ({
             const y1 = (height - viewport.y) / viewport.scale + GRID_SIZE;
             const lines = [];
             for (let x = x0; x <= x1; x += GRID_SIZE) {
-              lines.push(<Line key={`gv${x}`} points={[x, y0, x, y1]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} listening={false} />);
+              lines.push(<Line key={`gv${x}`} points={[x, y0, x, y1]} stroke="rgba(255,255,255,0.06)" strokeWidth={px} listening={false} />);
             }
             for (let y = y0; y <= y1; y += GRID_SIZE) {
-              lines.push(<Line key={`gh${y}`} points={[x0, y, x1, y]} stroke="rgba(255,255,255,0.06)" strokeWidth={1} listening={false} />);
+              lines.push(<Line key={`gh${y}`} points={[x0, y, x1, y]} stroke="rgba(255,255,255,0.06)" strokeWidth={px} listening={false} />);
             }
             return lines;
           })()}
@@ -1000,19 +994,19 @@ const CeilingCanvas: React.FC<Props> = ({
                 closed
                 fill={fabricSelected ? 'rgba(249,168,37,0.16)' : 'rgba(56,128,255,0.18)'}
                 stroke="#3880ff"
-                strokeWidth={2}
+                strokeWidth={2 * px}
                 onClick={e => pick(e, { kind: 'fabric' })}
                 onTap={e => pick(e, { kind: 'fabric' })}
               />
               {fabricSelected && (
-                <Line points={outlinePoints(points)} closed stroke={SEL} strokeWidth={3} dash={[10, 6]} listening={false} />
+                <Line points={outlinePoints(points)} closed stroke={SEL} strokeWidth={3 * px} dash={[10 * px, 6 * px]} listening={false} />
               )}
             </>
           )}
 
           {/* In-progress polygon */}
           {!closed && points.length > 1 && (
-            <Line points={flatPoints(points)} stroke="#3880ff" strokeWidth={2} lineCap="round" lineJoin="round" />
+            <Line points={flatPoints(points)} stroke="#3880ff" strokeWidth={2 * px} lineCap="round" lineJoin="round" />
           )}
 
           {/* Polygon preview line */}
@@ -1021,17 +1015,17 @@ const CeilingCanvas: React.FC<Props> = ({
               <Line
                 points={flatPoints(previewLine)}
                 stroke={nearStart ? '#2dd36f' : '#3880ff'}
-                strokeWidth={2}
-                dash={[6, 4]}
+                strokeWidth={2 * px}
+                dash={[6 * px, 4 * px]}
               />
               {dist(previewLine[0], previewLine[1]) > 1 && (
                 <Text
                   x={(previewLine[0].x + previewLine[1].x) / 2}
                   y={(previewLine[0].y + previewLine[1].y) / 2}
-                  offsetY={16}
+                  offsetY={16 * px}
                   rotation={-rotation.angle}
                   text={fmtCm(pxToCm(dist(previewLine[0], previewLine[1])))}
-                  fontSize={12}
+                  fontSize={12 * px}
                   fontStyle="bold"
                   fill={nearStart ? '#2dd36f' : '#fff'}
                   shadowColor="rgba(0,0,0,0.9)"
@@ -1047,7 +1041,8 @@ const CeilingCanvas: React.FC<Props> = ({
           {/* Diagonals with lengths */}
           {diagonalLabels.map(({ a, b, key, text, w, p, i, j }) => {
             const angle = uprightDeg(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); // keep text upright, never upside-down
-            const h = 13;
+            // the pill is drawn in screen px, scaled down to the drawing
+            const h = 15, pw = w / px;
             const isSel = selectedDiag != null && selectedDiag.i === i && selectedDiag.j === j;
             const tappable = closed && i != null && j != null;
             return (
@@ -1055,8 +1050,8 @@ const CeilingCanvas: React.FC<Props> = ({
                 <Line
                   points={[a.x, a.y, b.x, b.y]}
                   stroke="#F9A825"
-                  strokeWidth={isSel ? 4 : 1.5}
-                  dash={[8, 6]}
+                  strokeWidth={(isSel ? 4 : 1.5) * px}
+                  dash={[8 * px, 6 * px]}
                   opacity={isSel ? 1 : 0.85}
                   shadowColor={isSel ? SEL : undefined}
                   shadowBlur={isSel ? 10 : 0}
@@ -1064,37 +1059,26 @@ const CeilingCanvas: React.FC<Props> = ({
                 />
                 {/* Pill sits right on the line so the dashes never run through the text */}
                 <Group
-                  x={p.x} y={p.y} rotation={angle}
+                  x={p.x} y={p.y} rotation={angle} scaleX={px} scaleY={px}
                   listening={tappable}
                   onClick={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
                   onTap={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
                 >
                   <Rect
-                    x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2}
+                    x={-pw / 2} y={-h / 2} width={pw} height={h} cornerRadius={h / 2}
                     fill="rgba(18,22,38,0.88)" stroke="rgba(249,168,37,0.5)" strokeWidth={0.75}
                   />
                   <Text
-                    text={text} x={-w / 2} y={-h / 2} width={w} height={h}
+                    text={text} x={-pw / 2} y={-h / 2} width={pw} height={h}
                     align="center" verticalAlign="middle"
-                    fontSize={9} fontStyle="bold" fill="#F9A825"
+                    fontSize={10} fontStyle="bold" fill="#F9A825"
                   />
                   {/* wider invisible target than the pill itself */}
-                  <Rect x={-w / 2 - 6} y={-h / 2 - 8} width={w + 12} height={h + 16} fill="transparent" />
+                  <Rect x={-pw / 2 - 6} y={-h / 2 - 8} width={pw + 12} height={h + 16} fill="transparent" />
                 </Group>
               </Group>
             );
           })}
-
-          {/* Segment dimension labels */}
-          {segmentLabels.map(seg => seg && (
-            <Group
-              key={seg.key} x={seg.mx} y={seg.my} rotation={seg.angle}
-              onClick={e => pick(e, { kind: 'wall', index: seg.wall })}
-              onTap={e => pick(e, { kind: 'wall', index: seg.wall })}
-            >
-              <Text text={seg.label} fontSize={9} fill={seg.wall === selectedWall ? SEL : '#fff'} fontStyle={seg.wall === selectedWall ? 'bold' : 'normal'} offsetX={seg.label.length * 2.7} offsetY={7} padding={3} />
-            </Group>
-          ))}
 
           {/* Selected wall glow */}
           {selectedWall != null && points.length > selectedWall && (() => {
@@ -1102,7 +1086,7 @@ const CeilingCanvas: React.FC<Props> = ({
             return (
               <Line
                 points={[a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(q => [q.x, q.y])]}
-                stroke={SEL} strokeWidth={5} lineCap="round" lineJoin="round"
+                stroke={SEL} strokeWidth={5 * px} lineCap="round" lineJoin="round"
                 shadowColor={SEL} shadowBlur={10}
                 listening={false}
               />
@@ -1121,7 +1105,7 @@ const CeilingCanvas: React.FC<Props> = ({
               points={w.points}
               stroke="transparent"
               strokeWidth={1}
-              hitStrokeWidth={28}
+              hitStrokeWidth={28 * px}
               draggable
               x={0} y={0}
               onClick={e => pick(e, { kind: 'wall', index: w.i })}
@@ -1166,21 +1150,21 @@ const CeilingCanvas: React.FC<Props> = ({
                 fill={m.color} opacity={0.18}
               />
               {m.right ? (
-                <Line points={m.square} stroke={m.color} strokeWidth={1.5} />
+                <Line points={m.square} stroke={m.color} strokeWidth={1.5 * px} />
               ) : (
                 <Arc
                   x={m.v.x} y={m.v.y}
                   innerRadius={m.r} outerRadius={m.r}
                   angle={m.sweep} rotation={m.start}
-                  stroke={m.color} strokeWidth={1.5}
+                  stroke={m.color} strokeWidth={1.5 * px}
                 />
               )}
               <Text
                 x={m.labelX} y={m.labelY}
-                width={48} offsetX={24} offsetY={6} align="center"
+                width={48 * px} offsetX={24 * px} offsetY={6 * px} align="center"
                 rotation={-rotation.angle}
                 text={m.text}
-                fontSize={12}
+                fontSize={12 * px}
                 fontStyle="bold"
                 fill={m.textColor}
                 shadowColor="rgba(0,0,0,0.9)"
@@ -1194,7 +1178,9 @@ const CeilingCanvas: React.FC<Props> = ({
           {/* Vertices */}
           {points.map((p, i) => {
             const isSelected = selectedPoint === i;
-            const baseRadius = i === 0 && nearStart ? 14 : 7;
+            // a small dot (the letter sits outside it) — but the big «close
+            // the room here» target while the cursor is on the first corner
+            const baseRadius = (i === 0 && nearStart ? 14 : LABEL.dot) * px;
             // Point 0 stays a plain pass-through target while the room is
             // still open — it's the "tap here to close the loop" hotspot in
             // handleTap, so it must not steal the touch into a drag. Every
@@ -1205,10 +1191,10 @@ const CeilingCanvas: React.FC<Props> = ({
                 {isSelected && (
                   <Circle
                     x={p.x} y={p.y}
-                    radius={baseRadius + 7}
+                    radius={baseRadius + 7 * px}
                     fill="rgba(249,168,37,0.25)"
                     stroke={SEL}
-                    strokeWidth={2}
+                    strokeWidth={2 * px}
                     listening={false}
                   />
                 )}
@@ -1217,7 +1203,8 @@ const CeilingCanvas: React.FC<Props> = ({
                   radius={baseRadius}
                   fill={i === 0 ? (nearStart ? '#2dd36f' : '#fff') : '#3880ff'}
                   stroke={isSelected ? SEL : (i === 0 ? '#3880ff' : '#fff')}
-                  strokeWidth={isSelected ? 2 : 1}
+                  strokeWidth={(isSelected ? 2 : 1.5) * px}
+                  hitStrokeWidth={20 * px}
                   name="vertex"
                   listening={canDragVertex}
                   draggable={canDragVertex}
@@ -1242,17 +1229,6 @@ const CeilingCanvas: React.FC<Props> = ({
                   onClick={e => { if (closed) pick(e, { kind: 'corner', index: i }); }}
                   onTap={e => { if (closed) pick(e, { kind: 'corner', index: i }); }}
                 />
-                <Text
-                  x={p.x} y={p.y}
-                  width={baseRadius * 2} height={baseRadius * 2}
-                  offsetX={baseRadius} offsetY={baseRadius}
-                  rotation={-rotation.angle}
-                  align="center" verticalAlign="middle"
-                  text={labels[i]}
-                  fontSize={baseRadius + 3} fontStyle="bold"
-                  fill={i === 0 && !nearStart ? '#3880ff' : '#fff'}
-                  listening={false}
-                />
               </Group>
             );
           })}
@@ -1265,13 +1241,13 @@ const CeilingCanvas: React.FC<Props> = ({
               <Group key={el.id}>
                 {isSel && (
                   <Circle
-                    x={el.x} y={el.y} radius={18}
-                    fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2}
+                    x={el.x} y={el.y} radius={18 * px}
+                    fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2 * px}
                     listening={false}
                   />
                 )}
                 <Circle
-                  x={el.x} y={el.y} radius={16}
+                  x={el.x} y={el.y} radius={16 * px}
                   fill="transparent"
                   listening={!placingLighting && !placingNiche}
                   onClick={e => pick(e, { kind: 'light', id: el.id })}
@@ -1279,10 +1255,10 @@ const CeilingCanvas: React.FC<Props> = ({
                 />
                 <Text
                   x={el.x} y={el.y}
-                  offsetX={10} offsetY={10}
+                  offsetX={10 * px} offsetY={10 * px}
                   rotation={-rotation.angle}
                   text={el.catalogItem.symbol}
-                  fontSize={20}
+                  fontSize={20 * px}
                   fill={lightColor(el.catalogItem.color)}
                   shadowColor="rgba(0,0,0,0.6)" shadowBlur={4}
                   listening={false}
@@ -1300,13 +1276,13 @@ const CeilingCanvas: React.FC<Props> = ({
                 key={el.id}
                 points={el.points.flatMap(p => [p.x, p.y])}
                 stroke={lightColor(el.catalogItem.color)}
-                strokeWidth={isSel ? 9 : 5}
+                strokeWidth={(isSel ? 9 : 5) * px}
                 lineCap="round"
                 lineJoin="round"
                 shadowColor={isSel ? SEL : undefined}
                 shadowBlur={isSel ? 12 : 0}
                 listening={!placingLighting && !placingNiche}
-                hitStrokeWidth={20}
+                hitStrokeWidth={20 * px}
                 onClick={e => pick(e, { kind: 'light', id: el.id })}
                 onTap={e => pick(e, { kind: 'light', id: el.id })}
               />
@@ -1319,13 +1295,13 @@ const CeilingCanvas: React.FC<Props> = ({
               <Line
                 points={inProgressLightingPath.flatMap(p => [p.x, p.y])}
                 stroke={lightColor(placingLighting.color)}
-                strokeWidth={5}
-                dash={[10, 5]}
+                strokeWidth={5 * px}
+                dash={[10 * px, 5 * px]}
                 lineCap="round"
                 listening={false}
               />
               {inProgressLightingPath.map((p, i) => (
-                <Circle key={i} x={p.x} y={p.y} radius={5} fill={lightColor(placingLighting.color)} listening={false} />
+                <Circle key={i} x={p.x} y={p.y} radius={5 * px} fill={lightColor(placingLighting.color)} listening={false} />
               ))}
             </>
           )}
@@ -1335,8 +1311,8 @@ const CeilingCanvas: React.FC<Props> = ({
             <Line
               points={lightPathPreview.flatMap(p => [p.x, p.y])}
               stroke={lightColor(placingLighting!.color)}
-              strokeWidth={3}
-              dash={[6, 4]}
+              strokeWidth={3 * px}
+              dash={[6 * px, 4 * px]}
               opacity={0.5}
               listening={false}
             />
@@ -1354,19 +1330,19 @@ const CeilingCanvas: React.FC<Props> = ({
             return (
               <React.Fragment key={el.id}>
               {capBars.map((bar, i) => (
-                <Line key={i} points={bar} stroke="#00838F" strokeWidth={6} lineCap="round" listening={false} />
+                <Line key={i} points={bar} stroke="#00838F" strokeWidth={6 * px} lineCap="round" listening={false} />
               ))}
               <Line
                 points={el.points.flatMap(p => [p.x, p.y])}
                 stroke="#00838F"
-                strokeWidth={isSel ? 8 : 4}
+                strokeWidth={(isSel ? 8 : 4) * px}
                 lineCap="round"
                 lineJoin="round"
-                dash={[14, 6]}
+                dash={[14 * px, 6 * px]}
                 shadowColor={isSel ? SEL : undefined}
                 shadowBlur={isSel ? 12 : 0}
                 listening={!placingNiche && !placingLighting}
-                hitStrokeWidth={20}
+                hitStrokeWidth={20 * px}
                 onClick={e => pick(e, { kind: 'niche', id: el.id })}
                 onTap={e => pick(e, { kind: 'niche', id: el.id })}
               />
@@ -1380,13 +1356,13 @@ const CeilingCanvas: React.FC<Props> = ({
               <Line
                 points={inProgressNichePath.flatMap(p => [p.x, p.y])}
                 stroke="#00838F"
-                strokeWidth={4}
-                dash={[14, 6]}
+                strokeWidth={4 * px}
+                dash={[14 * px, 6 * px]}
                 lineCap="round"
                 listening={false}
               />
               {inProgressNichePath.map((p, i) => (
-                <Circle key={i} x={p.x} y={p.y} radius={5} fill="#00838F" listening={false} />
+                <Circle key={i} x={p.x} y={p.y} radius={5 * px} fill="#00838F" listening={false} />
               ))}
             </>
           )}
@@ -1396,8 +1372,8 @@ const CeilingCanvas: React.FC<Props> = ({
             <Line
               points={nichePathPreview.flatMap(p => [p.x, p.y])}
               stroke={nicheHoverOnWall ? '#2dd36f' : '#00838F'}
-              strokeWidth={3}
-              dash={[6, 4]}
+              strokeWidth={3 * px}
+              dash={[6 * px, 4 * px]}
               opacity={0.7}
               listening={false}
             />
@@ -1405,9 +1381,63 @@ const CeilingCanvas: React.FC<Props> = ({
 
           {/* ── Niche start marker — green on a wall, hollow off it (that end will take a cap) ── */}
           {nicheStartMarker && (nicheHoverOnWall
-            ? <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9} fill="#2dd36f" listening={false} />
-            : <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={8} stroke="#00838F" strokeWidth={3} listening={false} />
+            ? <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9 * px} fill="#2dd36f" listening={false} />
+            : <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={8 * px} stroke="#00838F" strokeWidth={3 * px} listening={false} />
           )}
+          </Group>
+
+          {/* Corner letters and wall lengths — laid out on
+              screen (labelLayout), so this group isn't rotated with the
+              drawing and the text always reads upright. */}
+          <Group>
+            {labelLayout.walls.map((l, i) => {
+              if (!l) return null;
+              const text = wallsIn[i]!.text;
+              const sel = i === selectedWall;
+              const onPick = (e: Konva.KonvaEventObject<Event>) => pick(e, { kind: 'wall', index: i });
+              if (l.kind === 'inline') {
+                const at = toStage(l), w = 80, h = LABEL.font + 8;
+                return (
+                  <Text
+                    key={`wl${i}`} x={at.x} y={at.y} rotation={l.angle} scaleX={px} scaleY={px}
+                    width={w} height={h} offsetX={w / 2} offsetY={h / 2} align="center" verticalAlign="middle"
+                    text={text} fontSize={LABEL.font} fontStyle={sel ? 'bold' : 'normal'} fill={sel ? SEL : '#fff'}
+                    onClick={onPick} onTap={onPick}
+                  />
+                );
+              }
+              const at = toStage(l), from = toStage(l.anchor), to = toStage(calloutJoin(l));
+              return (
+                <Group key={`wl${i}`}>
+                  <Line points={[from.x, from.y, to.x, to.y]} stroke={sel ? SEL : '#9aa3c7'} strokeWidth={px} listening={false} />
+                  <Circle x={from.x} y={from.y} radius={2 * px} fill={sel ? SEL : '#9aa3c7'} listening={false} />
+                  <Group x={at.x} y={at.y} scaleX={px} scaleY={px} onClick={onPick} onTap={onPick}>
+                    <Rect
+                      x={-l.w / 2} y={-l.h / 2} width={l.w} height={l.h} cornerRadius={l.h / 2}
+                      fill="#262842" stroke={sel ? SEL : '#4a5080'} strokeWidth={1}
+                      hitStrokeWidth={12}
+                    />
+                    <Text
+                      x={-l.w / 2} y={-l.h / 2} width={l.w} height={l.h} align="center" verticalAlign="middle"
+                      text={text} fontSize={LABEL.font} fontStyle={sel ? 'bold' : 'normal'} fill={sel ? SEL : '#fff'}
+                    />
+                  </Group>
+                </Group>
+              );
+            })}
+            {labelLayout.letters.map((l, i) => {
+              const at = toStage(l);
+              return (
+                <Text
+                  key={`cl${i}`} x={at.x} y={at.y} scaleX={px} scaleY={px}
+                  width={24} height={18} offsetX={12} offsetY={9} align="center" verticalAlign="middle"
+                  text={labels[i]} fontSize={LABEL.letterFont} fontStyle="bold"
+                  fill={i === selectedPoint ? SEL : '#8fb8ff'}
+                  shadowColor="rgba(0,0,0,0.9)" shadowBlur={3}
+                  listening={false}
+                />
+              );
+            })}
           </Group>
         </Layer>
       </Stage>
