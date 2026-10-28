@@ -9,7 +9,7 @@ import { getProject, saveProjectPricing } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { EstimateAdjustment, Project, ProjectPricing } from '../types';
 import { EstimateItem, ItemPrices, projectEstimate, projectItems, roomsUsing, withPrices } from '../lib/pricing';
-import { KIND_CATALOG_KEY, fmtRub, unitLabel } from '../lib/estimateFormat';
+import { KIND_CATALOG_KEY, fmtRub, itemTitle, unitLabel } from '../lib/estimateFormat';
 import PriceEditSheet from '../components/PriceEditSheet';
 import { useT } from '../lib/i18n';
 import './ProjectPrices.css';
@@ -85,7 +85,7 @@ const ProjectPrices: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}/summary`} />
@@ -130,7 +130,7 @@ const ProjectPrices: React.FC = () => {
                   {newGroup && <div className="prices-group">{t(KIND_CATALOG_KEY[item.kind])}</div>}
                   <button className="prices-row" onClick={() => setEditing(item)}>
                     <span className="prices-row__name">
-                      {item.title}
+                      {itemTitle(item, t)}
                       {item.overridden && <span className="prices-badge">{t('pp.changed')}</span>}
                       <small>{t('pp.install', { v: `${fmtRub(item.prices.priceInstall)}/${u}` })}</small>
                     </span>

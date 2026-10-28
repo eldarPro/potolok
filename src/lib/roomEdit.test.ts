@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Room } from '../types';
-import { cornerAngle, squareCorner, cornerPointsAtAngle, deleteVertex, resizedPoints, wallCm, roundEdge, nudgeVertex, cmToPx } from './roomEdit';
+import { cornerAngle, squareCorner, cornerPointsAtAngle, deleteVertex, splitEdge, resizedPoints, wallCm, roundEdge, nudgeVertex, cmToPx } from './roomEdit';
 
 const room = (points: { x: number; y: number }[]): Room => ({
   id: 'r', name: 'r', points, fabricId: null, fabric: null, profileSegments: [], lighting: [],
@@ -96,5 +96,24 @@ describe('wall edits', () => {
   it('nudges a corner by centimetres', () => {
     const r = nudgeVertex(room(L), 1, 1, 0);
     expect(r.points![1].x).toBeCloseTo(400 + cmToPx(1));
+  });
+});
+
+describe('hidden diagonals', () => {
+  // pentagon a b c d e; a–c and b–d hidden
+  const penta = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 500, y: 300 }, { x: 200, y: 500 }, { x: -100, y: 300 }];
+  const hidden = (r: Partial<Room>) => r.hiddenDiagonals;
+
+  it('follow their corners when a wall is split', () => {
+    const r = splitEdge({ ...room(penta), hiddenDiagonals: ['0-2', '1-3'] }, 0, 50, null, null)!;
+    expect(hidden(r)).toEqual(['0-3', '2-4']);
+  });
+  it('split of the closing wall shifts nothing', () => {
+    const r = splitEdge({ ...room(penta), hiddenDiagonals: ['0-2', '1-3'] }, 4, 50, null, null)!;
+    expect(hidden(r)).toEqual(['0-2', '1-3']);
+  });
+  it('follow their corners when a corner is deleted; ones through it or now a wall go', () => {
+    const r = deleteVertex({ ...room(penta), hiddenDiagonals: ['0-2', '1-3', '2-4'] }, 1)!;
+    expect(hidden(r)).toEqual(['1-3']);
   });
 });

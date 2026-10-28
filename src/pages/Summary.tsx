@@ -11,7 +11,7 @@ import { Project } from '../types';
 import {
   EstimateItem, EstimateSide, ItemPrices, changedFor, lineTotal, projectEstimate, roomCorners, roomsUsing, withPrices,
 } from '../lib/pricing';
-import { fmtRub, lineCalc, sectionedItems } from '../lib/estimateFormat';
+import { fmtRub, itemTitle, lineCalc, sectionedItems } from '../lib/estimateFormat';
 import { buildEstimatePdf, loadPdfFonts } from '../lib/estimatePdf';
 import PriceEditSheet from '../components/PriceEditSheet';
 import { useT } from '../lib/i18n';
@@ -82,17 +82,17 @@ const Summary: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader className={`summary-header${worker ? ' summary-header--worker' : ''}`}>
+      <IonHeader className={`blue-header${worker ? ' summary-header--worker' : ''}`}>
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}`} />
           </IonButtons>
           <IonTitle>{t('pd.estimate')}</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={handleShare}>
+            <IonButton fill="clear" onClick={handleShare}>
               <IonIcon slot="icon-only" icon={shareSocialOutline} />
             </IonButton>
-            <IonButton onClick={handlePDF}>
+            <IonButton fill="clear" onClick={handlePDF}>
               <IonIcon slot="icon-only" icon={downloadOutline} />
             </IonButton>
           </IonButtons>
@@ -177,7 +177,7 @@ const Summary: React.FC = () => {
                       <button key={item.itemId} className="summary-line" onClick={() => setEditing(item)}>
                         <span className="summary-line__name">
                           {changedFor(item, side) && <i className="summary-line__dot" aria-label={t('pp.changed')} />}
-                          {item.title}
+                          {itemTitle(item, t)}
                         </span>
                         <span className="summary-line__calc">{lineCalc(item, side, t)}</span>
                         <span className="summary-line__total">{fmtRub(lineTotal(item, side))}</span>

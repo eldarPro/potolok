@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners, vertexLabels, nextVertexLabel, edgeLabel, liveCornerAngle, pointInPolygon } from './geometry';
+import { polygonDiagonals, Point, dist, countRealCorners, totalFabricCorners, nicheFreeEnds, pathTurns, vertexLabels, nextVertexLabel, edgeLabel, liveCornerAngle, pointInPolygon } from './geometry';
 
 const pts = (arr: [number, number][]): Point[] => arr.map(([x, y]) => ({ x, y }));
 
@@ -203,5 +203,24 @@ describe('liveCornerAngle', () => {
 
   it('reads an obtuse corner', () => {
     expect(liveCornerAngle(pts([[0, 0], [4, 0]]), { x: 8, y: 4 })!.deg).toBeCloseTo(135);
+  });
+});
+
+describe('niche ends and turns', () => {
+  const room: Point[] = [{ x: 0, y: 0 }, { x: 500, y: 0 }, { x: 500, y: 400 }, { x: 0, y: 400 }];
+
+  it('finds the ends that stop short of a wall', () => {
+    expect(nicheFreeEnds(room, [{ x: 0, y: 30 }, { x: 500, y: 30 }])).toEqual([false, false]);
+    expect(nicheFreeEnds(room, [{ x: 0, y: 30 }, { x: 400, y: 30 }])).toEqual([false, true]);
+    expect(nicheFreeEnds(room, [{ x: 100, y: 30 }, { x: 400, y: 30 }])).toEqual([true, true]);
+  });
+
+  it('counts real turns only', () => {
+    expect(pathTurns([{ x: 0, y: 30 }, { x: 200, y: 30 }, { x: 400, y: 30 }])).toBe(0);
+    expect(pathTurns([{ x: 100, y: 0 }, { x: 100, y: 30 }, { x: 400, y: 30 }, { x: 400, y: 0 }])).toBe(2);
+  });
+
+  it('a niche with a free end adds no fabric corners', () => {
+    expect(totalFabricCorners(room, [[{ x: 0, y: 30 }, { x: 400, y: 30 }]])).toBe(4);
   });
 });

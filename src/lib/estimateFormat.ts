@@ -23,6 +23,12 @@ export const KIND_CATALOG_KEY: Record<ItemKind, string> = {
   accessory: 'sec.accessories', service: 'sec.services', niche: 'sec.niches',
 };
 
+/** Line name — a niche's end caps and cornice are named after the niche they belong to */
+export const itemTitle = (item: EstimateItem, t: T) =>
+  item.part === 'cap' ? t('nc.capLine', { title: item.title })
+  : item.part === 'cornice' ? t('nc.corniceLine', { title: item.title })
+  : item.title;
+
 /** «520 ₽ × 20.00 м² + 150 ₽ × 2 доп. угл.» */
 export const lineCalc = (item: EstimateItem, side: EstimateSide, t: T) => {
   const rate = side === 'client' ? item.prices.price : item.prices.priceInstall;

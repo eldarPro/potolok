@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CatalogItem, Project, Room } from '../types';
+import { CatalogItem, NicheItem, Project, Room, RoomNichePath } from '../types';
 import { emptyPricing, lineTotal, projectEstimate, roomItems, withPrices } from './pricing';
 
 const fabric: CatalogItem = { id: 'f1', title: 'Матовое белое', price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true, color: '', description: '' };
@@ -76,5 +76,40 @@ describe('projectEstimate', () => {
     expect(est.discount).toBe(est.clientSubtotal * 0.1);
     expect(est.clientTotal).toBe(est.clientSubtotal * 0.9 + 500);
     expect(est.workerTotal).toBe(est.workerSubtotal + 1000);
+  });
+});
+
+describe('niches', () => {
+  const niche: NicheItem = {
+    id: 'n1', title: 'Брус', unit: 'perimeter', type: 'cornice', description: '',
+    price: 1200, priceInstall: 600, priceCap: 200, priceInstallCap: 100,
+    priceCorner: 300, priceInstallCorner: 200, priceCornice: 700, priceInstallCornice: 300,
+  };
+  // Along the 5 m wall, 30 cm off it, stopping 1 m short of the right wall,
+  // then turning back to it — one turn, one free end
+  const path: RoomNichePath = {
+    id: 'e1', kind: 'path', nicheId: 'n1', niche,
+    points: [{ x: 0, y: 30 }, { x: 400, y: 30 }, { x: 400, y: 0 }], lengthM: 4.3, caps: 1,
+  };
+  const withNiche = (p: RoomNichePath) => ({ ...rect('r', 5, 4, 0), selectedNiches: [p] });
+
+  it('bills the niche turns, its end caps and its cornice as their own lines', () => {
+    const items = roomItems(withNiche(path)).filter(i => i.kind === 'niche');
+    expect(items.map(i => i.part)).toEqual([undefined, 'cap', 'cornice']);
+    const [main, cap, cornice] = items;
+    expect(main.corners).toBe(1);
+    expect(lineTotal(main, 'client')).toBe(1200 * 4.3 + 300);
+    expect(lineTotal(cap, 'worker')).toBe(100);
+    expect(lineTotal(cornice, 'client')).toBeCloseTo(700 * 4.3);
+  });
+
+  it('leaves the cornice out when the client has their own', () => {
+    const items = roomItems(withNiche({ ...path, cornice: false }));
+    expect(items.some(i => i.part === 'cornice')).toBe(false);
+  });
+
+  it('a curtain-track niche brings no cornice', () => {
+    const items = roomItems(withNiche({ ...path, niche: { ...niche, type: 'curtain' } }));
+    expect(items.some(i => i.part === 'cornice')).toBe(false);
   });
 });

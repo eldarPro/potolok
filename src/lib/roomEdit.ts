@@ -3,7 +3,7 @@ import {
   Point, polygonArea, polygonPerimeter, pxToMeters, edgeLengthM, edgeLengthCm, edgeLen, dist,
   pointOnArc, splitBulge, vertexLabels, nextVertexLabel, edgeWouldCrossRoom, GRID_SIZE, CM_PER_GRID,
 } from './geometry';
-import { shapeDiagonals, makePointMapper } from './diagonals';
+import { shapeDiagonals, makePointMapper, diagonalKey } from './diagonals';
 
 // Edits of a room's outline shared by the drawing (element card) and the
 // materials pages. Each returns the fields of the room that change.
@@ -14,6 +14,22 @@ export const roomMetrics = (pts: Point[]) => ({
   areaSqm: parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2)),
   perimeterM: parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2)),
 });
+
+/**
+ * Hidden diagonal keys are point index pairs — renumber them after points are
+ * inserted or removed. `move` gives a point's new index, or null when it's gone
+ * (a diagonal through it goes too, as does one that has become a wall).
+ */
+const remapHiddenDiagonals = (room: Room, n: number, move: (k: number) => number | null): Partial<Room> => {
+  if (!room.hiddenDiagonals?.length) return {};
+  const keys = room.hiddenDiagonals.flatMap(key => {
+    const [i, j] = key.split('-').map(Number).map(move);
+    if (i == null || j == null) return [];
+    const gap = Math.abs(i - j);
+    return gap === 1 || gap === n - 1 ? [] : [diagonalKey(i, j)];
+  });
+  return { hiddenDiagonals: keys };
+};
 
 const pathM = (ps: { x: number; y: number }[]) =>
   pxToMeters(ps.slice(1).reduce((sum, p, i) => sum + dist(ps[i], p), 0));
@@ -95,7 +111,10 @@ export function splitEdge(room: Room, edgeIndex: number, distCm: number, first: 
     ...part(edgeIndex, first),
     ...part(edgeIndex + 1, second),
   ].sort((x, y) => x.edgeIndex - y.edgeIndex);
-  return { points: newPts, ...roomMetrics(newPts), profileSegments };
+  return {
+    points: newPts, ...roomMetrics(newPts), profileSegments,
+    ...remapHiddenDiagonals(room, newPts.length, k => (k > edgeIndex ? k + 1 : k)),
+  };
 }
 
 /** Set a wall's curvature (0 = straight); null if the arc would run into another wall. */
@@ -155,7 +174,10 @@ export function deleteVertex(room: Room, i: number): Partial<Room> | null {
       return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
     })
     .sort((a, b) => a.edgeIndex - b.edgeIndex);
-  return { points: newPts, ...roomMetrics(newPts), profileSegments };
+  return {
+    points: newPts, ...roomMetrics(newPts), profileSegments,
+    ...remapHiddenDiagonals(room, newPts.length, k => (k === i ? null : k > i ? k - 1 : k)),
+  };
 }
 
 // ── Corners ──

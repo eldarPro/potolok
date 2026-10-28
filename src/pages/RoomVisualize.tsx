@@ -190,7 +190,7 @@ const RoomVisualize: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${projectId}/room/${roomId}`} />

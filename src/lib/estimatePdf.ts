@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import { Project } from '../types';
 import { EstimateSide, ProjectEstimate, lineTotal, roomCorners } from './pricing';
-import { fmtRub, lineCalc, sectionedItems } from './estimateFormat';
+import { fmtRub, itemTitle, lineCalc, sectionedItems } from './estimateFormat';
 import regularUrl from '../assets/fonts/NotoSans-Regular.ttf?url';
 import boldUrl from '../assets/fonts/NotoSans-Bold.ttf?url';
 
@@ -87,7 +87,7 @@ export async function buildEstimatePdf(project: Project, est: ProjectEstimate, s
     for (const g of groups) for (const item of g.items) {
       ensure(10);
       font(10.5);
-      const title = doc.splitTextToSize(item.title, 120) as string[];
+      const title = doc.splitTextToSize(itemTitle(item, t), 120) as string[];
       doc.text(title, MARGIN + 4, y);
       right(fmtRub(lineTotal(item, side)), y);
       y += 4.6 * title.length;

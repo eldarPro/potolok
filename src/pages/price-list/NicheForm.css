@@ -1,0 +1,17 @@
+.nf-group {
+  padding: 18px 32px 0;
+}
+
+.nf-group__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.nf-group__hint {
+  font-size: 12px;
+  color: #888;
+  margin-top: 3px;
+}

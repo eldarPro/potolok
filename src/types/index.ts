@@ -35,6 +35,11 @@ export interface RoomServiceItem {
 // 'perimeter' — priced per running meter, 'pcs' — per piece
 export type NicheUnit = 'perimeter' | 'pcs';
 
+// 'curtain' — a curtain-track profile (ПК-5, ПК-15, ПК-14): the niche itself
+// carries the hooks, nothing else to buy; 'cornice' — a niche (timber, Sigma,
+// БП-40, plasterboard) a separate cornice is hung in.
+export type NicheType = 'curtain' | 'cornice';
+
 export interface NicheItem {
   id: string;
   title: string;
@@ -42,6 +47,16 @@ export interface NicheItem {
   price: number;
   priceInstall: number;
   description: string;
+  type?: NicheType;
+  /** per end cap closing a niche end that stops short of a wall */
+  priceCap?: number;
+  priceInstallCap?: number;
+  /** per turn of a drawn niche */
+  priceCorner?: number;
+  priceInstallCorner?: number;
+  /** 'cornice' type only: the cornice hung in it, per meter */
+  priceCornice?: number;
+  priceInstallCornice?: number;
 }
 
 export interface Accessory {
@@ -61,8 +76,9 @@ export interface RoomAccessoryItem {
 }
 
 // A 'pcs'-unit niche is added manually with a quantity stepper; a
-// 'perimeter'-unit niche is instead drawn on the canvas as a wall-to-wall
-// line, so it carries its own geometry and a length derived from it.
+// 'perimeter'-unit niche is instead drawn on the canvas as a line from wall
+// to wall — or stopping short of one, where an end cap closes it — so it
+// carries its own geometry and a length derived from it.
 export interface RoomNicheCount {
   id: string;
   kind: 'count';
@@ -78,6 +94,10 @@ export interface RoomNichePath {
   niche: NicheItem;
   points: { x: number; y: number }[];
   lengthM: number;
+  /** end caps billed — set to the ends left free of a wall when drawn */
+  caps?: number;
+  /** false when the separate cornice isn't billed (the client has their own) */
+  cornice?: boolean;
 }
 
 export type RoomNicheElement = RoomNicheCount | RoomNichePath;
@@ -157,6 +177,8 @@ export interface Room {
   visualization: RoomVisualization | null;
   /** Diagonal hints on the drawing; undefined = shown */
   showDiagonals?: boolean;
+  /** Diagonals hidden one by one (diagonalKey) */
+  hiddenDiagonals?: string[];
 }
 
 // --- Project pricing (layered over the price list) ---

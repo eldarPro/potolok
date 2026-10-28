@@ -30,6 +30,8 @@ interface Props {
   diagonals?: DiagonalInfo[];
   activeDiagonal?: string | null;
   onDiagonalTap?: (key: string) => void;
+  /** keys of diagonals switched off — drawn faint and struck through */
+  hiddenDiagonals?: string[];
   /** A point to mark on the outline, e.g. where a wall will be split */
   marker?: Point | null;
   /** typed lengths can't form the room — the last valid outline is shown dimmed */
@@ -39,7 +41,7 @@ interface Props {
 /** Mini drawing of the room: walls (optionally coloured and tappable), diagonals, corner letters. */
 const RoomPreview: React.FC<Props> = ({
   points: pts, wallColors, selectedWall = null, onWallTap,
-  diagonals = [], activeDiagonal = null, onDiagonalTap, marker, invalid,
+  diagonals = [], activeDiagonal = null, onDiagonalTap, hiddenDiagonals = [], marker, invalid,
 }) => {
   if (pts.length < 3) return null;
 
@@ -123,9 +125,10 @@ const RoomPreview: React.FC<Props> = ({
         {diagonals.map(d => {
           const a = vs[d.i], b = vs[d.j];
           const active = activeDiagonal === d.key;
-          const faded = activeDiagonal != null && !active;
+          const hidden = hiddenDiagonals.includes(d.key);
+          const faded = hidden || (activeDiagonal != null && !active);
           return (
-            <g key={d.key} opacity={faded ? 0.35 : 1} onClick={onDiagonalTap ? () => onDiagonalTap(d.key) : undefined} style={{ cursor: 'pointer' }}>
+            <g key={d.key} opacity={hidden ? 0.25 : faded ? 0.35 : 1} onClick={onDiagonalTap ? () => onDiagonalTap(d.key) : undefined} style={{ cursor: 'pointer' }}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={16} />
               <line
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
@@ -135,6 +138,7 @@ const RoomPreview: React.FC<Props> = ({
                 transform={lineLabel(a, b, { x: (a.x + b.x) / 2 - (b.y - a.y), y: (a.y + b.y) / 2 + (b.x - a.x) }, 8)}
                 textAnchor="middle" dominantBaseline="middle"
                 fontSize={11} fontWeight={700} fill={ACTIVE}
+                textDecoration={hidden ? 'line-through' : undefined}
                 style={{ paintOrder: 'stroke', stroke: '#141726', strokeWidth: 3 }}
               >
                 {d.label} {diagonalCm(pts, d.i, d.j)} см

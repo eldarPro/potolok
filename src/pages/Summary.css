@@ -2,25 +2,9 @@
   --background: var(--color-bg);
 }
 
-/* ── Header: blue for the client, green for the crew ── */
-.summary-header {
-  border-bottom: none !important;
-}
-
-.summary-header ion-toolbar {
-  --background: var(--color-primary);
-  --color: #fff;
-  --border-width: 0;
-  transition: --background 0.2s;
-}
-
-.summary-header--worker ion-toolbar {
+/* ── Header: shared .blue-header, green for the crew ── */
+.blue-header.summary-header--worker ion-toolbar {
   --background: var(--color-worker);
-}
-
-.summary-header ion-back-button,
-.summary-header ion-button {
-  --color: #fff;
 }
 
 .summary-hero {

@@ -174,6 +174,17 @@ export function seedCatalog(): void {
       { id: uuid(), title: 'Платформа под люстру', price: 150, priceInstall: 100, unit: 'шт', description: '' },
     ]);
   }
+  if (loadNiches().length === 0) {
+    const niche = (n: Omit<NicheItem, 'id' | 'unit' | 'description'>): NicheItem =>
+      ({ id: uuid(), unit: 'perimeter', description: '', ...n });
+    saveList<NicheItem>(NICHES_KEY, [
+      niche({ title: 'Гардина ПК-5 (3 ряда)',     type: 'curtain', price: 2800, priceInstall: 700, priceCap: 300, priceInstallCap: 100, priceCorner: 500, priceInstallCorner: 300 }),
+      niche({ title: 'Гардина ПК-15 (2 ряда)',    type: 'curtain', price: 2500, priceInstall: 700, priceCap: 300, priceInstallCap: 100, priceCorner: 500, priceInstallCorner: 300 }),
+      niche({ title: 'Гардина ПК-14 с подсветкой', type: 'curtain', price: 2600, priceInstall: 800, priceCap: 300, priceInstallCap: 100, priceCorner: 500, priceInstallCorner: 300 }),
+      niche({ title: 'Ниша из бруса под карниз',  type: 'cornice', price: 1200, priceInstall: 600, priceCap: 200, priceInstallCap: 100, priceCorner: 300, priceInstallCorner: 200, priceCornice: 700, priceInstallCornice: 300 }),
+      niche({ title: 'Ниша Sigma Plus под карниз', type: 'cornice', price: 2200, priceInstall: 700, priceCap: 250, priceInstallCap: 100, priceCorner: 400, priceInstallCorner: 250, priceCornice: 700, priceInstallCornice: 300 }),
+    ]);
+  }
 }
 
 // --- Master profile ---

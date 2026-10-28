@@ -8,15 +8,15 @@ import {
 import {
   chevronBackOutline, chevronDownOutline, checkmarkOutline, checkmarkCircle,
   trashOutline, pencilOutline, addOutline, settingsOutline, ellipsisVerticalOutline,
-  layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline, resizeOutline,
+  eyeOutline, eyeOffOutline, layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline, resizeOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
-import { edgeLengthM, edgeLengthCm, edgeLabel, Point } from '../lib/geometry';
+import { edgeLengthM, edgeLengthCm, edgeLabel, Point, pathTurns } from '../lib/geometry';
 import { useT } from '../lib/i18n';
-import { roomItems, lineTotal, ItemKind } from '../lib/pricing';
+import { roomItems, lineTotal, ItemKind, hasCornice, nicheCapId, nicheCorniceId } from '../lib/pricing';
 import RoomPreview from '../components/RoomPreview';
 import WallSplitScreen from '../components/WallSplitScreen';
 import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm } from '../lib/diagonals';
@@ -339,7 +339,7 @@ const RoomMaterials: React.FC = () => {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="blue-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={backHref} />
@@ -553,6 +553,7 @@ const RoomMaterials: React.FC = () => {
                   activeDiagonal={activeDiag}
                   invalid={diagPoints == null}
                   onDiagonalTap={setActiveDiag}
+                  hiddenDiagonals={room.hiddenDiagonals}
                 />
                 <div style={{ marginTop: 12 }}>
                   <HintText text={t('diag.hint')} />
@@ -562,6 +563,11 @@ const RoomMaterials: React.FC = () => {
                     const value = diagDraft[d.key] ?? String(diagonalCm(diagPoints ?? room.points, d.i, d.j));
                     const active = activeDiag === d.key;
                     const bad = diagPoints == null && diagDriver === d.key;
+                    const hidden = room.hiddenDiagonals?.includes(d.key) ?? false;
+                    const toggleHidden = () => {
+                      const rest = (room.hiddenDiagonals ?? []).filter(k => k !== d.key);
+                      updateRoom({ hiddenDiagonals: hidden ? rest : [...rest, d.key] });
+                    };
                     return (
                       <div
                         key={d.key}
@@ -579,6 +585,8 @@ const RoomMaterials: React.FC = () => {
                             background: 'rgba(249,168,37,0.15)', color: '#F9A825',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontWeight: 800, fontSize: 14,
+                            opacity: hidden ? 0.45 : 1,
+                            textDecoration: hidden ? 'line-through' : undefined,
                           }}>
                             {d.label}
                           </div>
@@ -600,6 +608,18 @@ const RoomMaterials: React.FC = () => {
                             />
                             <span style={{ fontSize: 14, color: '#888', flexShrink: 0 }}>{t('re.cm')}</span>
                           </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleHidden(); }}
+                            aria-label={t(hidden ? 'diag.showOne' : 'ec.hideDiagonal')}
+                            style={{
+                              width: 36, height: 36, flexShrink: 0, border: 'none', borderRadius: 10,
+                              background: 'transparent', cursor: 'pointer', padding: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: hidden ? 'rgba(0,0,0,0.35)' : '#F9A825', fontSize: 22,
+                            }}
+                          >
+                            <IonIcon icon={hidden ? eyeOffOutline : eyeOutline} />
+                          </button>
                         </div>
                         {bad && diagRange && (
                           <div style={{ fontSize: 12, color: '#E53935', marginTop: 6, textAlign: 'right' }}>
@@ -809,7 +829,9 @@ const RoomMaterials: React.FC = () => {
 
               {Object.values(nichePathGroups).map(({ item, elements }) => {
                 const totalLen = elements.reduce((s, e) => s + e.lengthM, 0);
-                const total = item.price * totalLen;
+                // the niche line plus its corners, end caps and cornice lines
+                const ids = [item.id, nicheCapId(item.id), nicheCorniceId(item.id)];
+                const total = sectionItems.filter(i => ids.includes(i.itemId)).reduce((s, i) => s + lineTotal(i, 'client'), 0);
                 return (
                   <div key={item.id} style={{
                     background: '#fff', borderRadius: 16, marginBottom: 10,
@@ -823,7 +845,7 @@ const RoomMaterials: React.FC = () => {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
                         <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
-                          {totalLen.toFixed(2)} м · {item.price} ₽ = {Math.round(total).toLocaleString('ru')} ₽
+                          {totalLen.toFixed(2)} м · {Math.round(total).toLocaleString('ru')} ₽
                         </div>
                       </div>
                     </div>
@@ -835,6 +857,9 @@ const RoomMaterials: React.FC = () => {
                       }}>
                         <span style={{ fontSize: 13, color: '#aaa' }}>
                           {t('mat.line')} {idx + 1} · {el.lengthM.toFixed(2)} м
+                          {pathTurns(el.points) > 0 && ` · ${pathTurns(el.points)} ${t('sum.cornersShort')}`}
+                          {(el.caps ?? 0) > 0 && ` · ${el.caps} ${t('nc.capsShort')}`}
+                          {hasCornice(el) && ` · ${t('nc.cornice').toLowerCase()}`}
                         </span>
                         <button
                           onClick={() => removeNiche(el.id)}

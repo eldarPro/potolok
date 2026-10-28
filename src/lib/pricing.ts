@@ -1,5 +1,5 @@
-import { Project, ProjectPricing, PriceOverride, Room } from '../types';
-import { totalFabricCorners } from './geometry';
+import { Project, ProjectPricing, PriceOverride, Room, RoomNichePath } from '../types';
+import { totalFabricCorners, pathTurns } from './geometry';
 
 // The first 4 corners of a room (a plain rectangle) are free — only extra
 // corners past that add to the fabric price.
@@ -7,6 +7,7 @@ export const FREE_FABRIC_CORNERS = 4;
 
 export type EstimateSide = 'client' | 'worker';
 export type ItemKind = 'fabric' | 'profile' | 'lighting' | 'accessory' | 'service' | 'niche';
+export type NichePart = 'cap' | 'cornice';
 
 /** 'm2' | 'm' | 'pcs' are unit codes; anything else is an accessory's own unit label */
 export type ItemUnit = string;
@@ -27,6 +28,8 @@ export interface EstimateItem {
   unit: ItemUnit;
   /** corners billed at the corner price: extra fabric corners, or one per profile segment */
   corners: number;
+  /** a niche's add-on billed on its own line: its end caps or the cornice hung in it */
+  part?: NichePart;
   /** prices copied into the room when the item was picked */
   base: ItemPrices;
   /** base with the project's override applied */
@@ -55,8 +58,9 @@ export const emptyPricing = (): ProjectPricing => ({ overrides: {}, discountPct:
 
 export const projectPricing = (project: Project): ProjectPricing => ({ ...emptyPricing(), ...project.pricing });
 
-/** Fabric and profiles are also priced per corner; everything else isn't */
-export const hasCorners = (kind: ItemKind) => kind === 'fabric' || kind === 'profile';
+/** Fabric, profiles and drawn niches are also priced per corner; everything else isn't */
+export const hasCorners = (item: EstimateItem) =>
+  item.kind === 'fabric' || item.kind === 'profile' || (item.kind === 'niche' && item.unit === 'm' && !item.part);
 
 const PRICE_KEYS: (keyof ItemPrices)[] = ['price', 'priceCorner', 'priceInstall', 'priceInstallCorner'];
 
@@ -96,20 +100,26 @@ export const roomCorners = (room: Room) => totalFabricCorners(
   (room.selectedNiches ?? []).filter(n => n.kind === 'path').map(n => n.points),
 );
 
+export const nicheCapId = (nicheId: string) => `${nicheId}:cap`;
+export const nicheCorniceId = (nicheId: string) => `${nicheId}:cornice`;
+
+/** Whether a drawn niche gets a separate cornice billed alongside it */
+export const hasCornice = (n: RoomNichePath) => n.niche.type === 'cornice' && n.cornice !== false;
+
 /** Every priced item in a room, grouped per price-list item, in estimate order */
 export const roomItems = (room: Room, pricing?: ProjectPricing): EstimateItem[] => {
   const items: EstimateItem[] = [];
   const byId: Record<string, EstimateItem> = {};
   const add = (
     itemId: string, kind: ItemKind, title: string, unit: ItemUnit,
-    base: Partial<ItemPrices>, qty: number, corners = 0,
+    base: Partial<ItemPrices>, qty: number, corners = 0, part?: NichePart,
   ) => {
     const existing = byId[itemId];
     if (existing) { existing.qty += qty; existing.corners += corners; return; }
     const full: ItemPrices = { price: 0, priceCorner: 0, priceInstall: 0, priceInstallCorner: 0, ...base };
     const o = pricing?.overrides[itemId];
     const item: EstimateItem = {
-      itemId, kind, title, unit, qty, corners,
+      itemId, kind, title, unit, qty, corners, ...(part ? { part } : {}),
       base: full, prices: applyOverride(full, o), overridden: !!o && !!overrideFor(full, applyOverride(full, o)),
     };
     byId[itemId] = item;
@@ -129,8 +139,20 @@ export const roomItems = (room: Room, pricing?: ProjectPricing): EstimateItem[] 
     add(a.accessoryId, 'accessory', a.accessory.title, a.accessory.unit || 'pcs', a.accessory, a.quantity);
   for (const s of room.selectedServices ?? [])
     add(s.serviceId, 'service', s.service.title, 'pcs', s.service, s.quantity);
-  for (const n of niches)
-    add(n.nicheId, 'niche', n.niche.title, n.kind === 'count' ? 'pcs' : 'm', n.niche, n.kind === 'count' ? n.quantity : n.lengthM);
+  // A drawn niche's end caps and cornice follow it as lines of their own, under
+  // their own ids so the project can reprice them apart from the niche.
+  for (const n of niches) {
+    const nc = n.niche;
+    if (n.kind === 'count') { add(n.nicheId, 'niche', nc.title, 'pcs', nc, n.quantity); continue; }
+    add(n.nicheId, 'niche', nc.title, 'm', {
+      price: nc.price, priceInstall: nc.priceInstall,
+      priceCorner: nc.priceCorner ?? 0, priceInstallCorner: nc.priceInstallCorner ?? 0,
+    }, n.lengthM, pathTurns(n.points));
+    if ((n.caps ?? 0) > 0 && (nc.priceCap || nc.priceInstallCap))
+      add(nicheCapId(n.nicheId), 'niche', nc.title, 'pcs', { price: nc.priceCap ?? 0, priceInstall: nc.priceInstallCap ?? 0 }, n.caps!, 0, 'cap');
+    if (hasCornice(n) && (nc.priceCornice || nc.priceInstallCornice))
+      add(nicheCorniceId(n.nicheId), 'niche', nc.title, 'm', { price: nc.priceCornice ?? 0, priceInstall: nc.priceInstallCornice ?? 0 }, n.lengthM, 0, 'cornice');
+  }
   return items.filter(i => i.qty > 0 || i.corners > 0);
 };
 

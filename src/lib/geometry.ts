@@ -535,10 +535,40 @@ export function totalFabricCorners(roomPoints: Point[], nichePaths: Point[][]): 
   if (roomPoints.length < 3) return 0;
   let combined = roomPoints;
   for (const path of nichePaths) {
-    if (path.length < 2) continue;
+    // A niche with a free end doesn't cut the outline — nothing to splice
+    if (path.length < 2 || nicheFreeEnds(roomPoints, path).some(Boolean)) continue;
     combined = spliceNicheIntoOutline(combined, path);
   }
   return countRealCorners(mergeCoincidentPoints(combined));
+}
+
+// A niche end snapped onto a wall lies right on it; reshaping the room
+// carries it along with a little float drift, so allow a couple of px.
+const ON_WALL_PX = 2;
+
+/** Which ends of a niche line stop short of a wall — each is closed with an end cap */
+export function nicheFreeEnds(roomPoints: Point[], path: Point[]): [boolean, boolean] {
+  if (roomPoints.length < 3 || path.length < 2) return [false, false];
+  const outline = tessellateRoom(roomPoints, true);
+  const free = (p: Point) => nearestPointOnOutline(p, outline).distance > ON_WALL_PX;
+  return [free(path[0]), free(path[path.length - 1])];
+}
+
+/** Points where an open line actually turns — each is a corner of the niche profile */
+export function pathTurns(path: Point[]): number {
+  let turns = 0;
+  for (let i = 1; i < path.length - 1; i++) {
+    const prev = path[i - 1], curr = path[i], next = path[i + 1];
+    const ax = curr.x - prev.x, ay = curr.y - prev.y;
+    const bx = next.x - curr.x, by = next.y - curr.y;
+    const lenA = Math.hypot(ax, ay), lenB = Math.hypot(bx, by);
+    if (lenA === 0 || lenB === 0) continue;
+    // under ~3° off straight is a wobble of the finger, not a corner
+    const sin = Math.abs(ax * by - ay * bx) / (lenA * lenB);
+    const straight = sin < 0.05 && (ax * bx + ay * by) > 0;
+    if (!straight) turns++;
+  }
+  return turns;
 }
 
 /** Ray-casting point-in-polygon test */

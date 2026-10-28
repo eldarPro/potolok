@@ -18,7 +18,7 @@ import WallSplitScreen from '../components/WallSplitScreen';
 import RoomSheet from '../components/RoomSheet';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
-import { edgeLengthM, dist, pxToMeters, polygonArea, polygonPerimeter, GRID_SIZE } from '../lib/geometry';
+import { edgeLengthM, dist, pxToMeters, nicheFreeEnds } from '../lib/geometry';
 import { roomDiagonals, diagonalKey } from '../lib/diagonals';
 import { splitEdge } from '../lib/roomEdit';
 import { useT } from '../lib/i18n';
@@ -61,7 +61,6 @@ const RoomEditor: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [bluetoothOpen, setBluetoothOpen] = useState(false);
   const [manualMeasureOpen, setManualMeasureOpen] = useState(false);
 
@@ -148,7 +147,8 @@ const RoomEditor: React.FC = () => {
     if (s.kind === 'corner' || s.kind === 'wall') return s.index < n ? s : null;
     if (s.kind === 'diagonal') {
       const key = diagonalKey(s.i, s.j);
-      return room.showDiagonals !== false && roomDiagonals(room.points).some(d => d.key === key) ? s : null;
+      return room.showDiagonals !== false && !room.hiddenDiagonals?.includes(key)
+        && roomDiagonals(room.points).some(d => d.key === key) ? s : null;
     }
     if (s.kind === 'light') return (room.lighting ?? []).some(e => e.id === s.id) ? s : null;
     if (s.kind === 'niche') return (room.selectedNiches ?? []).some(e => e.id === s.id && e.kind === 'path') ? s : null;
@@ -157,41 +157,6 @@ const RoomEditor: React.FC = () => {
   // Part of the canvas the card hides: everything above the room panel it covers
   const panelHeight = (bodyRef.current?.clientHeight ?? 0) - canvasSize.height;
   const obscuredBottom = liveSelection ? Math.max(0, cardHeight - panelHeight) : 0;
-
-  // ── Room templates ──────────────────────────────────────────────────────────
-
-  // Shapes in integer grid-cell units. All corners are whole numbers →
-  // after scaling by (k × GRID_SIZE) every point lands exactly on the grid.
-  const TEMPLATES: { id: string; labelKey: string; w: number; h: number; shape: [number, number][] }[] = [
-    { id: 'rect',   labelKey: 'tpl.rect',   w: 8, h: 5, shape: [[0,0],[8,0],[8,5],[0,5]] },
-    { id: 'square', labelKey: 'tpl.square', w: 6, h: 6, shape: [[0,0],[6,0],[6,6],[0,6]] },
-    { id: 'lshape', labelKey: 'tpl.lshape', w: 8, h: 8, shape: [[0,0],[8,0],[8,4],[4,4],[4,8],[0,8]] },
-    { id: 'ushape', labelKey: 'tpl.ushape', w: 8, h: 8, shape: [[0,0],[3,0],[3,5],[5,5],[5,0],[8,0],[8,8],[0,8]] },
-    { id: 'tshape', labelKey: 'tpl.tshape', w: 8, h: 8, shape: [[0,0],[8,0],[8,3],[5,3],[5,8],[3,8],[3,3],[0,3]] },
-    { id: 'trap',   labelKey: 'tpl.trap',   w: 8, h: 6, shape: [[1,0],[7,0],[8,6],[0,6]] },
-    { id: 'hexagon', labelKey: 'tpl.hexagon', w: 8, h: 6, shape: [[2,0],[6,0],[8,3],[6,6],[2,6],[0,3]] },
-    { id: 'hexagon2', labelKey: 'tpl.hexagon2', w: 8, h: 6, shape: [[0,0],[6,0],[8,2],[8,4],[6,6],[0,6]] },
-  ];
-
-  const applyTemplate = (shape: [number, number][], tw: number, th: number) => {
-    const pad = GRID_SIZE * 2;
-    const W = canvasSize.width - pad * 2;
-    const H = canvasSize.height - pad * 2;
-    // k — сколько пикселей сетки на одну единицу шаблона (кратно GRID_SIZE)
-    const k = Math.max(1, Math.floor(Math.min(W / tw, H / th) / GRID_SIZE));
-    const sc = k * GRID_SIZE;
-    const sw = tw * sc;
-    const sh = th * sc;
-    // Начало координат — с привязкой к сетке
-    const ox = Math.round((canvasSize.width - sw) / 2 / GRID_SIZE) * GRID_SIZE;
-    const oy = Math.round((canvasSize.height - sh) / 2 / GRID_SIZE) * GRID_SIZE;
-    const pts = shape.map(([gx, gy]) => ({ x: ox + gx * sc, y: oy + gy * sc }));
-    const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2));
-    const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2));
-    setTemplatesOpen(false);
-    updateRoom({ points: pts, areaSqm, perimeterM, lighting: [] });
-    setCanvasKey(k => k + 1);
-  };
 
   const handleVertexDragStart = () => {
     if (!isDraggingRef.current) {
@@ -288,7 +253,7 @@ const RoomEditor: React.FC = () => {
     // once it's wiped — drop them, same as lighting. Manually-counted ('pcs')
     // niches carry no geometry, so they survive the redraw like accessories do.
     updateRoom({
-      points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [],
+      points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [], hiddenDiagonals: [],
       selectedNiches: (room.selectedNiches ?? []).filter(n => n.kind !== 'path'),
     });
     setLightingPathPts([]);
@@ -387,27 +352,29 @@ const RoomEditor: React.FC = () => {
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
   const isPlacingPath = placingLighting?.placement === 'path';
 
-  // A niche line is a single wall-to-wall gesture: the tap that lands back on
-  // a wall (finish=true) both adds the final point and commits the path in
-  // one go, then placement mode exits automatically.
+  // A niche line ends either on a wall — the tap that lands there (finish=true)
+  // adds the final point and commits the path in one go — or anywhere inside
+  // the room via «Готово». Each end left free of a wall gets an end cap.
+  const commitNiche = (pts: { x: number; y: number }[]) => {
+    if (!placingNiche || pts.length < 2) return;
+    let totalPx = 0;
+    for (let i = 0; i < pts.length - 1; i++) totalPx += dist(pts[i], pts[i + 1]);
+    const newEl: RoomNichePath = {
+      id: uuid(), kind: 'path',
+      nicheId: placingNiche.id, niche: { ...placingNiche },
+      points: pts, lengthM: pxToMeters(totalPx),
+      caps: nicheFreeEnds(room.points, pts).filter(Boolean).length,
+    };
+    updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
+    setPlacingNiche(null);
+    setNichePathPts([]);
+  };
+
   const handleNicheTap = (pt: { x: number; y: number }, finish: boolean) => {
     setNichePathRedoStack([]);
-    setNichePathPts(prev => {
-      const next = [...prev, pt];
-      if (finish && placingNiche) {
-        let totalPx = 0;
-        for (let i = 0; i < next.length - 1; i++) totalPx += dist(next[i], next[i + 1]);
-        const newEl: RoomNichePath = {
-          id: uuid(), kind: 'path',
-          nicheId: placingNiche.id, niche: { ...placingNiche },
-          points: next, lengthM: pxToMeters(totalPx),
-        };
-        updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
-        setPlacingNiche(null);
-        return [];
-      }
-      return next;
-    });
+    const next = [...nichePathPts, pt];
+    if (finish) commitNiche(next);
+    else setNichePathPts(next);
   };
 
   const handleUndoNichePoint = () => {
@@ -490,7 +457,6 @@ const RoomEditor: React.FC = () => {
                   message: t('re.outOfBounds'),
                   duration: 1500, position: 'bottom', color: 'danger',
                 })}
-                onOpenTemplates={() => setTemplatesOpen(true)}
                 onOpenBluetooth={() => setBluetoothOpen(true)}
                 onOpenManualMeasure={() => setManualMeasureOpen(true)}
                 selection={liveSelection}
@@ -598,7 +564,7 @@ const RoomEditor: React.FC = () => {
                 border: '1px solid rgba(0,131,143,0.35)',
               }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingNiche.title} · {nichePathPts.length === 0 ? t('re.nicheDrawStart') : t('re.nicheDrawFinish')}
+                  {placingNiche.title} · {nichePathPts.length === 0 ? t('re.nicheDrawStart') : nichePathPts.length === 1 ? t('re.nicheDrawNext') : t('re.nicheDrawFinish')}
                 </span>
                 <button
                   onClick={handleCancelPlacingNiche}
@@ -609,6 +575,18 @@ const RoomEditor: React.FC = () => {
                 >
                   <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
                 </button>
+                {nichePathPts.length >= 2 && (
+                  <button
+                    onClick={() => commitNiche(nichePathPts)}
+                    style={{
+                      padding: '6px 14px', borderRadius: 10,
+                      background: '#00ACC1', border: 'none',
+                      color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    {t('re.done')}
+                  </button>
+                )}
               </div>
             )}
 
@@ -652,66 +630,6 @@ const RoomEditor: React.FC = () => {
             setSplitEdgeIdx(null);
           }}
         />
-      )}
-
-      {/* ── Templates sheet ── */}
-      {templatesOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', alignItems: 'flex-end' }}>
-          <div
-            onClick={() => setTemplatesOpen(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
-          />
-          <div style={{
-            position: 'relative', zIndex: 1, width: '100%',
-            background: '#16182a',
-            boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
-            borderRadius: '20px 20px 0 0',
-            paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
-            </div>
-            <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('tpl.title')}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                {t('tpl.subtitle')}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, padding: '16px 20px' }}>
-              {TEMPLATES.map(tpl => {
-                const pad = 1.5;
-                const vw = tpl.w + pad * 2;
-                const vh = tpl.h + pad * 2;
-                return (
-                  <button
-                    key={tpl.id}
-                    onClick={() => applyTemplate(tpl.shape, tpl.w, tpl.h)}
-                    style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 14, padding: '14px 8px',
-                      cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', gap: 10,
-                    }}
-                  >
-                    <svg width={56} height={44} viewBox={`0 0 ${vw} ${vh}`} style={{ overflow: 'visible' }}>
-                      <polygon
-                        points={tpl.shape.map(([gx, gy]) => `${gx + pad},${gy + pad}`).join(' ')}
-                        fill="rgba(30,136,229,0.25)"
-                        stroke="#1E88E5"
-                        strokeWidth={0.6}
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 1.3 }}>
-                      {t(tpl.labelKey)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ── Room menu ── */}

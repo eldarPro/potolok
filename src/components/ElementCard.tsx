@@ -4,14 +4,16 @@ import {
   closeOutline, checkmarkOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
   analyticsOutline, albumsOutline, layersOutline, cutOutline, ellipseOutline,
   copyOutline, addCircleOutline, trashOutline, gitBranchOutline, eyeOffOutline, listOutline,
-  arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline,
+  arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline, sunnyOutline,
 } from 'ionicons/icons';
 import {
-  Room, CatalogItem, LightingCatalogItem, NicheItem, ProjectPricing, RoomLightingPoint,
+  Room, CatalogItem, LightingCatalogItem, NicheItem, ProjectPricing, RoomLightingPoint, RoomLightingPath,
+  RoomNichePath, RoomNicheElement,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
 import { SheetSection } from './RoomSheet';
-import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon, tessellateRoom, GRID_SIZE } from '../lib/geometry';
+import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon, tessellateRoom, GRID_SIZE, nicheFreeEnds, pathTurns } from '../lib/geometry';
+import { hasCornice, nicheCapId, nicheCorniceId } from '../lib/pricing';
 import { diagonalCm, diagonalKey, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm } from '../lib/diagonals';
 import {
   reshapedRoom, resizedPoints, wallCm, roundEdge, bendEdge, setWallProfile,
@@ -280,7 +282,10 @@ const ElementCard: React.FC<Props> = props => {
       </div>
       {actions([
         { icon: listOutline, label: t('ec.allDiagonals'), onClick: () => props.onOpenSection('diagonals') },
-        { icon: eyeOffOutline, label: t('ec.hideDiagonals'), onClick: () => { onChange({ showDiagonals: false }); close(); } },
+        {
+          icon: eyeOffOutline, label: t('ec.hideDiagonal'),
+          onClick: () => { onChange({ hiddenDiagonals: [...(room.hiddenDiagonals ?? []), key] }); close(); },
+        },
       ])}
     </>;
   }
@@ -341,31 +346,88 @@ const ElementCard: React.FC<Props> = props => {
   // ═══ Niche ═══
   if (selection.kind === 'niche') {
     const el = (room.selectedNiches ?? []).find(e => e.id === selection.id)!;
-    const lengthM = el.kind === 'path' ? el.lengthM : 0;
-    const same = props.niches.filter(nc => nc.unit === 'perimeter');
+    const path = el.kind === 'path' ? el : null;
+    const lengthM = path?.lengthM ?? 0;
+    const nc = el.niche;
+    const same = props.niches.filter(x => x.unit === 'perimeter');
     const remove = () => onChange({ selectedNiches: (room.selectedNiches ?? []).filter(e => e.id !== el.id) });
+    const patch = (p: Partial<RoomNichePath>) =>
+      onChange({ selectedNiches: (room.selectedNiches ?? []).map(e => e.id === el.id ? { ...e, ...p } as RoomNicheElement : e) });
+    // Project prices of the niche's own lines (see roomItems)
+    const ov = pricing?.overrides ?? {};
+    const turns = path ? pathTurns(path.points) : 0;
+    const caps = path?.caps ?? 0;
+    const freeEnds = path ? nicheFreeEnds(pts, path.points).filter(Boolean).length : 0;
+    const cornice = path ? hasCornice(path) : false;
+    const rate = ov[el.nicheId]?.price ?? nc.price;
+    const cornerRate = ov[el.nicheId]?.priceCorner ?? nc.priceCorner ?? 0;
+    const capRate = ov[nicheCapId(el.nicheId)]?.price ?? nc.priceCap ?? 0;
+    const corniceRate = ov[nicheCorniceId(el.nicheId)]?.price ?? nc.priceCornice ?? 0;
+    const parts: { text: string; sum: number }[] = [
+      { text: `${lengthM.toFixed(2)} ${t('unit.m')} × ${rate} ₽`, sum: rate * lengthM },
+      ...(turns > 0 && cornerRate > 0 ? [{ text: `${turns} ${t('sum.cornersShort')} × ${cornerRate} ₽`, sum: cornerRate * turns }] : []),
+      ...(caps > 0 && capRate > 0 ? [{ text: `${caps} ${t('nc.capsShort')} × ${capRate} ₽`, sum: capRate * caps }] : []),
+      ...(cornice && corniceRate > 0 ? [{ text: `${t('nc.cornice')} ${lengthM.toFixed(2)} ${t('unit.m')} × ${corniceRate} ₽`, sum: corniceRate * lengthM }] : []),
+    ];
+    const addLight = () => {
+      if (!path) return;
+      const existing = (room.lighting ?? []).find(l => l.kind === 'path' && JSON.stringify(l.points) === JSON.stringify(path.points));
+      if (existing) { onSelect({ kind: 'light', id: existing.id }); return; }
+      const strips = props.lightings.filter(l => l.placement === 'path');
+      const strip = strips.find(l => l.type === 'strip') ?? strips[0];
+      if (!strip) { props.onToast(t('nc.noStrip')); return; }
+      const light: RoomLightingPath = {
+        id: uuid(), kind: 'path', catalogItemId: strip.id, catalogItem: { ...strip },
+        points: path.points.map(p => ({ ...p })), lengthM: path.lengthM,
+      };
+      onChange({ lighting: [...(room.lighting ?? []), light] });
+      onSelect({ kind: 'light', id: light.id });
+    };
+    const sub = [
+      `${lengthM.toFixed(2)} ${t('unit.m')}`,
+      nc.type ? t(nc.type === 'curtain' ? 'nc.typeCurtain' : 'nc.typeCornice') : null,
+    ].filter(Boolean).join(' · ');
     pick = {
       title: t('ec.type'),
       sub: `${lengthM.toFixed(2)} ${t('unit.m')}`,
-      options: same.map(nc => ({
-        id: nc.id, title: nc.title, mark: lineMark(NICHE_COLOR),
-        price: `${priceOf(nc)} ₽/${t('unit.m')}`, total: `≈ ${rub(priceOf(nc) * lengthM)}`,
+      options: same.map(x => ({
+        id: x.id, title: x.title, mark: lineMark(NICHE_COLOR),
+        price: `${priceOf(x)} ₽/${t('unit.m')}`, total: `≈ ${rub(priceOf(x) * lengthM)}`,
       })),
       selectedId: el.nicheId,
       onPick: id => {
-        const nc = same.find(x => x.id === id);
-        if (nc) onChange({ selectedNiches: (room.selectedNiches ?? []).map(e => e.id === el.id ? { ...e, nicheId: nc.id, niche: { ...nc } } : e) });
+        const x = same.find(y => y.id === id);
+        if (x) patch({ nicheId: x.id, niche: { ...x } });
       },
     };
     body = <>
-      {head(albumsOutline, NICHE_COLOR, el.niche.title, `${lengthM.toFixed(2)} ${t('unit.m')} · ${priceOf(el.niche)} ₽/${t('unit.m')}`)}
-      {same.length > 1 && selectRow(t('ec.type'), lineMark(NICHE_COLOR), el.niche.title, `${priceOf(el.niche)} ₽/${t('unit.m')}`)}
+      {head(albumsOutline, NICHE_COLOR, nc.title, sub)}
+      {same.length > 1 && selectRow(t('ec.type'), lineMark(NICHE_COLOR), nc.title, `${priceOf(nc)} ₽/${t('unit.m')}`)}
+      {path && <>
+        <div className="ecard__label">{t('nc.caps')}</div>
+        <div className="ecard__row">
+          <button className="ecard__btn" disabled={caps <= 0} onClick={() => patch({ caps: caps - 1 })}>−</button>
+          <div className="ecard__count">
+            <b>{caps}</b> {t('unit.pcs')}
+            {capRate > 0 && <span> · {capRate} ₽/{t('unit.pcs')}</span>}
+          </div>
+          <button className="ecard__btn" disabled={caps >= 2} onClick={() => patch({ caps: caps + 1 })}>+</button>
+        </div>
+        <div className="ecard__hint">{t(freeEnds ? 'nc.capsHintFree' : 'nc.capsHintWall', { n: freeEnds })}</div>
+        {nc.type === 'cornice' && (
+          <button className={`ecard__toggle${cornice ? ' ecard__toggle--on' : ''}`} onClick={() => patch({ cornice: !cornice })}>
+            <span>{t('nc.corniceOurs')}</span>
+            <span className="ecard__toggle-knob" />
+          </button>
+        )}
+      </>}
       <div className="ecard__price">
-        <span>{lengthM.toFixed(2)} {t('unit.m')} × {priceOf(el.niche)} ₽</span>
-        <b>{rub(priceOf(el.niche) * lengthM)}</b>
+        <span>{parts.map(p => p.text).join(' + ')}</span>
+        <b>{rub(parts.reduce((s, p) => s + p.sum, 0))}</b>
       </div>
       {actions([
-        { icon: gitBranchOutline, label: t('ec.redraw'), onClick: () => { remove(); close(); props.onPlaceNiche(el.niche); } },
+        { icon: sunnyOutline, label: t('nc.light'), onClick: addLight },
+        { icon: gitBranchOutline, label: t('ec.redraw'), onClick: () => { remove(); close(); props.onPlaceNiche(nc); } },
         { icon: trashOutline, label: t('common.delete'), danger: true, onClick: () => { remove(); close(); } },
       ])}
     </>;

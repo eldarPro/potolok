@@ -1,13 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, createOutline, appsOutline, bluetoothOutline, keypadOutline, chevronForwardOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, createOutline, shapesOutline, bluetoothOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group, Rect, Wedge, Arc } from 'react-konva';
 import Konva from 'konva';
 import {
   Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, vertexLabels,
   pointInPolygon, GRID_SIZE,
   edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom, liveCornerAngle, cornerWedge,
-  nearestPointOnOutline,
+  nearestPointOnOutline, nicheFreeEnds,
 } from '../lib/geometry';
 import { roomDiagonals } from '../lib/diagonals';
 
@@ -84,7 +84,6 @@ interface Props {
   onVertexDragStart?: () => void;
   onVertexDragEnd?: () => void;
   onOutOfBounds?: () => void;
-  onOpenTemplates?: () => void;
   onOpenBluetooth?: () => void;
   onOpenManualMeasure?: () => void;
   selection?: CanvasSelection | null;
@@ -120,7 +119,6 @@ const CeilingCanvas: React.FC<Props> = ({
   onVertexDragStart,
   onVertexDragEnd,
   onOutOfBounds,
-  onOpenTemplates,
   onOpenBluetooth,
   onOpenManualMeasure,
   selection = null,
@@ -303,11 +301,21 @@ const CeilingCanvas: React.FC<Props> = ({
     return { point, onWall: distance * viewport.scale <= CLOSE_THRESHOLD };
   };
 
+  // Where a niche would start from: snapped onto a wall when near one, else
+  // anywhere inside the room — a niche along the window only, with an end
+  // cap closing the free end.
+  const nicheStartAt = (raw: Point): { point: Point; onWall: boolean } | null => {
+    const snapped = snapToWall(raw);
+    if (snapped.onWall) return snapped;
+    return pointInPolygon(raw, tessellateRoom(points, true)) ? { point: raw, onWall: false } : null;
+  };
+
   const handleNicheTap = (raw: Point) => {
     const { point: wallPt, onWall } = snapToWall(raw);
     if (inProgressNichePath.length === 0) {
-      if (!onWall) { onOutOfBounds?.(); return; }
-      onNicheTap?.(wallPt, false);
+      const start = nicheStartAt(raw);
+      if (!start) { onOutOfBounds?.(); return; }
+      onNicheTap?.(start.point, false);
       return;
     }
     if (onWall) {
@@ -406,9 +414,9 @@ const CeilingCanvas: React.FC<Props> = ({
         setNicheHoverOnWall(onWall);
         setCursor(onWall ? point : snapAngle(last, pos));
       } else {
-        const { point, onWall } = snapToWall(pos);
-        setNicheHoverOnWall(onWall);
-        setCursor(onWall ? point : null);
+        const start = nicheStartAt(pos);
+        setNicheHoverOnWall(!!start?.onWall);
+        setCursor(start?.point ?? null);
       }
       return;
     }
@@ -613,9 +621,9 @@ const CeilingCanvas: React.FC<Props> = ({
         setNicheHoverOnWall(onWall);
         setCursor(onWall ? point : snapAngle(last, raw));
       } else {
-        const { point, onWall } = snapToWall(raw);
-        setNicheHoverOnWall(onWall);
-        setCursor(onWall ? point : null);
+        const start = nicheStartAt(raw);
+        setNicheHoverOnWall(!!start?.onWall);
+        setCursor(start?.point ?? null);
       }
       return;
     }
@@ -743,6 +751,24 @@ const CeilingCanvas: React.FC<Props> = ({
     return a && angleMark(points[points.length - 2], previewLine[0], previewLine[1], a, false);
   })();
 
+  // First wall: no previous wall yet, so measure against the on-screen
+  // horizontal (the grid), toward whichever side the wall leans. Hidden while
+  // the wall lies along it — «0°» tells nothing.
+  const firstWallCorner = (() => {
+    if (!previewLine || closed || points.length !== 1) return null;
+    const [v, next] = previewLine;
+    const wall = Math.atan2(next.y - v.y, next.x - v.x) * 180 / Math.PI;
+    const onScreen = normDeg(wall + rotation.angle);
+    const ref = Math.abs(onScreen) <= 90 ? 0 : 180;
+    const sweep = normDeg(onScreen - ref);
+    if (Math.round(Math.abs(sweep)) === 0) return null;
+    const refRoom = (ref - rotation.angle) * Math.PI / 180;
+    const len = dist(v, next);
+    const prev = { x: v.x + Math.cos(refRoom) * len, y: v.y + Math.sin(refRoom) * len };
+    const start = ref - rotation.angle + Math.min(0, sweep);
+    return angleMark(prev, v, next, { deg: Math.abs(sweep), start, sweep: Math.abs(sweep) }, false);
+  })();
+
   // At the corner being dragged, or else the selected one, of the finished
   // room. Matches cornerAngle() in the card: walls measured along their chords
   const cornerMark = (() => {
@@ -754,7 +780,7 @@ const CeilingCanvas: React.FC<Props> = ({
     return angleMark(prev, v, next, cornerWedge(prev, v, next, winding), i === selectedPoint);
   })();
 
-  const angleMarks = [liveCorner, cornerMark].filter((m): m is NonNullable<AngleMark> => m != null);
+  const angleMarks = [liveCorner, firstWallCorner, cornerMark].filter((m): m is NonNullable<AngleMark> => m != null);
 
   const labelCentroid = points.length > 0 ? {
     x: points.reduce((s, q) => s + q.x, 0) / points.length,
@@ -793,7 +819,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const labels = vertexLabels(points);
   type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string; i?: number; j?: number };
   const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
-    ? roomDiagonals(points).map(d => ({
+    ? roomDiagonals(points).filter(d => !room.hiddenDiagonals?.includes(d.key)).map(d => ({
         a: points[d.i], b: points[d.j], labelI: labels[d.i], labelJ: labels[d.j], key: `diag-${d.key}`, i: d.i, j: d.j,
       }))
     : [];
@@ -849,14 +875,20 @@ const CeilingCanvas: React.FC<Props> = ({
     ? [lastPathPt, cursor]
     : null;
 
+  // End cap of a niche end left free of a wall: a short bar across the line
+  const capBar = (end: Point, toward: Point): number[] => {
+    const dx = toward.x - end.x, dy = toward.y - end.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len * 10, ny = dx / len * 10;
+    return [end.x + nx, end.y + ny, end.x - nx, end.y - ny];
+  };
+
   // Niche line preview — dashed segment from the last placed point to the
   // (possibly wall-snapped) cursor; the start marker shows where a tap on an
   // empty in-progress path would begin the line.
   const lastNichePt = inProgressNichePath[inProgressNichePath.length - 1];
   const nichePathPreview = placingNiche && lastNichePt && cursor ? [lastNichePt, cursor] : null;
-  const nicheStartMarker = placingNiche && inProgressNichePath.length === 0 && cursor && nicheHoverOnWall
-    ? cursor
-    : null;
+  const nicheStartMarker = placingNiche && inProgressNichePath.length === 0 && cursor ? cursor : null;
 
   // Screen point the selection is about — kept clear of the element card
   const selectionAnchor = (): Point | null => {
@@ -1313,9 +1345,18 @@ const CeilingCanvas: React.FC<Props> = ({
           {/* ── Placed niche lines ── */}
           {(room.selectedNiches ?? []).filter((e): e is RoomNichePath => e.kind === 'path').map(el => {
             const isSel = selectedNicheEl === el.id;
+            const [startFree, endFree] = nicheFreeEnds(points, el.points);
+            const n = el.points.length;
+            const capBars = [
+              ...(startFree ? [capBar(el.points[0], el.points[1])] : []),
+              ...(endFree ? [capBar(el.points[n - 1], el.points[n - 2])] : []),
+            ];
             return (
+              <React.Fragment key={el.id}>
+              {capBars.map((bar, i) => (
+                <Line key={i} points={bar} stroke="#00838F" strokeWidth={6} lineCap="round" listening={false} />
+              ))}
               <Line
-                key={el.id}
                 points={el.points.flatMap(p => [p.x, p.y])}
                 stroke="#00838F"
                 strokeWidth={isSel ? 8 : 4}
@@ -1329,6 +1370,7 @@ const CeilingCanvas: React.FC<Props> = ({
                 onClick={e => pick(e, { kind: 'niche', id: el.id })}
                 onTap={e => pick(e, { kind: 'niche', id: el.id })}
               />
+              </React.Fragment>
             );
           })}
 
@@ -1361,9 +1403,10 @@ const CeilingCanvas: React.FC<Props> = ({
             />
           )}
 
-          {/* ── Niche start marker — highlights the wall point a tap would start from ── */}
-          {nicheStartMarker && (
-            <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9} fill="#2dd36f" listening={false} />
+          {/* ── Niche start marker — green on a wall, hollow off it (that end will take a cap) ── */}
+          {nicheStartMarker && (nicheHoverOnWall
+            ? <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9} fill="#2dd36f" listening={false} />
+            : <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={8} stroke="#00838F" strokeWidth={3} listening={false} />
           )}
           </Group>
         </Layer>
@@ -1435,13 +1478,13 @@ const CeilingCanvas: React.FC<Props> = ({
                 subtitle="Ставьте точки на холсте вручную"
                 onClick={() => setManualStarted(true)}
               />
-              {onOpenTemplates && (
+              {onOpenManualMeasure && (
                 <StartOption
-                  icon={appsOutline}
+                  icon={shapesOutline}
                   color="#8E24AA"
-                  title="Готовый шаблон"
-                  subtitle="Прямоугольник, буквой Г, П и другие"
-                  onClick={onOpenTemplates}
+                  title="Форма и размеры"
+                  subtitle="Г, П, трапеция… или стена за стеной"
+                  onClick={onOpenManualMeasure}
                 />
               )}
               {onOpenBluetooth && (
@@ -1451,15 +1494,6 @@ const CeilingCanvas: React.FC<Props> = ({
                   title="Через дальномер"
                   subtitle="Обмерить стены лазерным дальномером"
                   onClick={onOpenBluetooth}
-                />
-              )}
-              {onOpenManualMeasure && (
-                <StartOption
-                  icon={keypadOutline}
-                  color="#00ACC1"
-                  title="Ввести размеры"
-                  subtitle="Углы и длины стен вручную"
-                  onClick={onOpenManualMeasure}
                 />
               )}
             </div>

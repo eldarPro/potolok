@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { IonModal } from '@ionic/react';
 import { EstimateItem, ItemPrices, hasCorners } from '../lib/pricing';
-import { KIND_CATALOG_KEY, fmtRub, unitLabel } from '../lib/estimateFormat';
+import { KIND_CATALOG_KEY, fmtRub, itemTitle, unitLabel } from '../lib/estimateFormat';
 import { useT } from '../lib/i18n';
 import ActionButton from './ActionButton';
 import './PriceEditSheet.css';
@@ -38,7 +38,7 @@ const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, on
     setDraft(toDraft(item.prices));
   }, [item]);
 
-  const corners = item ? hasCorners(item.kind) : false;
+  const corners = item ? hasCorners(item) : false;
   const u = item ? unitLabel(item.unit, t) : '';
 
   const field = (key: keyof ItemPrices, label: string) => {
@@ -80,7 +80,7 @@ const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, on
     >
       {item && draft && (
         <div className="price-sheet__content">
-          <div className="price-sheet__title">{item.title}</div>
+          <div className="price-sheet__title">{itemTitle(item, t)}</div>
           <div className="price-sheet__sub">
             {t(KIND_CATALOG_KEY[item.kind])} · {t('pe.rooms', { n: roomsCount })}
           </div>

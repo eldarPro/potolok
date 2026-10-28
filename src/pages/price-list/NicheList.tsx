@@ -9,7 +9,7 @@ import ActionButton from '../../components/ActionButton';
 import { NicheItem } from '../../types';
 import { loadNiches, deleteNiche } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
-import PriceItemCard from './PriceItemCard';
+import PriceItemCard, { PriceLine } from './PriceItemCard';
 import './ItemCard.css';
 
 const NicheList: React.FC = () => {
@@ -26,6 +26,18 @@ const NicheList: React.FC = () => {
     deleteNiche(deleteId);
     setDeleteId(null);
     load();
+  };
+
+  // End cap, corner and cornice prices — only those the niche has
+  const extras = (item: NicheItem, side: 'client' | 'worker'): PriceLine[] => {
+    if (item.unit !== 'perimeter') return [];
+    const w = side === 'worker';
+    const lines: PriceLine[] = [
+      { value: (w ? item.priceInstallCap : item.priceCap) ?? 0, unit: t('nc.capUnit') },
+      { value: (w ? item.priceInstallCorner : item.priceCorner) ?? 0, unit: t('unit.corner') },
+      ...(item.type === 'cornice' ? [{ value: (w ? item.priceInstallCornice : item.priceCornice) ?? 0, unit: t('nc.corniceUnit') }] : []),
+    ];
+    return lines.filter(l => l.value > 0);
   };
 
   return (
@@ -60,9 +72,14 @@ const NicheList: React.FC = () => {
               <PriceItemCard
                 key={item.id}
                 title={item.title}
-                tags={<span className="price-item-card__chip">{t(item.unit === 'pcs' ? 'nf.unitPcs' : 'nf.unitPerimeter')}</span>}
-                client={[{ value: item.price, unit: unitLabel }]}
-                worker={[{ value: item.priceInstall, unit: unitLabel }]}
+                tags={<>
+                  <span className="price-item-card__chip">{t(item.unit === 'pcs' ? 'nf.unitPcs' : 'nf.unitPerimeter')}</span>
+                  {item.unit === 'perimeter' && item.type && (
+                    <span className="price-item-card__chip">{t(item.type === 'curtain' ? 'nc.typeCurtain' : 'nc.typeCornice')}</span>
+                  )}
+                </>}
+                client={[{ value: item.price, unit: unitLabel }, ...extras(item, 'client')]}
+                worker={[{ value: item.priceInstall, unit: unitLabel }, ...extras(item, 'worker')]}
                 description={item.description}
                 onEdit={() => router.push(`/price-list/niches/${item.id}/edit`)}
                 onDelete={() => setDeleteId(item.id)}

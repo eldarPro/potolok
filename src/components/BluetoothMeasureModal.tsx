@@ -162,7 +162,7 @@ const BluetoothMeasureModal: React.FC<Props> = ({ room, canvasW, canvasH, onAppl
   const applyPoints = (pts: { x: number; y: number }[]) => {
     const areaSqm = parseFloat((pxToMeters(Math.sqrt(polygonArea(pts))) ** 2).toFixed(2));
     const perimeterM = parseFloat(pxToMeters(polygonPerimeter(pts)).toFixed(2));
-    onApply({ points: pts, areaSqm, perimeterM, profileSegments: [], lighting: [] });
+    onApply({ points: pts, areaSqm, perimeterM, profileSegments: [], lighting: [], hiddenDiagonals: [] });
     onClose();
   };
 

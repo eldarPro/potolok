@@ -1,21 +1,27 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonFab, IonFabButton, IonIcon, IonItem,
   IonItemSliding, IonItemOptions, IonItemOption,
   IonSearchbar, IonButtons, IonButton,
+  IonInfiniteScroll, IonInfiniteScrollContent,
   useIonViewWillEnter,
 } from '@ionic/react';
-import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, personOutline, callOutline, locationOutline } from 'ionicons/icons';
+import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, optionsOutline, personOutline, callOutline, locationOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
 import { projectEstimate } from '../lib/pricing';
 import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
+import ProjectFilterSheet from '../components/ProjectFilterSheet';
+import { DEFAULT_FILTERS, ProjectFilters, activeFilterCount, filterProjects, projectDate } from '../lib/projectFilter';
 import { useT } from '../lib/i18n';
 import './ProjectList.css';
 
 const projectArea = (p: Project) => p.rooms.reduce((s, r) => s + r.areaSqm, 0);
 const projectPrice = (p: Project) => projectEstimate(p).clientTotal;
+
+/** Cards rendered per infinite-scroll step */
+const PAGE_SIZE = 10;
 
 const formatRub = (v: number) => `${Math.round(v).toLocaleString('ru')} ₽`;
 
@@ -65,6 +71,9 @@ const ProjectList: React.FC = () => {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchbarRef = useRef<HTMLIonSearchbarElement>(null);
+  const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [shown, setShown] = useState(PAGE_SIZE);
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -94,14 +103,32 @@ const ProjectList: React.FC = () => {
     return d.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
   };
 
+  // the estimate is the heaviest part of a card, so it's computed once per load
+  const prices = useMemo(() => new Map(projects.map(p => [p.id, projectPrice(p)])), [projects]);
+  const priceOf = (p: Project) => prices.get(p.id) ?? 0;
+
   const q = query.trim().toLowerCase();
-  const filtered = q
-    ? projects.filter(p =>
-        p.clientName.toLowerCase().includes(q) ||
-        p.address.toLowerCase().includes(q) ||
-        p.phone.toLowerCase().includes(q)
-      )
-    : projects;
+  const filtered = useMemo(() => {
+    const searched = q
+      ? projects.filter(p =>
+          p.clientName.toLowerCase().includes(q) ||
+          p.address.toLowerCase().includes(q) ||
+          p.phone.toLowerCase().includes(q)
+        )
+      : projects;
+    return filterProjects(searched, filters, p => prices.get(p.id) ?? 0);
+  }, [projects, prices, q, filters]);
+
+  const filterCount = activeFilterCount(filters);
+  const page = filtered.slice(0, shown);
+
+  // a new search or filter starts again from the first page
+  useEffect(() => { setShown(PAGE_SIZE); }, [q, filters]);
+
+  const loadMore = (e: CustomEvent<void>) => {
+    setShown(n => n + PAGE_SIZE);
+    (e.target as HTMLIonInfiniteScrollElement).complete();
+  };
 
   return (
     <IonPage>
@@ -128,6 +155,10 @@ const ProjectList: React.FC = () => {
               <IonTitle>{t('proj.title')}</IonTitle>
               {projects.length > 0 && (
                 <IonButtons slot="end">
+                  <IonButton onClick={() => setFiltersOpen(true)} className="project-filter-btn">
+                    <IonIcon slot="icon-only" icon={optionsOutline} />
+                    {filterCount > 0 && <span className="project-filter-btn__badge">{filterCount}</span>}
+                  </IonButton>
                   <IonButton onClick={openSearch}>
                     <IonIcon slot="icon-only" icon={searchOutline} />
                   </IonButton>
@@ -159,14 +190,19 @@ const ProjectList: React.FC = () => {
             <div className="blue-hero" />
 
             <div className="card-list project-list-cards blue-hero-overlap">
-              {filtered.length === 0 && searchOpen ? (
+              {filtered.length === 0 ? (
                 <div className="project-list-no-results card">
-                  <IonIcon icon={searchOutline} />
+                  <IonIcon icon={filterCount > 0 ? optionsOutline : searchOutline} />
                   <p>{t('proj.noResults')}</p>
+                  {filterCount > 0 && (
+                    <button className="project-list-reset" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                      {t('pf.reset')}
+                    </button>
+                  )}
                 </div>
-              ) : filtered.map(p => {
+              ) : page.map(p => {
                 const sqm = projectArea(p);
-                const price = projectPrice(p);
+                const price = priceOf(p);
                 return (
                   <IonItemSliding key={p.id}>
                     <IonItem
@@ -182,7 +218,7 @@ const ProjectList: React.FC = () => {
                         <div className="project-card__body">
                           <div className="project-card__top">
                             <div className="project-card__name">{p.clientName || t('proj.noName')}</div>
-                            <div className="project-card__date">{relDate(p.updatedAt || p.createdAt)}</div>
+                            <div className="project-card__date">{relDate(projectDate(p))}</div>
                           </div>
                           {p.phone && (
                             <div className="project-card__line">
@@ -221,8 +257,20 @@ const ProjectList: React.FC = () => {
                 );
               })}
             </div>
+
+            <IonInfiniteScroll onIonInfinite={loadMore} disabled={shown >= filtered.length}>
+              <IonInfiniteScrollContent />
+            </IonInfiniteScroll>
           </>
         )}
+
+        <ProjectFilterSheet
+          isOpen={filtersOpen}
+          filters={filters}
+          found={filtered.length}
+          onChange={setFilters}
+          onClose={() => setFiltersOpen(false)}
+        />
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
           <IonFabButton routerLink="/new-project">

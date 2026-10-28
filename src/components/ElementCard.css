@@ -249,6 +249,75 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+.ecard__count {
+  flex: 1;
+  height: 46px;
+  border-radius: 12px;
+  background: #23263b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ecard__count b {
+  font-size: 18px;
+  color: #fff;
+}
+
+.ecard__count span {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+}
+
+/* ── On/off row: label and a switch ── */
+.ecard__toggle {
+  width: 100%;
+  height: 48px;
+  margin-top: 12px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: none;
+  background: #23263b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ecard__toggle-knob {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.15s;
+}
+
+.ecard__toggle-knob::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.ecard__toggle--on .ecard__toggle-knob {
+  background: #00ACC1;
+}
+
+.ecard__toggle--on .ecard__toggle-knob::after {
+  transform: translateX(16px);
+}
+
 .ecard__price b {
   color: #fff;
   font-size: 15px;
