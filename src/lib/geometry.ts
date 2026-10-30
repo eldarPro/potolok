@@ -439,6 +439,9 @@ function closestOnSegment(p: Point, a: Point, b: Point): { point: Point; distSq:
   return { point, distSq };
 }
 
+/** Distance from `p` to segment a–b */
+export const distToSegment = (p: Point, a: Point, b: Point) => Math.sqrt(closestOnSegment(p, a, b).distSq);
+
 /**
  * Closest point on a closed outline (consecutive segments, wrapping from the
  * last point back to the first) to `p`, with the distance to it. Used to snap

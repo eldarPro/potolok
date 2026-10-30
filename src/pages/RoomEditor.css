@@ -107,3 +107,78 @@
   margin: 4px 0;
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* ── Niche placing bar: one chip per niche of the price list ── */
+.niche-types {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -14px 10px;
+  padding: 0 14px;
+}
+
+.niche-types__chip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(0, 172, 193, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.niche-types__chip small {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.niche-types__chip--on {
+  background: #00ACC1;
+  border-color: #00ACC1;
+  color: #04181b;
+}
+
+.niche-types__chip--on small {
+  color: rgba(4, 24, 27, 0.7);
+}
+
+.niche-types__chip--piece {
+  border-style: dashed;
+}
+
+/* ── Niche placing bar: along a wall / across the room ── */
+.niche-modes {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.niche-modes__btn {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.niche-modes__btn--on {
+  background: rgba(0, 172, 193, 0.9);
+  color: #04181b;
+  font-weight: 800;
+}

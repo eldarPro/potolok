@@ -100,7 +100,47 @@ export interface RoomNichePath {
   cornice?: boolean;
 }
 
-export type RoomNicheElement = RoomNicheCount | RoomNichePath;
+// A niche set against the room's walls: it runs along `edges` (consecutive
+// walls in outline order — one wall, or several around a bay window), stops
+// `startCm`/`endCm` short of the chain's first/last corner, and takes
+// `depthCm` off the canvas. Kept in cm from the corners, so it stays put when
+// the walls are resized.
+export interface RoomNicheWall {
+  id: string;
+  kind: 'wall';
+  nicheId: string;
+  niche: NicheItem;
+  edges: number[];
+  depthCm: number;
+  startCm: number;
+  endCm: number;
+  /** false when the separate cornice isn't billed (the client has their own) */
+  cornice?: boolean;
+}
+
+/** A point on a wall: `cm` from the wall's start corner */
+export interface WallPoint {
+  edge: number;
+  cm: number;
+}
+
+// A niche straight across the room, from one wall to another — a curtain
+// zoning off a bed or a wardrobe. It splits the ceiling: the canvas stays one
+// (no area lost), but each end adds corners where it meets the wall.
+export interface RoomNicheCross {
+  id: string;
+  kind: 'cross';
+  nicheId: string;
+  niche: NicheItem;
+  a: WallPoint;
+  b: WallPoint;
+  /** how wide the profile or niche is across the ceiling, between the two canvas edges */
+  widthCm?: number;
+  /** false when the separate cornice isn't billed (the client has their own) */
+  cornice?: boolean;
+}
+
+export type RoomNicheElement = RoomNicheCount | RoomNichePath | RoomNicheWall | RoomNicheCross;
 
 // --- Lighting catalog ---
 

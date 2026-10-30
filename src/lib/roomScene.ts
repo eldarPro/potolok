@@ -6,6 +6,7 @@
 //
 // Loaded lazily (dynamic import) — three.js is heavy and only this screen needs it.
 
+import { crossLine, crossWidthCm, nicheShape } from './nicheGeometry';
 import * as THREE from 'three';
 import { Room, LightingType } from '../types';
 import { Point, tessellateRoom, pointInPolygon, pxToMeters } from './geometry';
@@ -235,8 +236,15 @@ export async function renderRoomScene(room: Room, opts: RoomSceneOptions = {}): 
   // ── Curtain niches: a dark gap in the ceiling along the drawn line ──
   const nicheMat = new THREE.MeshBasicMaterial({ color: '#3a3836', side: THREE.DoubleSide });
   for (const n of room.selectedNiches) {
-    if (n.kind !== 'path' || n.points.length < 2) continue;
-    scene.add(ceilingBand(n.points.map(toM), 0.15, H - 0.004, nicheMat));
+    if (n.kind === 'path' && n.points.length >= 2) scene.add(ceilingBand(n.points.map(toM), 0.15, H - 0.004, nicheMat));
+    if (n.kind === 'cross') {
+      const line = crossLine(room, n);
+      if (line) scene.add(ceilingBand(line.map(toM), crossWidthCm(n) / 100, H - 0.004, nicheMat));
+    }
+    if (n.kind === 'wall') {
+      const shape = nicheShape(room, n);
+      if (shape) scene.add(ceilingBand(shape.rail.map(toM), n.depthCm / 100, H - 0.004, nicheMat));
+    }
   }
 
   // ── Lighting ──
@@ -464,7 +472,7 @@ export function drawingPrompt(room: Room): string {
     .map(([title, { kind, n }]) => `${title} (${kind})${n > 0 ? ` — ${n} шт.` : ''}`)
     .join(', ');
   const fabric = room.fabric?.title;
-  const niches = room.selectedNiches.some(n => n.kind === 'path');
+  const niches = room.selectedNiches.some(n => n.kind !== 'count');
 
   return [
     // The point is to sell the ceiling — an empty room gives the model nothing to invent besides it

@@ -1,5 +1,6 @@
-import { Project, ProjectPricing, PriceOverride, Room, RoomNichePath } from '../types';
-import { totalFabricCorners, pathTurns } from './geometry';
+import { Project, ProjectPricing, PriceOverride, Room, RoomNicheElement } from '../types';
+import { totalFabricCorners } from './geometry';
+import { crossCorners, nicheCutPaths, nicheMetrics } from './nicheGeometry';
 
 // The first 4 corners of a room (a plain rectangle) are free — only extra
 // corners past that add to the fabric price.
@@ -95,16 +96,35 @@ export const lineTotal = (item: EstimateItem, side: EstimateSide) => side === 'c
 // without adding a real corner, so count geometric corners, not raw points.
 // A niche drawn as a routed box also welds in its own corners — unless it
 // wraps an existing room corner, which then isn't counted twice.
-export const roomCorners = (room: Room) => totalFabricCorners(
-  room.points,
-  (room.selectedNiches ?? []).filter(n => n.kind === 'path').map(n => n.points),
-);
+// A niche across the room splits the ceiling and adds corners at its ends.
+export const roomCorners = (room: Room) => totalFabricCorners(room.points, nicheCutPaths(room))
+  + (room.selectedNiches ?? []).reduce((s, n) => s + (n.kind === 'cross' ? crossCorners(room, n) : 0), 0);
 
 export const nicheCapId = (nicheId: string) => `${nicheId}:cap`;
 export const nicheCorniceId = (nicheId: string) => `${nicheId}:cornice`;
 
 /** Whether a drawn niche gets a separate cornice billed alongside it */
-export const hasCornice = (n: RoomNichePath) => n.niche.type === 'cornice' && n.cornice !== false;
+export const hasCornice = (n: RoomNicheElement) => n.kind !== 'count' && n.niche.type === 'cornice' && n.cornice !== false;
+
+export interface NicheCostPart { part: 'length' | 'corners' | 'caps' | 'cornice'; qty: number; rate: number }
+
+/** What one drawn niche costs the client, line by line, at the project's prices */
+export function nicheCost(room: Room, n: RoomNicheElement, pricing?: ProjectPricing): { parts: NicheCostPart[]; total: number } {
+  const m = nicheMetrics(room, n);
+  if (!m || n.kind === 'count') return { parts: [], total: 0 };
+  const nc = n.niche, ov = pricing?.overrides ?? {};
+  const rate = ov[n.nicheId]?.price ?? nc.price;
+  const cornerRate = ov[n.nicheId]?.priceCorner ?? nc.priceCorner ?? 0;
+  const capRate = ov[nicheCapId(n.nicheId)]?.price ?? nc.priceCap ?? 0;
+  const corniceRate = ov[nicheCorniceId(n.nicheId)]?.price ?? nc.priceCornice ?? 0;
+  const parts: NicheCostPart[] = [
+    { part: 'length', qty: m.lengthM, rate },
+    ...(m.turns > 0 && cornerRate > 0 ? [{ part: 'corners' as const, qty: m.turns, rate: cornerRate }] : []),
+    ...(m.caps > 0 && capRate > 0 ? [{ part: 'caps' as const, qty: m.caps, rate: capRate }] : []),
+    ...(hasCornice(n) && corniceRate > 0 ? [{ part: 'cornice' as const, qty: m.lengthM, rate: corniceRate }] : []),
+  ];
+  return { parts, total: parts.reduce((s, p) => s + p.qty * p.rate, 0) };
+}
 
 /** Every priced item in a room, grouped per price-list item, in estimate order */
 export const roomItems = (room: Room, pricing?: ProjectPricing): EstimateItem[] => {
@@ -144,14 +164,16 @@ export const roomItems = (room: Room, pricing?: ProjectPricing): EstimateItem[] 
   for (const n of niches) {
     const nc = n.niche;
     if (n.kind === 'count') { add(n.nicheId, 'niche', nc.title, 'pcs', nc, n.quantity); continue; }
+    const m = nicheMetrics(room, n);
+    if (!m) continue;
     add(n.nicheId, 'niche', nc.title, 'm', {
       price: nc.price, priceInstall: nc.priceInstall,
       priceCorner: nc.priceCorner ?? 0, priceInstallCorner: nc.priceInstallCorner ?? 0,
-    }, n.lengthM, pathTurns(n.points));
-    if ((n.caps ?? 0) > 0 && (nc.priceCap || nc.priceInstallCap))
-      add(nicheCapId(n.nicheId), 'niche', nc.title, 'pcs', { price: nc.priceCap ?? 0, priceInstall: nc.priceInstallCap ?? 0 }, n.caps!, 0, 'cap');
+    }, m.lengthM, m.turns);
+    if (m.caps > 0 && (nc.priceCap || nc.priceInstallCap))
+      add(nicheCapId(n.nicheId), 'niche', nc.title, 'pcs', { price: nc.priceCap ?? 0, priceInstall: nc.priceInstallCap ?? 0 }, m.caps, 0, 'cap');
     if (hasCornice(n) && (nc.priceCornice || nc.priceInstallCornice))
-      add(nicheCorniceId(n.nicheId), 'niche', nc.title, 'm', { price: nc.priceCornice ?? 0, priceInstall: nc.priceInstallCornice ?? 0 }, n.lengthM, 0, 'cornice');
+      add(nicheCorniceId(n.nicheId), 'niche', nc.title, 'm', { price: nc.priceCornice ?? 0, priceInstall: nc.priceInstallCornice ?? 0 }, m.lengthM, 0, 'cornice');
   }
   return items.filter(i => i.qty > 0 || i.corners > 0);
 };

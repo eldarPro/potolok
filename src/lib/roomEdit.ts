@@ -1,4 +1,5 @@
-import { Room, CatalogItem, RoomProfileSegment } from '../types';
+import { Room, CatalogItem, RoomProfileSegment, RoomNicheElement, WallPoint } from '../types';
+import { nicheSpan } from './nicheGeometry';
 import {
   Point, polygonArea, polygonPerimeter, pxToMeters, edgeLengthM, edgeLengthCm, edgeLen, dist,
   pointOnArc, splitBulge, vertexLabels, nextVertexLabel, edgeWouldCrossRoom, GRID_SIZE, CM_PER_GRID,
@@ -79,6 +80,26 @@ export function resizedPoints(pts: Point[], edgeIndex: number, newLenCm: number)
 
 export const wallCm = (pts: Point[], i: number) => Math.round(edgeLengthCm(pts, i));
 
+/**
+ * Wall niches renumbered after corners are added or removed: `mapEdge` gives
+ * the new wall(s) each old wall becomes. Each keeps its gaps to the chain's
+ * end corners as they were; a niche across the room keeps its ends where
+ * they stood (`mapPoint`).
+ */
+function remapWallNiches(
+  room: Room, mapEdge: (e: number) => number[], mapPoint: (w: WallPoint) => WallPoint,
+): RoomNicheElement[] {
+  return (room.selectedNiches ?? []).map(n => {
+    if (n.kind === 'cross') return { ...n, a: mapPoint(n.a), b: mapPoint(n.b) };
+    if (n.kind !== 'wall') return n;
+    const { from, to, total } = nicheSpan(room, n);
+    const edges: number[] = [];
+    for (const e of n.edges.flatMap(mapEdge)) if (edges[edges.length - 1] !== e) edges.push(e);
+    while (edges.length > 1 && edges[0] === edges[edges.length - 1]) edges.pop();
+    return { ...n, edges, startCm: from, endCm: total - to };
+  });
+}
+
 /** Split a wall `distCm` from its start. Every corner keeps its letter and the new point takes the next free one; each part gets its own profile. */
 export function splitEdge(room: Room, edgeIndex: number, distCm: number, first: CatalogItem | null, second: CatalogItem | null): Partial<Room> | null {
   const pts = room.points;
@@ -111,8 +132,15 @@ export function splitEdge(room: Room, edgeIndex: number, distCm: number, first: 
     ...part(edgeIndex, first),
     ...part(edgeIndex + 1, second),
   ].sort((x, y) => x.edgeIndex - y.edgeIndex);
+  const selectedNiches = remapWallNiches(
+    room,
+    e => e === edgeIndex ? [e, e + 1] : [e > edgeIndex ? e + 1 : e],
+    w => w.edge > edgeIndex ? { edge: w.edge + 1, cm: w.cm }
+      : w.edge === edgeIndex && w.cm > distCm ? { edge: edgeIndex + 1, cm: w.cm - distCm }
+      : w,
+  );
   return {
-    points: newPts, ...roomMetrics(newPts), profileSegments,
+    points: newPts, ...roomMetrics(newPts), profileSegments, selectedNiches,
     ...remapHiddenDiagonals(room, newPts.length, k => (k > edgeIndex ? k + 1 : k)),
   };
 }
@@ -174,8 +202,14 @@ export function deleteVertex(room: Room, i: number): Partial<Room> | null {
       return { ...s, edgeIndex: newIdx, lengthM: edgeLengthM(newPts, newIdx) };
     })
     .sort((a, b) => a.edgeIndex - b.edgeIndex);
+  const mapEdge = (e: number) => e === i || e === prevEdgeIdx ? mergedIdx : e > i ? e - 1 : e;
+  const prevLenCm = edgeLengthCm(points, prevEdgeIdx);
+  const selectedNiches = remapWallNiches(
+    room, e => [mapEdge(e)],
+    w => ({ edge: mapEdge(w.edge), cm: w.edge === i ? w.cm + prevLenCm : w.cm }),
+  );
   return {
-    points: newPts, ...roomMetrics(newPts), profileSegments,
+    points: newPts, ...roomMetrics(newPts), profileSegments, selectedNiches,
     ...remapHiddenDiagonals(room, newPts.length, k => (k === i ? null : k > i ? k - 1 : k)),
   };
 }

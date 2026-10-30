@@ -13,11 +13,12 @@ import {
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadFabrics, loadProfiles, loadLightings, loadServices, loadAccessories, loadNiches } from '../lib/storage';
 import { uuid } from '../lib/uuid';
-import { Project, Room, CatalogItem, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount, RoomNichePath } from '../types';
-import { edgeLengthM, edgeLengthCm, edgeLabel, Point, pathTurns } from '../lib/geometry';
+import { Project, Room, CatalogItem, LightingCatalogItem, RoomLightingPath, AdditionalService, Accessory, RoomAccessoryItem, RoomServiceItem, NicheItem, RoomNicheCount } from '../types';
+import { edgeLengthM, edgeLengthCm, edgeLabel, Point } from '../lib/geometry';
 import { useT } from '../lib/i18n';
-import { roomItems, lineTotal, ItemKind, hasCornice, nicheCapId, nicheCorniceId } from '../lib/pricing';
+import { roomItems, lineTotal, ItemKind } from '../lib/pricing';
 import RoomPreview from '../components/RoomPreview';
+import NicheSection from '../components/NicheSection';
 import WallSplitScreen from '../components/WallSplitScreen';
 import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm } from '../lib/diagonals';
 import { reshapedRoom as reshapedRoomOf, resizedPoints, splitEdge, bendEdge, setWallProfile, setAllProfiles } from '../lib/roomEdit';
@@ -211,8 +212,8 @@ const RoomMaterials: React.FC = () => {
 
   // ── Niches ──
   // 'pcs'-unit niches are added here with a quantity stepper; 'perimeter'-unit
-  // niches are instead drawn wall-to-wall on the canvas (see RoomEditor), so
-  // they arrive already-formed as RoomNichePath elements with their own length.
+  // niches go on a wall on the drawing and are sized there or in the preview
+  // here (NicheSection), in cm from the corners.
   const roomNiches = room.selectedNiches ?? [];
 
   const addNicheCount = (niche: NicheItem) => {
@@ -288,13 +289,6 @@ const RoomMaterials: React.FC = () => {
   }, {} as Record<string, { item: LightingCatalogItem; elements: typeof lighting }>);
 
   const nicheCounts = roomNiches.filter((n): n is RoomNicheCount => n.kind === 'count');
-  const nichePathGroups = roomNiches
-    .filter((n): n is RoomNichePath => n.kind === 'path')
-    .reduce((acc, e) => {
-      if (!acc[e.nicheId]) acc[e.nicheId] = { item: e.niche, elements: [] };
-      acc[e.nicheId].elements.push(e);
-      return acc;
-    }, {} as Record<string, { item: NicheItem; elements: RoomNichePath[] }>);
 
   // Totals go through the shared estimate so they include the project's prices
   const sectionItems = roomItems(room, project.pricing).filter(i => i.kind === SECTION_KIND[section as Section]);
@@ -332,7 +326,14 @@ const RoomMaterials: React.FC = () => {
 
   const fabAction: (() => void) | null =
     (section === 'lighting' && lightings.length > 0) ? () => router.push(`${backHref}?pickLighting=1`, 'back') :
-    (section === 'niche' && niches.length > 0) ? () => setAddNicheOpen(true) :
+    // a niche goes on a wall on the drawing — picked there by its chip;
+    // a price list of pieces only keeps the plain list
+    (section === 'niche' && niches.length > 0) ? () => {
+      const perim = niches.filter(n => n.unit === 'perimeter');
+      const first = perim.find(n => n.type === 'curtain') ?? perim[0];
+      if (first) router.push(`${backHref}?placeNiche=${first.id}`, 'back');
+      else setAddNicheOpen(true);
+    } :
     (section === 'accessories' && accessories.length > 0) ? () => setAddAccessoryOpen(true) :
     (section === 'services' && services.length > 0) ? () => setAddServiceOpen(true) :
     null;
@@ -772,6 +773,9 @@ const RoomMaterials: React.FC = () => {
             />
           ) : (
             <div style={{ padding: '12px 16px 100px' }}>
+              {room.areaSqm > 0 && roomNiches.some(n => n.kind !== 'count') && (
+                <NicheSection room={room} catalog={niches} pricing={project.pricing} onChange={updateRoom} />
+              )}
               {nicheCounts.length > 0 && (
                 <div className="card" style={{ overflow: 'hidden', marginBottom: 10 }}>
                   <IonList style={{ '--background': 'transparent' } as React.CSSProperties}>
@@ -827,54 +831,6 @@ const RoomMaterials: React.FC = () => {
                 </div>
               )}
 
-              {Object.values(nichePathGroups).map(({ item, elements }) => {
-                const totalLen = elements.reduce((s, e) => s + e.lengthM, 0);
-                // the niche line plus its corners, end caps and cornice lines
-                const ids = [item.id, nicheCapId(item.id), nicheCorniceId(item.id)];
-                const total = sectionItems.filter(i => ids.includes(i.itemId)).reduce((s, i) => s + lineTotal(i, 'client'), 0);
-                return (
-                  <div key={item.id} style={{
-                    background: '#fff', borderRadius: 16, marginBottom: 10,
-                    overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-                  }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '12px 16px', borderBottom: '1px solid #F5F5F5',
-                    }}>
-                      <div style={{ width: 28, height: 4, borderRadius: 2, background: '#00838F', flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{item.title}</div>
-                        <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
-                          {totalLen.toFixed(2)} м · {Math.round(total).toLocaleString('ru')} ₽
-                        </div>
-                      </div>
-                    </div>
-                    {elements.map((el, idx) => (
-                      <div key={el.id} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '9px 16px',
-                        borderBottom: idx < elements.length - 1 ? '1px solid #F5F5F5' : 'none',
-                      }}>
-                        <span style={{ fontSize: 13, color: '#aaa' }}>
-                          {t('mat.line')} {idx + 1} · {el.lengthM.toFixed(2)} м
-                          {pathTurns(el.points) > 0 && ` · ${pathTurns(el.points)} ${t('sum.cornersShort')}`}
-                          {(el.caps ?? 0) > 0 && ` · ${el.caps} ${t('nc.capsShort')}`}
-                          {hasCornice(el) && ` · ${t('nc.cornice').toLowerCase()}`}
-                        </span>
-                        <button
-                          onClick={() => removeNiche(el.id)}
-                          style={{
-                            background: 'none', border: 'none', padding: '4px 8px',
-                            cursor: 'pointer', color: '#E53935',
-                          }}
-                        >
-                          <IonIcon icon={trashOutline} style={{ fontSize: 17, display: 'block' }} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
             </div>
           )
         )}
@@ -1177,9 +1133,8 @@ const RoomMaterials: React.FC = () => {
         onDidDismiss={() => setApplyAllOpen(false)}
       />
 
-      {/* Niche picker — 'pcs' niches are added directly here; 'perimeter'
-          niches instead send you back to the canvas to draw the wall-to-wall
-          line, since their length (not a manual count) is what's priced. */}
+      {/* Niche picker — only when the price list has no niches to put on a
+          wall: 'pcs' niches are added directly here. */}
       <IonActionSheet
         isOpen={addNicheOpen}
         header={t('mat.addNiche')}

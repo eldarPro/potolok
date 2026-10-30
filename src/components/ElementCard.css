@@ -485,3 +485,100 @@
 .epick__row--none .epick__name {
   color: rgba(255, 255, 255, 0.55);
 }
+
+/* ── Niche / window sizes: three cm fields in a row ── */
+.ecard__nums {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ecard__num-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.42);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ecard__num .ecard__field {
+  height: 44px;
+  padding: 0 10px;
+}
+
+.ecard__field--accent {
+  border-color: rgba(0, 172, 193, 0.6);
+}
+
+/* ── Choice chips: depth, overhang, walls ── */
+.ecard__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ecard__chip {
+  flex: 1 0 auto;
+  min-width: 56px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: none;
+  background: #23263b;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ecard__chip--on {
+  background: #00ACC1;
+  color: #04181b;
+  font-weight: 800;
+}
+
+.ecard__link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #4dd0e1;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ecard__num .ecard__field input {
+  width: 100%;
+  font-size: 17px;
+}
+
+
+/* ── A typed value among the chips (custom niche depth) ── */
+.ecard__chip-field {
+  flex: 1.3 0 84px;
+}
+
+.ecard__chip-field .ecard__field {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.ecard__chip-field .ecard__field input {
+  width: 100%;
+  font-size: 15px;
+}
+
+.ecard__chip-field .ecard__field input::placeholder {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.ecard__nums--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
+}

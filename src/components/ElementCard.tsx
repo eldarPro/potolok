@@ -3,17 +3,19 @@ import { IonIcon } from '@ionic/react';
 import {
   closeOutline, checkmarkOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
   analyticsOutline, albumsOutline, layersOutline, cutOutline, ellipseOutline,
-  copyOutline, addCircleOutline, trashOutline, gitBranchOutline, eyeOffOutline, listOutline,
+  copyOutline, addCircleOutline, trashOutline, eyeOffOutline, listOutline,
   arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline, sunnyOutline,
 } from 'ionicons/icons';
 import {
   Room, CatalogItem, LightingCatalogItem, NicheItem, ProjectPricing, RoomLightingPoint, RoomLightingPath,
-  RoomNichePath, RoomNicheElement,
+  RoomNichePath, RoomNicheElement, RoomNicheWall, RoomNicheCross,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
 import { SheetSection } from './RoomSheet';
-import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon, tessellateRoom, GRID_SIZE, nicheFreeEnds, pathTurns } from '../lib/geometry';
-import { hasCornice, nicheCapId, nicheCorniceId } from '../lib/pricing';
+import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon, tessellateRoom, GRID_SIZE, nicheFreeEnds } from '../lib/geometry';
+import { hasCornice, nicheCapId, nicheCost, NicheCostPart } from '../lib/pricing';
+import { nicheMetrics, nicheShape, nicheSpan, crossLine, crossCorners, crossWidthCm, wallLengthCm } from '../lib/nicheGeometry';
+import { setNicheSizes, changeNicheWalls, setCrossEnd, DEPTH_OPTIONS, clampDepth } from '../lib/nicheEdit';
 import { diagonalCm, diagonalKey, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm } from '../lib/diagonals';
 import {
   reshapedRoom, resizedPoints, wallCm, roundEdge, bendEdge, setWallProfile,
@@ -36,7 +38,6 @@ interface Props {
   onSplitWall: (edgeIndex: number) => void;
   onOpenSection: (section: SheetSection) => void;
   onPlaceLighting: (item: LightingCatalogItem) => void;
-  onPlaceNiche: (item: NicheItem) => void;
   onToast: (message: string) => void;
   onHeight: (px: number) => void;
 }
@@ -347,45 +348,51 @@ const ElementCard: React.FC<Props> = props => {
   if (selection.kind === 'niche') {
     const el = (room.selectedNiches ?? []).find(e => e.id === selection.id)!;
     const path = el.kind === 'path' ? el : null;
-    const lengthM = path?.lengthM ?? 0;
+    const wall = el.kind === 'wall' ? el : null;
+    const cross = el.kind === 'cross' ? el : null;
+    const m = nicheMetrics(room, el) ?? { lengthM: 0, turns: 0, caps: 0 };
+    const lengthM = m.lengthM;
     const nc = el.niche;
     const same = props.niches.filter(x => x.unit === 'perimeter');
     const remove = () => onChange({ selectedNiches: (room.selectedNiches ?? []).filter(e => e.id !== el.id) });
-    const patch = (p: Partial<RoomNichePath>) =>
-      onChange({ selectedNiches: (room.selectedNiches ?? []).map(e => e.id === el.id ? { ...e, ...p } as RoomNicheElement : e) });
-    // Project prices of the niche's own lines (see roomItems)
-    const ov = pricing?.overrides ?? {};
-    const turns = path ? pathTurns(path.points) : 0;
-    const caps = path?.caps ?? 0;
+    const replace = (next: RoomNicheElement) =>
+      onChange({ selectedNiches: (room.selectedNiches ?? []).map(e => e.id === el.id ? next : e) });
+    const patch = (p: Partial<Omit<RoomNichePath, 'kind'> & Omit<RoomNicheWall, 'kind'> & Omit<RoomNicheCross, 'kind'>>) => replace({ ...el, ...p } as RoomNicheElement);
     const freeEnds = path ? nicheFreeEnds(pts, path.points).filter(Boolean).length : 0;
-    const cornice = path ? hasCornice(path) : false;
-    const rate = ov[el.nicheId]?.price ?? nc.price;
-    const cornerRate = ov[el.nicheId]?.priceCorner ?? nc.priceCorner ?? 0;
-    const capRate = ov[nicheCapId(el.nicheId)]?.price ?? nc.priceCap ?? 0;
-    const corniceRate = ov[nicheCorniceId(el.nicheId)]?.price ?? nc.priceCornice ?? 0;
-    const parts: { text: string; sum: number }[] = [
-      { text: `${lengthM.toFixed(2)} ${t('unit.m')} × ${rate} ₽`, sum: rate * lengthM },
-      ...(turns > 0 && cornerRate > 0 ? [{ text: `${turns} ${t('sum.cornersShort')} × ${cornerRate} ₽`, sum: cornerRate * turns }] : []),
-      ...(caps > 0 && capRate > 0 ? [{ text: `${caps} ${t('nc.capsShort')} × ${capRate} ₽`, sum: capRate * caps }] : []),
-      ...(cornice && corniceRate > 0 ? [{ text: `${t('nc.cornice')} ${lengthM.toFixed(2)} ${t('unit.m')} × ${corniceRate} ₽`, sum: corniceRate * lengthM }] : []),
-    ];
+    const cornice = hasCornice(el);
+    const cost = nicheCost(room, el, pricing);
+    const capRate = cost.parts.find(p => p.part === 'caps')?.rate ?? pricing?.overrides[nicheCapId(el.nicheId)]?.price ?? nc.priceCap ?? 0;
+    const partText = (p: NicheCostPart) =>
+      p.part === 'length' ? `${p.qty.toFixed(2)} ${t('unit.m')} × ${p.rate} ₽`
+      : p.part === 'corners' ? `${p.qty} ${t('sum.cornersShort')} × ${p.rate} ₽`
+      : p.part === 'caps' ? `${p.qty} ${t('nc.capsShort')} × ${p.rate} ₽`
+      : `${t('nc.cornice')} ${p.qty.toFixed(2)} ${t('unit.m')} × ${p.rate} ₽`;
+    // LED strip along the canvas edge of the niche (the line of a niche drawn by points)
+    const lightPts = path ? path.points : wall ? nicheShape(room, wall)?.inner ?? null : cross ? crossLine(room, cross) : null;
     const addLight = () => {
-      if (!path) return;
-      const existing = (room.lighting ?? []).find(l => l.kind === 'path' && JSON.stringify(l.points) === JSON.stringify(path.points));
+      if (!lightPts) return;
+      const key = JSON.stringify(lightPts);
+      const existing = (room.lighting ?? []).find(l => l.kind === 'path' && JSON.stringify(l.points) === key);
       if (existing) { onSelect({ kind: 'light', id: existing.id }); return; }
       const strips = props.lightings.filter(l => l.placement === 'path');
       const strip = strips.find(l => l.type === 'strip') ?? strips[0];
       if (!strip) { props.onToast(t('nc.noStrip')); return; }
       const light: RoomLightingPath = {
         id: uuid(), kind: 'path', catalogItemId: strip.id, catalogItem: { ...strip },
-        points: path.points.map(p => ({ ...p })), lengthM: path.lengthM,
+        points: lightPts.map(p => ({ x: p.x, y: p.y })), lengthM,
       };
       onChange({ lighting: [...(room.lighting ?? []), light] });
       onSelect({ kind: 'light', id: light.id });
     };
+    const n = pts.length;
+    const chainName = wall ? `${labels[wall.edges[0]]}–${labels[(wall.edges[wall.edges.length - 1] + 1) % n]}` : '';
+    const wallName = (e: number) => `${labels[e]}–${labels[(e + 1) % n]}`;
     const sub = [
+      wall ? `${t('mat.wall')} ${chainName}` : null,
+      cross ? t('nc.acrossFrom', { a: wallName(cross.a.edge), b: wallName(cross.b.edge) }) : null,
       `${lengthM.toFixed(2)} ${t('unit.m')}`,
-      nc.type ? t(nc.type === 'curtain' ? 'nc.typeCurtain' : 'nc.typeCornice') : null,
+      m.caps ? `${m.caps} ${t('nc.capsShort')}` : null,
+      m.turns ? `${m.turns} ${t('sum.cornersShort')}` : null,
     ].filter(Boolean).join(' · ');
     pick = {
       title: t('ec.type'),
@@ -400,34 +407,112 @@ const ElementCard: React.FC<Props> = props => {
         if (x) patch({ nicheId: x.id, niche: { ...x } });
       },
     };
+
+    // Where a wall niche stands: its sizes from the corners
+    let placement: React.ReactNode = null;
+    if (cross) {
+      // each end: its gap to both corners of its wall — one follows the other
+      const endFields = (end: 'a' | 'b') => {
+        const w = cross[end], len = wallLengthCm(pts, w.edge);
+        const startName = labels[w.edge], endName = labels[(w.edge + 1) % n];
+        return <>
+          <div className="ecard__label">{t('mat.wall')} {startName}–{endName}</div>
+          <div className="ecard__nums ecard__nums--two">
+            <NumField label={t('nc.fromCorner', { c: startName })} value={w.cm} onCommit={v => replace(setCrossEnd(room, cross, end, v))} />
+            <NumField label={t('nc.toCorner', { c: endName })} value={len - w.cm} onCommit={v => replace(setCrossEnd(room, cross, end, len - v))} />
+          </div>
+        </>;
+      };
+      const width = crossWidthCm(cross);
+      placement = <>
+        {endFields('a')}
+        {endFields('b')}
+        <div className="ecard__label">{t('nc.width')}</div>
+        <div className="ecard__chips">
+          {DEPTH_OPTIONS.map(d => (
+            <button key={d} className={`ecard__chip${width === d ? ' ecard__chip--on' : ''}`} onClick={() => patch({ widthCm: d })}>
+              {d} {t('re.cm')}
+            </button>
+          ))}
+          <div className="ecard__chip-field">
+            {DEPTH_OPTIONS.includes(width)
+              ? <NumField value={width} placeholder={t('nc.depthOther')} onCommit={v => patch({ widthCm: clampDepth(v) })} />
+              : <NumField value={width} accent onCommit={v => patch({ widthCm: clampDepth(v) })} />}
+          </div>
+        </div>
+        <div className="ecard__hint">{t('nc.crossHint', { n: crossCorners(room, cross) })}</div>
+      </>;
+    }
+    if (wall) {
+      const { from, to, total } = nicheSpan(room, wall);
+      const startName = labels[wall.edges[0]], endName = labels[(wall.edges[wall.edges.length - 1] + 1) % n];
+      const walls = (side: 'start' | 'end', delta: 1 | -1) => {
+        const next = changeNicheWalls(room, wall, side, delta);
+        if (next) replace(next); else props.onToast(t('nc.noMoreWalls'));
+      };
+      placement = <>
+        <div className="ecard__nums">
+          <NumField label={t('nc.fromCorner', { c: startName })} value={from} onCommit={v => replace(setNicheSizes(room, wall, { start: v }))} />
+          <NumField label={t('ec.length')} value={to - from} accent onCommit={v => replace(setNicheSizes(room, wall, { length: v }))} />
+          <NumField label={t('nc.toCorner', { c: endName })} value={total - to} onCommit={v => replace(setNicheSizes(room, wall, { end: v }))} />
+        </div>
+        <div className="ecard__label">{t('nc.depth')}</div>
+        <div className="ecard__chips">
+          {DEPTH_OPTIONS.map(d => (
+            <button key={d} className={`ecard__chip${wall.depthCm === d ? ' ecard__chip--on' : ''}`} onClick={() => patch({ depthCm: d })}>
+              {d} {t('re.cm')}
+            </button>
+          ))}
+          {/* any other depth — a deep plasterboard box, several curtain rows */}
+          <div className="ecard__chip-field">
+            {DEPTH_OPTIONS.includes(wall.depthCm)
+              ? <NumField value={wall.depthCm} placeholder={t('nc.depthOther')} onCommit={v => patch({ depthCm: clampDepth(v) })} />
+              : <NumField value={wall.depthCm} accent onCommit={v => patch({ depthCm: clampDepth(v) })} />}
+          </div>
+        </div>
+        <div className="ecard__label">{t('nc.walls', { n: wall.edges.length })}</div>
+        <div className="ecard__chips">
+          <button className="ecard__chip" onClick={() => walls('start', 1)}>+ {t('nc.wallBefore', { c: startName })}</button>
+          <button className="ecard__chip" onClick={() => walls('end', 1)}>+ {t('nc.wallAfter', { c: endName })}</button>
+          {(from > 0.5 || total - to > 0.5) && (
+            <button className="ecard__chip" onClick={() => patch({ startCm: 0, endCm: 0 })}>{t('nc.wholeWall')}</button>
+          )}
+          {wall.edges.length > 1 && <>
+            <button className="ecard__chip" onClick={() => walls('start', -1)}>−</button>
+            <button className="ecard__chip" onClick={() => walls('end', -1)}>−</button>
+          </>}
+        </div>
+      </>;
+    }
+
     body = <>
       {head(albumsOutline, NICHE_COLOR, nc.title, sub)}
       {same.length > 1 && selectRow(t('ec.type'), lineMark(NICHE_COLOR), nc.title, `${priceOf(nc)} ₽/${t('unit.m')}`)}
+      {placement}
       {path && <>
         <div className="ecard__label">{t('nc.caps')}</div>
         <div className="ecard__row">
-          <button className="ecard__btn" disabled={caps <= 0} onClick={() => patch({ caps: caps - 1 })}>−</button>
+          <button className="ecard__btn" disabled={m.caps <= 0} onClick={() => patch({ caps: m.caps - 1 })}>−</button>
           <div className="ecard__count">
-            <b>{caps}</b> {t('unit.pcs')}
+            <b>{m.caps}</b> {t('unit.pcs')}
             {capRate > 0 && <span> · {capRate} ₽/{t('unit.pcs')}</span>}
           </div>
-          <button className="ecard__btn" disabled={caps >= 2} onClick={() => patch({ caps: caps + 1 })}>+</button>
+          <button className="ecard__btn" disabled={m.caps >= 2} onClick={() => patch({ caps: m.caps + 1 })}>+</button>
         </div>
         <div className="ecard__hint">{t(freeEnds ? 'nc.capsHintFree' : 'nc.capsHintWall', { n: freeEnds })}</div>
-        {nc.type === 'cornice' && (
-          <button className={`ecard__toggle${cornice ? ' ecard__toggle--on' : ''}`} onClick={() => patch({ cornice: !cornice })}>
-            <span>{t('nc.corniceOurs')}</span>
-            <span className="ecard__toggle-knob" />
-          </button>
-        )}
       </>}
+      {nc.type === 'cornice' && (
+        <button className={`ecard__toggle${cornice ? ' ecard__toggle--on' : ''}`} onClick={() => patch({ cornice: !cornice })}>
+          <span>{t('nc.corniceOurs')}</span>
+          <span className="ecard__toggle-knob" />
+        </button>
+      )}
       <div className="ecard__price">
-        <span>{parts.map(p => p.text).join(' + ')}</span>
-        <b>{rub(parts.reduce((s, p) => s + p.sum, 0))}</b>
+        <span>{cost.parts.map(partText).join(' + ')}</span>
+        <b>{rub(cost.total)}</b>
       </div>
       {actions([
         { icon: sunnyOutline, label: t('nc.light'), onClick: addLight },
-        { icon: gitBranchOutline, label: t('ec.redraw'), onClick: () => { remove(); close(); props.onPlaceNiche(nc); } },
         { icon: trashOutline, label: t('common.delete'), danger: true, onClick: () => { remove(); close(); } },
       ])}
     </>;
@@ -469,6 +554,40 @@ const ElementCard: React.FC<Props> = props => {
       <div className="ecard__handle" />
       {body}
       {pickerOpen && pick && <PickerSheet spec={pick} onClose={() => setPickerOpen(false)} />}
+    </div>
+  );
+};
+
+/** A size in cm typed in place; applied on Enter or when the field loses focus */
+const NumField: React.FC<{
+  label?: string; value: number; accent?: boolean; onCommit: (cm: number) => void;
+  /** show an empty field with this hint instead of the value (it's picked elsewhere, e.g. by a chip) */
+  placeholder?: string;
+}> = ({ label, value, accent, onCommit, placeholder }) => {
+  const { t } = useT();
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = Math.round(value);
+  const commit = () => {
+    if (draft == null) return;
+    const v = parseFloat(draft.replace(',', '.'));
+    setDraft(null);
+    if (Number.isFinite(v) && v >= 0 && Math.round(v) !== shown) onCommit(v);
+  };
+  return (
+    <div className="ecard__num">
+      {label && <div className="ecard__num-label">{label}</div>}
+      <label className={`ecard__field${accent ? ' ecard__field--accent' : ''}${draft != null ? ' ecard__field--active' : ''}`}>
+        <input
+          type="number" inputMode="numeric" min="0"
+          value={draft ?? (placeholder ? '' : String(shown))}
+          placeholder={placeholder}
+          onChange={e => setDraft(e.target.value)}
+          onFocus={e => e.target.select()}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDraft(null); }}
+        />
+        <span className="ecard__unit">{t('re.cm')}</span>
+      </label>
     </div>
   );
 };

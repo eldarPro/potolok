@@ -4,10 +4,10 @@ import { arrowUndoOutline, arrowRedoOutline, createOutline, shapesOutline, bluet
 import { Stage, Layer, Line, Circle, Text, Group, Rect, Wedge, Arc } from 'react-konva';
 import Konva from 'konva';
 import {
-  Point, snapAngle, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, vertexLabels,
+  Point, dist, polygonArea, polygonPerimeter, pxToMeters, pxToCm, fmtCm, vertexLabels,
   pointInPolygon, GRID_SIZE,
   edgeLen, arcHandlePoint, bulgeFromThreePoints, edgeWouldCrossRoom, sampleArc, tessellateRoom, liveCornerAngle, cornerWedge,
-  nearestPointOnOutline, nicheFreeEnds,
+  nicheFreeEnds, distToSegment,
 } from '../lib/geometry';
 import { roomDiagonals } from '../lib/diagonals';
 import { layoutLabels, calloutJoin, LABEL } from '../lib/canvasLabels';
@@ -17,7 +17,14 @@ import { layoutLabels, calloutJoin, LABEL } from '../lib/canvasLabels';
 // edgeWouldCrossRoom check below can't be fooled by a reflex arc looping
 // around a shared corner without technically crossing a wall segment.
 const MAX_WALL_BULGE = 1;
-import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
+import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNicheWall, RoomNicheCross, WallPoint } from '../types';
+import {
+  nicheShape, nicheSpan, chainCmAt, pointAlongChain, inwardNormal, isStraightWall, chainLengthCm,
+  crossLine, crossBand, wallPointXY, wallLengthCm, snapWallCm, squareCmOn,
+} from '../lib/nicheGeometry';
+import { snapNicheEnd } from '../lib/nicheEdit';
+import { hasCornice } from '../lib/pricing';
+import { useT } from '../lib/i18n';
 
 /** What a tap on the finished drawing picked — the element card acts on it */
 export type CanvasSelection =
@@ -36,6 +43,38 @@ const TAP_SLOP_PX = 8;
 const SEL = '#F9A825';
 
 const CLOSE_THRESHOLD = 24;
+// How far (screen px) from a wall a tap still puts a niche on it
+const NICHE_WALL_REACH = 44;
+// How close (screen px) a dragged niche end must come to a magnet to stick
+const NICHE_SNAP_PX = 14;
+const NICHE = '#00ACC1';
+const NICHE_DARK = '#00838F';
+
+// Diagonal hatch for a niche band — made once, on first use
+let hatch: HTMLCanvasElement | null | undefined;
+const nicheHatch = () => {
+  if (hatch !== undefined) return hatch;
+  hatch = null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 8;
+    const g = c.getContext('2d');
+    if (g) {
+      g.fillStyle = 'rgba(0,172,193,0.16)';
+      g.fillRect(0, 0, 8, 8);
+      g.strokeStyle = 'rgba(0,172,193,0.85)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(0, 8); g.lineTo(8, 0);
+      g.moveTo(-2, 2); g.lineTo(2, -2);
+      g.moveTo(6, 10); g.lineTo(10, 6);
+      g.stroke();
+      hatch = c;
+    }
+  } catch { /* no canvas (tests) — plain fill instead */ }
+  return hatch;
+};
+const flat = (ps: Point[]) => ps.flatMap(p => [p.x, p.y]);
 // Deep enough to pull apart corners a few cm apart — marks and text keep
 // their screen size at any zoom, so zooming in really does make room.
 const MAX_ZOOM = 20;
@@ -75,12 +114,12 @@ interface Props {
   canUndoLighting?: boolean;
   canRedoLighting?: boolean;
   placingNiche?: NicheItem | null;
-  inProgressNichePath?: { x: number; y: number }[];
-  onNicheTap?: (pt: { x: number; y: number }, finish: boolean) => void;
-  onUndoNichePoint?: () => void;
-  onRedoNichePoint?: () => void;
-  canUndoNiche?: boolean;
-  canRedoNiche?: boolean;
+  onNicheWallTap?: (edge: number) => void;
+  /** placing a niche across the room: two taps, one on each wall */
+  nicheCross?: boolean;
+  /** the first end of a niche across the room, once tapped */
+  crossStart?: WallPoint | null;
+  onNicheCrossTap?: (wp: WallPoint) => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -110,12 +149,10 @@ const CeilingCanvas: React.FC<Props> = ({
   canUndoLighting = false,
   canRedoLighting = false,
   placingNiche = null,
-  inProgressNichePath = [],
-  onNicheTap,
-  onUndoNichePoint,
-  onRedoNichePoint,
-  canUndoNiche = false,
-  canRedoNiche = false,
+  onNicheWallTap,
+  nicheCross = false,
+  crossStart = null,
+  onNicheCrossTap,
   onUndo,
   onRedo,
   canUndo = false,
@@ -153,13 +190,18 @@ const CeilingCanvas: React.FC<Props> = ({
   const selectedWall = selection?.kind === 'wall' ? selection.index : null;
   const selectedLighting = selection?.kind === 'light' ? selection.id : null;
   const selectedNicheEl = selection?.kind === 'niche' ? selection.id : null;
+  // Wall a niche being placed would go on (hover), and the niche end being dragged
+  const [nicheHoverEdge, setNicheHoverEdge] = useState<number | null>(null);
+  const [nicheDrag, setNicheDrag] = useState<{ at: Point; text: string } | null>(null);
+  // Where the next tap would put an end of a niche across the room
+  const [crossHover, setCrossHover] = useState<{ at: Point; square: boolean } | null>(null);
+  const { t } = useT();
   const selectedDiag = selection?.kind === 'diagonal' ? selection : null;
   const fabricSelected = selection?.kind === 'fabric';
   // Where the current pointer gesture started and whether it has turned into
   // a pan/pinch — a tap that travelled isn't a selection.
   const gestureStart = useRef<Point | null>(null);
   const gestureMoved = useRef(false);
-  const [nicheHoverOnWall, setNicheHoverOnWall] = useState(false);
   const isDragging = useRef(false);
   const isDraggingPoint = useRef(false);
   const lastTouch = useRef<Point | null>(null);
@@ -251,9 +293,13 @@ const CeilingCanvas: React.FC<Props> = ({
   useEffect(() => { if (!closed) onSelect?.(null); }, [closed]);
 
   // Select on a real tap only; tapping the selected element again lets go of it.
+  // The tap that places a niche ends placing mode — its click must not then
+  // also pick whatever lies under it
+  const placedAt = useRef(0);
   const pick = (e: Konva.KonvaEventObject<Event>, s: CanvasSelection) => {
     e.cancelBubble = true;
     if (gestureMoved.current || placingLighting || placingNiche || !closed) return;
+    if (Date.now() - placedAt.current < 400) return;
     onSelect?.(selectionKey(s) === selKey ? null : s);
   };
 
@@ -301,51 +347,41 @@ const CeilingCanvas: React.FC<Props> = ({
     onChange({ points: pts, ...metrics });
   };
 
-  // Snaps a raw tap/cursor point onto the nearest wall when it's close enough
-  // to one (within the same threshold used to close the room polygon) — used
-  // both to start/finish a niche line on a wall and to preview it on hover.
-  const snapToWall = (raw: Point): { point: Point; onWall: boolean } => {
-    const outline = tessellateRoom(points, true);
-    const { point, distance } = nearestPointOnOutline(raw, outline);
-    return { point, onWall: distance * viewport.scale <= CLOSE_THRESHOLD };
+  // Wall a niche goes on: the nearest straight one, within reach of the tap
+  const nicheWallAt = (pt: Point): number | null => {
+    if (points.length < 3) return null;
+    let best: number | null = null, bestD = NICHE_WALL_REACH / viewport.scale;
+    points.forEach((a, i) => {
+      if (!isStraightWall(points, i)) return;
+      const d = distToSegment(pt, a, points[(i + 1) % points.length]);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
   };
 
-  // Where a niche would start from: snapped onto a wall when near one, else
-  // anywhere inside the room — a niche along the window only, with an end
-  // cap closing the free end.
-  const nicheStartAt = (raw: Point): { point: Point; onWall: boolean } | null => {
-    const snapped = snapToWall(raw);
-    if (snapped.onWall) return snapped;
-    return pointInPolygon(raw, tessellateRoom(points, true)) ? { point: raw, onWall: false } : null;
-  };
-
-  const handleNicheTap = (raw: Point) => {
-    const { point: wallPt, onWall } = snapToWall(raw);
-    if (inProgressNichePath.length === 0) {
-      const start = nicheStartAt(raw);
-      if (!start) { onOutOfBounds?.(); return; }
-      onNicheTap?.(start.point, false);
-      return;
-    }
-    if (onWall) {
-      onNicheTap?.(wallPt, true);
-      return;
-    }
-    // Unlike room-wall points, a niche line's anchor (the wall-projected
-    // start/previous point) is generally off-grid — rounding the next point
-    // to the grid first would measure the snapped angle from an off-grid
-    // point to an on-grid one, throwing the direction off by however far the
-    // rounding moved it. That error is negligible over a long run but swamps
-    // a short one, drawing a visibly crooked line. So snap the angle only,
-    // straight off the raw tap, and keep its exact distance from `last`.
-    const last = inProgressNichePath[inProgressNichePath.length - 1];
-    onNicheTap?.(snapAngle(last, raw), false);
+  // Where an end of a niche across the room lands for a tap at `pt`: on the
+  // nearest straight wall — square across from the first end when close to
+  // it, else a corner or the nearest 5 cm
+  const crossPointAt = (pt: Point): { wp: WallPoint; at: Point; square: boolean } | null => {
+    const edge = nicheWallAt(pt);
+    if (edge == null) return null;
+    const square = crossStart && crossStart.edge !== edge ? squareCmOn(points, edge, crossStart) : null;
+    const snap = snapWallCm(wallLengthCm(points, edge), chainCmAt(points, [edge], pt), pxToCm(NICHE_SNAP_PX / viewport.scale), square);
+    const wp = { edge, cm: snap.cm };
+    return { wp, at: wallPointXY(points, wp), square: snap.square };
   };
 
   const handleTap = (pt: Point) => {
-    // Niche line placement — start/continue/finish on the room's walls
+    if (placingNiche && isClosed && nicheCross) {
+      const c = crossPointAt(pt);
+      if (!c || (crossStart && c.wp.edge === crossStart.edge)) { onOutOfBounds?.(); return; }
+      if (crossStart) placedAt.current = Date.now();
+      onNicheCrossTap?.(c.wp);
+      return;
+    }
     if (placingNiche && isClosed) {
-      handleNicheTap(pt);
+      const edge = nicheWallAt(pt);
+      if (edge == null) onOutOfBounds?.(); else { placedAt.current = Date.now(); onNicheWallTap?.(edge); }
       return;
     }
 
@@ -417,16 +453,8 @@ const CeilingCanvas: React.FC<Props> = ({
     if (!pos) return;
 
     if (placingNiche) {
-      if (inProgressNichePath.length > 0) {
-        const { point, onWall } = snapToWall(pos);
-        const last = inProgressNichePath[inProgressNichePath.length - 1];
-        setNicheHoverOnWall(onWall);
-        setCursor(onWall ? point : snapAngle(last, pos));
-      } else {
-        const start = nicheStartAt(pos);
-        setNicheHoverOnWall(!!start?.onWall);
-        setCursor(start?.point ?? null);
-      }
+      setNicheHoverEdge(nicheWallAt(pos));
+      if (nicheCross) { const c = crossPointAt(pos); setCrossHover(c && { at: c.at, square: c.square }); }
       return;
     }
 
@@ -623,16 +651,8 @@ const CeilingCanvas: React.FC<Props> = ({
 
     if (placingNiche && touches.length === 1 && pos) {
       const raw = screenToWorld(pos.x, pos.y);
-      if (inProgressNichePath.length > 0) {
-        const { point, onWall } = snapToWall(raw);
-        const last = inProgressNichePath[inProgressNichePath.length - 1];
-        setNicheHoverOnWall(onWall);
-        setCursor(onWall ? point : snapAngle(last, raw));
-      } else {
-        const start = nicheStartAt(raw);
-        setNicheHoverOnWall(!!start?.onWall);
-        setCursor(start?.point ?? null);
-      }
+      setNicheHoverEdge(nicheWallAt(raw));
+      if (nicheCross) { const c = crossPointAt(raw); setCrossHover(c && { at: c.at, square: c.square }); }
       return;
     }
 
@@ -869,20 +889,128 @@ const CeilingCanvas: React.FC<Props> = ({
     ? [lastPathPt, cursor]
     : null;
 
-  // End cap of a niche end left free of a wall: a short bar across the line
-  const capBar = (end: Point, toward: Point): number[] => {
+  // End cap of a niche end left free of a wall: a white bar across the line,
+  // as long as the line is wide
+  const capBar = (end: Point, toward: Point, width: number): number[] => {
     const dx = toward.x - end.x, dy = toward.y - end.y;
     const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len * 10 * px, ny = dx / len * 10 * px;
+    const nx = -dy / len * width / 2, ny = dx / len * width / 2;
     return [end.x + nx, end.y + ny, end.x - nx, end.y - ny];
   };
 
-  // Niche line preview — dashed segment from the last placed point to the
-  // (possibly wall-snapped) cursor; the start marker shows where a tap on an
-  // empty in-progress path would begin the line.
-  const lastNichePt = inProgressNichePath[inProgressNichePath.length - 1];
-  const nichePathPreview = placingNiche && lastNichePt && cursor ? [lastNichePt, cursor] : null;
-  const nicheStartMarker = placingNiche && inProgressNichePath.length === 0 && cursor ? cursor : null;
+  // Ends of the selected wall niche, dragged along its walls. Each settles on
+  // a corner of its walls or the nearest 5 cm.
+  const nicheHandles = (el: RoomNicheWall, rail: Point[]) => {
+    const r = { ...room, points };
+    const handle = (which: 'start' | 'end', at: Point) => (
+      <Circle
+        key={which}
+        x={at.x} y={at.y} radius={10 * px}
+        fill="#fff" stroke={NICHE} strokeWidth={3 * px} hitStrokeWidth={16 * px}
+        draggable
+        onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
+        onDragStart={e => {
+          if (pinchRef.current) { e.target.stopDrag(); return; }
+          onVertexDragStart?.();
+          lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
+        }}
+        onDragMove={e => {
+          if (pinchRef.current) return;
+          const { from, to, total } = nicheSpan(r, el);
+          const raw = chainCmAt(points, el.edges, e.target.position());
+          const snap = snapNicheEnd(r, el, raw, pxToCm(NICHE_SNAP_PX / viewport.scale), t('nc.snapCorner'));
+          const MIN = 10;
+          const cm = which === 'start' ? Math.min(snap.cm, to - MIN) : Math.max(snap.cm, from + MIN);
+          const next: RoomNicheWall = which === 'start'
+            ? { ...el, startCm: cm, endCm: total - to }
+            : { ...el, startCm: from, endCm: total - cm };
+          const { point, edge } = pointAlongChain(points, el.edges, cm);
+          const nr = inwardNormal(points, edge);
+          const half = cm2px(el.depthCm) / 2;
+          e.target.position({ x: point.x + nr.x * half, y: point.y + nr.y * half });
+          const gap = which === 'start' ? cm : total - cm;
+          const lift = 30 / viewport.scale;
+          setNicheDrag({ at: { x: point.x - nr.x * lift, y: point.y - nr.y * lift }, text: Math.round(gap) === 0 ? t('nc.snapCorner') : `${Math.round(gap)} ${t('re.cm')}` });
+          onChange({ selectedNiches: (room.selectedNiches ?? []).map(x => x.id === el.id ? next : x) });
+        }}
+        onDragEnd={() => { isDraggingPoint.current = false; setNicheDrag(null); onVertexDragEnd?.(); }}
+      />
+    );
+    return <>{handle('start', rail[0])}{handle('end', rail[rail.length - 1])}</>;
+  };
+  const cm2px = (cm: number) => cm / pxToCm(1);
+
+  // Ends of the selected niche across the room, each dragged along its own
+  // wall — settling square across from the other end, a corner or 5 cm
+  const crossHandles = (el: RoomNicheCross, line: [Point, Point]) => {
+    const handle = (end: 'a' | 'b', at: Point) => (
+      <Circle
+        key={end}
+        x={at.x} y={at.y} radius={10 * px}
+        fill="#fff" stroke={NICHE} strokeWidth={3 * px} hitStrokeWidth={16 * px}
+        draggable
+        onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
+        onDragStart={e => {
+          if (pinchRef.current) { e.target.stopDrag(); return; }
+          onVertexDragStart?.();
+          lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
+        }}
+        onDragMove={e => {
+          if (pinchRef.current) return;
+          const w = el[end], other = el[end === 'a' ? 'b' : 'a'];
+          const len = wallLengthCm(points, w.edge);
+          const snap = snapWallCm(len, chainCmAt(points, [w.edge], e.target.position()), pxToCm(NICHE_SNAP_PX / viewport.scale), squareCmOn(points, w.edge, other));
+          const wp = { edge: w.edge, cm: snap.cm };
+          const p = wallPointXY(points, wp);
+          e.target.position(p);
+          const nr = inwardNormal(points, w.edge), lift = 30 / viewport.scale;
+          setNicheDrag({
+            at: { x: p.x - nr.x * lift, y: p.y - nr.y * lift },
+            text: snap.square ? t('nc.square') : `${Math.round(Math.min(snap.cm, len - snap.cm))} ${t('re.cm')}`,
+          });
+          onChange({ selectedNiches: (room.selectedNiches ?? []).map(x => x.id === el.id ? { ...el, [end]: wp } : x) });
+        }}
+        onDragEnd={() => { isDraggingPoint.current = false; setNicheDrag(null); onVertexDragEnd?.(); }}
+      />
+    );
+    return <>{handle('a', line[0])}{handle('b', line[1])}</>;
+  };
+
+  // Size chain along the wall for the selected niche: the gap to
+  // each corner and its own length — the numbers the card edits
+  const sizeChain = (edges: number[], from: number, to: number): { at: Point; text: string; main: boolean }[] => {
+    const total = chainLengthCm(points, edges);
+    const out: { at: Point; text: string; main: boolean }[] = [];
+    const part = (a: number, b: number, main: boolean) => {
+      if (b - a < 0.5) return;
+      const { point, edge } = pointAlongChain(points, edges, (a + b) / 2);
+      const nr = inwardNormal(points, edge);
+      const off = 22 / viewport.scale;
+      out.push({ at: { x: point.x - nr.x * off, y: point.y - nr.y * off }, text: `${Math.round(b - a)}`, main });
+    };
+    part(0, from, false); part(from, to, true); part(to, total, false);
+    return out;
+  };
+  const sizePills = (() => {
+    if (!isClosed || nicheDrag) return [];
+    const r = { ...room, points };
+    const el = (room.selectedNiches ?? []).find(x => x.id === selectedNicheEl);
+    if (el?.kind === 'wall' && nicheShape(r, el)) {
+      const { from, to } = nicheSpan(r, el);
+      return sizeChain(el.edges, from, to);
+    }
+    // across the room: each end's gaps to its wall's corners, and its length
+    const line = el?.kind === 'cross' ? crossLine(r, el) : null;
+    if (el?.kind === 'cross' && line) {
+      const mid = { x: (line[0].x + line[1].x) / 2, y: (line[0].y + line[1].y) / 2 };
+      return [
+        ...sizeChain([el.a.edge], el.a.cm, el.a.cm),
+        ...sizeChain([el.b.edge], el.b.cm, el.b.cm),
+        { at: mid, text: `${Math.round(pxToCm(dist(line[0], line[1])))}`, main: true },
+      ];
+    }
+    return [];
+  })();
 
   // Screen point the selection is about — kept clear of the element card
   const selectionAnchor = (): Point | null => {
@@ -903,7 +1031,11 @@ const CeilingCanvas: React.FC<Props> = ({
     }
     if (selection.kind === 'niche') {
       const el = (room.selectedNiches ?? []).find(e => e.id === selection.id);
-      return el?.kind === 'path' ? centre(el.points) : null;
+      if (el?.kind === 'path') return centre(el.points);
+      const line = el?.kind === 'cross' ? crossLine({ ...room, points }, el) : null;
+      if (line) return centre(line);
+      const shape = el?.kind === 'wall' ? nicheShape({ ...room, points }, el) : null;
+      return shape ? centre(shape.inner) : null;
     }
     return points.length ? centre(points) : null;
   };
@@ -1318,72 +1450,126 @@ const CeilingCanvas: React.FC<Props> = ({
             />
           )}
 
-          {/* ── Placed niche lines ── */}
-          {(room.selectedNiches ?? []).filter((e): e is RoomNichePath => e.kind === 'path').map(el => {
+          {/* ── Walls a niche can go on, while placing one by a tap ── */}
+          {placingNiche && isClosed && points.map((a, i) => isStraightWall(points, i) && (
+            <Line
+              key={`nw${i}`}
+              points={flat([a, points[(i + 1) % points.length]])}
+              stroke={NICHE} strokeWidth={(i === nicheHoverEdge ? 8 : 6) * px} lineCap="round"
+              opacity={i === nicheHoverEdge ? 0.95 : 0.35}
+              shadowColor={i === nicheHoverEdge ? NICHE : undefined} shadowBlur={i === nicheHoverEdge ? 10 : 0}
+              listening={false}
+            />
+          ))}
+
+          {/* ── A niche across the room being placed: its first end, and a
+              line on to where the next tap would land (green when square) ── */}
+          {placingNiche && nicheCross && crossStart && (() => {
+            const a = wallPointXY(points, crossStart);
+            return <>
+              {crossHover && (
+                <Line
+                  points={flat([a, crossHover.at])} stroke={crossHover.square ? '#2dd36f' : NICHE}
+                  strokeWidth={3 * px} dash={[8 * px, 5 * px]} listening={false}
+                />
+              )}
+              <Circle x={a.x} y={a.y} radius={8 * px} fill={NICHE} stroke="#fff" strokeWidth={2 * px} listening={false} />
+            </>;
+          })()}
+          {placingNiche && nicheCross && crossHover && (
+            <Circle x={crossHover.at.x} y={crossHover.at.y} radius={7 * px} stroke={crossHover.square ? '#2dd36f' : NICHE} strokeWidth={3 * px} listening={false} />
+          )}
+
+          {/* ── Placed niches: a hatched band where the canvas stops short of
+              the wall, its edge solid; a curtain track (гардина) shows its
+              rail with runners, a niche for a cornice shows the cornice;
+              a cap closes each end that stops short of a wall ── */}
+          {(room.selectedNiches ?? []).map(el => {
+            if (el.kind === 'count') return null;
             const isSel = selectedNicheEl === el.id;
-            const [startFree, endFree] = nicheFreeEnds(points, el.points);
-            const n = el.points.length;
-            const capBars = [
-              ...(startFree ? [capBar(el.points[0], el.points[1])] : []),
-              ...(endFree ? [capBar(el.points[n - 1], el.points[n - 2])] : []),
-            ];
+            const listen = !placingNiche && !placingLighting;
+            const onPick = (e: Konva.KonvaEventObject<Event>) => pick(e, { kind: 'niche', id: el.id });
+            const curtain = el.niche.type === 'curtain';
+            const cornice = hasCornice(el);
+            const rail = (ps: Point[]) => <>
+              {curtain && <>
+                <Line points={flat(ps)} stroke="#e0f7fa" strokeWidth={3 * px} lineCap="round" lineJoin="round" listening={false} />
+                <Line points={flat(ps)} stroke={NICHE_DARK} strokeWidth={4.5 * px} dash={[0, 10 * px]} lineCap="round" listening={false} />
+              </>}
+              {cornice && <Line points={flat(ps)} stroke="#ffcc80" strokeWidth={2 * px} dash={[5 * px, 4 * px]} listening={false} />}
+            </>;
+            const edgeLine = (ps: Point[]) => (
+              <Line
+                points={flat(ps)} stroke={NICHE} strokeWidth={(isSel ? 4 : 2.5) * px} lineCap="round" lineJoin="round"
+                shadowColor={isSel ? SEL : undefined} shadowBlur={isSel ? 12 : 0}
+                listening={listen} hitStrokeWidth={20 * px} onClick={onPick} onTap={onPick}
+              />
+            );
+            const cap = (a: Point, b: Point, k: string) => (
+              <Line key={k} points={flat([a, b])} stroke={NICHE} strokeWidth={5 * px} lineCap="round" listening={false} />
+            );
+
+            // Across the room: a hatched band wall to wall, a canvas edge on
+            // each side, the rail or cornice down the middle
+            if (el.kind === 'cross') {
+              const cb = crossBand({ ...room, points }, el);
+              if (!cb) return null;
+              const pattern = nicheHatch();
+              return (
+                <React.Fragment key={el.id}>
+                  <Line
+                    points={flat(cb.band)} closed
+                    {...(pattern
+                      ? { fillPatternImage: pattern as unknown as HTMLImageElement, fillPatternScale: { x: px, y: px }, fillPatternRepeat: 'repeat' }
+                      : { fill: 'rgba(0,172,193,0.3)' })}
+                    listening={listen} onClick={onPick} onTap={onPick}
+                  />
+                  {edgeLine(cb.edges[0])}
+                  {edgeLine(cb.edges[1])}
+                  {rail(cb.line)}
+                  {isSel && listen && crossHandles(el, cb.line)}
+                </React.Fragment>
+              );
+            }
+
+            // Legacy / odd-shaped niche drawn by points: no band, just its line
+            if (el.kind === 'path') {
+              const [startFree, endFree] = nicheFreeEnds(points, el.points);
+              const n = el.points.length;
+              const w = 7 * px;
+              return (
+                <React.Fragment key={el.id}>
+                  {edgeLine(el.points)}
+                  {rail(el.points)}
+                  {startFree && <Line points={capBar(el.points[0], el.points[1], 3 * w)} stroke={NICHE} strokeWidth={4 * px} lineCap="round" listening={false} />}
+                  {endFree && <Line points={capBar(el.points[n - 1], el.points[n - 2], 3 * w)} stroke={NICHE} strokeWidth={4 * px} lineCap="round" listening={false} />}
+                </React.Fragment>
+              );
+            }
+
+            const shape = nicheShape({ ...room, points }, el);
+            if (!shape) return null;
+            const pattern = nicheHatch();
+            const last = shape.wall.length - 1;
             return (
               <React.Fragment key={el.id}>
-              {capBars.map((bar, i) => (
-                <Line key={i} points={bar} stroke="#00838F" strokeWidth={6 * px} lineCap="round" listening={false} />
-              ))}
-              <Line
-                points={el.points.flatMap(p => [p.x, p.y])}
-                stroke="#00838F"
-                strokeWidth={(isSel ? 8 : 4) * px}
-                lineCap="round"
-                lineJoin="round"
-                dash={[14 * px, 6 * px]}
-                shadowColor={isSel ? SEL : undefined}
-                shadowBlur={isSel ? 12 : 0}
-                listening={!placingNiche && !placingLighting}
-                hitStrokeWidth={20 * px}
-                onClick={e => pick(e, { kind: 'niche', id: el.id })}
-                onTap={e => pick(e, { kind: 'niche', id: el.id })}
-              />
+                <Line
+                  points={flat([...shape.wall, ...[...shape.inner].reverse()])} closed
+                  {...(pattern
+                    ? { fillPatternImage: pattern as unknown as HTMLImageElement, fillPatternScale: { x: px, y: px }, fillPatternRepeat: 'repeat' }
+                    : { fill: 'rgba(0,172,193,0.3)' })}
+                  listening={listen} onClick={onPick} onTap={onPick}
+                />
+                {edgeLine(shape.inner)}
+                {rail(shape.rail)}
+                {shape.freeStart && cap(shape.wall[0], shape.inner[0], 's')}
+                {shape.freeEnd && cap(shape.wall[last], shape.inner[shape.inner.length - 1], 'e')}
+                {isSel && listen && nicheHandles(el, shape.rail)}
               </React.Fragment>
             );
           })}
 
-          {/* ── In-progress niche line ── */}
-          {placingNiche && inProgressNichePath.length > 0 && (
-            <>
-              <Line
-                points={inProgressNichePath.flatMap(p => [p.x, p.y])}
-                stroke="#00838F"
-                strokeWidth={4 * px}
-                dash={[14 * px, 6 * px]}
-                lineCap="round"
-                listening={false}
-              />
-              {inProgressNichePath.map((p, i) => (
-                <Circle key={i} x={p.x} y={p.y} radius={5 * px} fill="#00838F" listening={false} />
-              ))}
-            </>
-          )}
 
-          {/* ── Niche line preview (cursor) — green once it's over a wall and would finish the line ── */}
-          {nichePathPreview && (
-            <Line
-              points={nichePathPreview.flatMap(p => [p.x, p.y])}
-              stroke={nicheHoverOnWall ? '#2dd36f' : '#00838F'}
-              strokeWidth={3 * px}
-              dash={[6 * px, 4 * px]}
-              opacity={0.7}
-              listening={false}
-            />
-          )}
-
-          {/* ── Niche start marker — green on a wall, hollow off it (that end will take a cap) ── */}
-          {nicheStartMarker && (nicheHoverOnWall
-            ? <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={9 * px} fill="#2dd36f" listening={false} />
-            : <Circle x={nicheStartMarker.x} y={nicheStartMarker.y} radius={8 * px} stroke="#00838F" strokeWidth={3 * px} listening={false} />
-          )}
           </Group>
 
           {/* Corner letters and wall lengths — laid out on
@@ -1425,6 +1611,16 @@ const CeilingCanvas: React.FC<Props> = ({
                 </Group>
               );
             })}
+            {[...sizePills, ...(nicheDrag ? [{ at: nicheDrag.at, text: nicheDrag.text, main: true }] : [])].map((p, i) => {
+              const at = toStage(worldToScreen(p.at)), w = p.text.length * 7.5 + 16, h = 20;
+              const color = p.main ? NICHE : '#c9cfe8';
+              return (
+                <Group key={`np${i}`} x={at.x} y={at.y} scaleX={px} scaleY={px} listening={false}>
+                  <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2} fill="#0c3b42" stroke={color} strokeWidth={1} />
+                  <Text x={-w / 2} y={-h / 2} width={w} height={h} align="center" verticalAlign="middle" text={p.text} fontSize={11} fontStyle="bold" fill={p.main ? '#bff4fa' : '#fff'} />
+                </Group>
+              );
+            })}
             {labelLayout.letters.map((l, i) => {
               const at = toStage(l);
               return (
@@ -1448,16 +1644,7 @@ const CeilingCanvas: React.FC<Props> = ({
         display: 'flex', gap: 8,
         pointerEvents: 'auto',
       }}>
-        {placingNiche ? (
-          <>
-            <button onClick={onUndoNichePoint} disabled={!canUndoNiche} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoNiche ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoNiche ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
-            </button>
-            <button onClick={onRedoNichePoint} disabled={!canRedoNiche} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoNiche ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoNiche ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
-            </button>
-          </>
-        ) : placingLighting ? (
+        {placingNiche ? null : placingLighting ? (
           <>
             <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />

@@ -11,14 +11,16 @@ import {
 import { useParams, useHistory } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches, loadFabrics } from '../lib/storage';
 import { uuid } from '../lib/uuid';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNichePath } from '../types';
+import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, WallPoint } from '../types';
 import CeilingCanvas, { CanvasSelection, selectionKey } from '../components/CeilingCanvas';
 import ElementCard from '../components/ElementCard';
 import WallSplitScreen from '../components/WallSplitScreen';
 import RoomSheet from '../components/RoomSheet';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
-import { edgeLengthM, dist, pxToMeters, nicheFreeEnds } from '../lib/geometry';
+import { edgeLengthM, dist, pxToMeters } from '../lib/geometry';
+import { isStraightWall } from '../lib/nicheGeometry';
+import { newWallNiche, newCrossNiche } from '../lib/nicheEdit';
 import { roomDiagonals, diagonalKey } from '../lib/diagonals';
 import { splitEdge } from '../lib/roomEdit';
 import { useT } from '../lib/i18n';
@@ -55,8 +57,10 @@ const RoomEditor: React.FC = () => {
   const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
 
   const [placingNiche, setPlacingNiche] = useState<NicheItem | null>(null);
-  const [nichePathPts, setNichePathPts] = useState<{ x: number; y: number }[]>([]);
-  const [nichePathRedoStack, setNichePathRedoStack] = useState<{ x: number; y: number }[]>([]);
+  // Placing a niche across the room (two taps) rather than along a wall, and its first end
+  const [nicheCross, setNicheCross] = useState(false);
+  const [crossStart, setCrossStart] = useState<WallPoint | null>(null);
+  useEffect(() => { if (!placingNiche) setCrossStart(null); }, [placingNiche]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -126,15 +130,12 @@ const RoomEditor: React.FC = () => {
   }, [room?.id]);
 
   useEffect(() => { setLightingPathPts([]); setPathRedoStack([]); }, [placingLighting?.id]);
-  useEffect(() => { setNichePathPts([]); setNichePathRedoStack([]); }, [placingNiche?.id]);
   useIonViewWillLeave(() => {
     setPlacingLighting(null);
     setLightingPathPts([]);
     setPathRedoStack([]);
     setLightingSessionIds(new Set());
     setPlacingNiche(null);
-    setNichePathPts([]);
-    setNichePathRedoStack([]);
   });
 
   if (!project || !room) return null;
@@ -151,7 +152,7 @@ const RoomEditor: React.FC = () => {
         && roomDiagonals(room.points).some(d => d.key === key) ? s : null;
     }
     if (s.kind === 'light') return (room.lighting ?? []).some(e => e.id === s.id) ? s : null;
-    if (s.kind === 'niche') return (room.selectedNiches ?? []).some(e => e.id === s.id && e.kind === 'path') ? s : null;
+    if (s.kind === 'niche') return (room.selectedNiches ?? []).some(e => e.id === s.id && e.kind !== 'count') ? s : null;
     return s;
   })();
   // Part of the canvas the card hides: everything above the room panel it covers
@@ -236,6 +237,10 @@ const RoomEditor: React.FC = () => {
             .map(s => ({ ...s, lengthM: edgeLengthM(pts, s.edgeIndex) }));
         }
       }
+      // Wall niches hang on wall numbers — drop any whose wall is gone
+      updated.selectedNiches = (updated.selectedNiches ?? [])
+        .filter(n => n.kind === 'wall' ? n.edges.every(e => e < pts.length)
+          : n.kind === 'cross' ? n.a.edge < pts.length && n.b.edge < pts.length : true);
     }
 
     setRoom(updated);
@@ -254,13 +259,11 @@ const RoomEditor: React.FC = () => {
     // niches carry no geometry, so they survive the redraw like accessories do.
     updateRoom({
       points: [], areaSqm: 0, perimeterM: 0, profileSegments: [], lighting: [], hiddenDiagonals: [],
-      selectedNiches: (room.selectedNiches ?? []).filter(n => n.kind !== 'path'),
+      selectedNiches: (room.selectedNiches ?? []).filter(n => n.kind === 'count'),
     });
     setLightingPathPts([]);
     setPathRedoStack([]);
     setPlacingLighting(null);
-    setNichePathPts([]);
-    setNichePathRedoStack([]);
     setPlacingNiche(null);
     setCanvasKey(k => k + 1);
   };
@@ -352,52 +355,46 @@ const RoomEditor: React.FC = () => {
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
   const isPlacingPath = placingLighting?.placement === 'path';
 
-  // A niche line ends either on a wall — the tap that lands there (finish=true)
-  // adds the final point and commits the path in one go — or anywhere inside
-  // the room via «Готово». Each end left free of a wall gets an end cap.
-  const commitNiche = (pts: { x: number; y: number }[]) => {
-    if (!placingNiche || pts.length < 2) return;
-    let totalPx = 0;
-    for (let i = 0; i < pts.length - 1; i++) totalPx += dist(pts[i], pts[i + 1]);
-    const newEl: RoomNichePath = {
-      id: uuid(), kind: 'path',
-      nicheId: placingNiche.id, niche: { ...placingNiche },
-      points: pts, lengthM: pxToMeters(totalPx),
-      caps: nicheFreeEnds(room.points, pts).filter(Boolean).length,
-    };
+  // Across the room: the first tap sets one end, the second — on another
+  // wall — puts the niche in
+  const handleNicheCrossTap = (wp: WallPoint) => {
+    if (!placingNiche) return;
+    if (!crossStart) { setCrossStart(wp); return; }
+    const newEl = newCrossNiche(placingNiche, crossStart, wp);
     updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
     setPlacingNiche(null);
-    setNichePathPts([]);
+    setCrossStart(null);
+    setSelection({ kind: 'niche', id: newEl.id });
   };
 
-  const handleNicheTap = (pt: { x: number; y: number }, finish: boolean) => {
-    setNichePathRedoStack([]);
-    const next = [...nichePathPts, pt];
-    if (finish) commitNiche(next);
-    else setNichePathPts(next);
-  };
-
-  const handleUndoNichePoint = () => {
-    if (nichePathPts.length > 0) {
-      const last = nichePathPts[nichePathPts.length - 1];
-      setNichePathRedoStack(prev => [...prev, last]);
-      setNichePathPts(prev => prev.slice(0, -1));
+  // A niche goes on with a tap on a wall: along all of it — then the card or
+  // its handles move its ends.
+  const handleNicheWallTap = (edge: number) => {
+    if (!placingNiche) return;
+    if (!isStraightWall(room.points, edge)) {
+      presentToast({ message: t('nc.curvedWall'), duration: 2000, position: 'top' });
+      return;
     }
-  };
-
-  const handleRedoNichePoint = () => {
-    if (nichePathRedoStack.length > 0) {
-      const pt = nichePathRedoStack[nichePathRedoStack.length - 1];
-      setNichePathRedoStack(prev => prev.slice(0, -1));
-      setNichePathPts(prev => [...prev, pt]);
-    }
-  };
-
-  const handleCancelPlacingNiche = () => {
+    const newEl = newWallNiche(placingNiche, edge);
+    updateRoom({ selectedNiches: [...(room.selectedNiches ?? []), newEl] });
     setPlacingNiche(null);
-    setNichePathPts([]);
-    setNichePathRedoStack([]);
+    setSelection({ kind: 'niche', id: newEl.id });
   };
+
+  // A niche counted in pieces needs no wall — add one and stop placing
+  const addNichePiece = (item: NicheItem) => {
+    const list = room.selectedNiches ?? [];
+    const existing = list.find(n => n.kind === 'count' && n.nicheId === item.id);
+    updateRoom({
+      selectedNiches: existing
+        ? list.map(n => n === existing && n.kind === 'count' ? { ...n, quantity: n.quantity + 1 } : n)
+        : [...list, { id: uuid(), kind: 'count', nicheId: item.id, niche: { ...item }, quantity: 1 }],
+    });
+    presentToast({ message: t('nc.pieceAdded', { title: item.title }), duration: 1500, position: 'top' });
+    handleCancelPlacingNiche();
+  };
+
+  const handleCancelPlacingNiche = () => { setPlacingNiche(null); setCrossStart(null); };
 
   return (
     <IonPage style={{ display: 'flex', flexDirection: 'column' }}>
@@ -441,12 +438,10 @@ const RoomEditor: React.FC = () => {
                 canUndoLighting={lightingPathPts.length > 0 || (undoStack.length > 0 && (undoStack[undoStack.length - 1]?.areaSqm ?? 0) > 0)}
                 canRedoLighting={pathRedoStack.length > 0 || (redoStack.length > 0 && (redoStack[redoStack.length - 1]?.areaSqm ?? 0) > 0)}
                 placingNiche={placingNiche}
-                inProgressNichePath={nichePathPts}
-                onNicheTap={handleNicheTap}
-                onUndoNichePoint={handleUndoNichePoint}
-                onRedoNichePoint={handleRedoNichePoint}
-                canUndoNiche={nichePathPts.length > 0}
-                canRedoNiche={nichePathRedoStack.length > 0}
+                onNicheWallTap={handleNicheWallTap}
+                nicheCross={nicheCross}
+                crossStart={crossStart}
+                onNicheCrossTap={handleNicheCrossTap}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 canUndo={undoStack.length > 0}
@@ -554,17 +549,42 @@ const RoomEditor: React.FC = () => {
               </div>
             )}
 
-            {/* Niche line drawing bar */}
+            {/* Niche placing bar: which niche (its chip), along a wall or across
+                the room, then the tap(s) on the walls */}
             {placingNiche && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
                 marginBottom: 12, padding: '10px 14px',
                 background: 'rgba(0,131,143,0.12)',
                 borderRadius: 14,
                 border: '1px solid rgba(0,131,143,0.35)',
               }}>
+              {niches.length > 1 && (
+                <div className="niche-types">
+                  {niches.filter(n => n.unit === 'perimeter').map(n => (
+                    <button key={n.id} className={`niche-types__chip${n.id === placingNiche.id ? ' niche-types__chip--on' : ''}`} onClick={() => setPlacingNiche(n)}>
+                      {n.title}
+                      <small>{n.price.toLocaleString('ru')} ₽/{t('unit.m')}</small>
+                    </button>
+                  ))}
+                  {niches.filter(n => n.unit === 'pcs').map(n => (
+                    <button key={n.id} className="niche-types__chip niche-types__chip--piece" onClick={() => addNichePiece(n)}>
+                      + {n.title}
+                      <small>{n.price.toLocaleString('ru')} ₽/{t('unit.pcs')}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="niche-modes">
+                <button className={`niche-modes__btn${!nicheCross ? ' niche-modes__btn--on' : ''}`} onClick={() => { setNicheCross(false); setCrossStart(null); }}>
+                  {t('nc.modeAlong')}
+                </button>
+                <button className={`niche-modes__btn${nicheCross ? ' niche-modes__btn--on' : ''}`} onClick={() => setNicheCross(true)}>
+                  {t('nc.modeAcross')}
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingNiche.title} · {nichePathPts.length === 0 ? t('re.nicheDrawStart') : nichePathPts.length === 1 ? t('re.nicheDrawNext') : t('re.nicheDrawFinish')}
+                  {!nicheCross ? t('re.nicheTapWall') : !crossStart ? t('nc.crossFirst') : t('nc.crossSecond')}
                 </span>
                 <button
                   onClick={handleCancelPlacingNiche}
@@ -575,18 +595,7 @@ const RoomEditor: React.FC = () => {
                 >
                   <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
                 </button>
-                {nichePathPts.length >= 2 && (
-                  <button
-                    onClick={() => commitNiche(nichePathPts)}
-                    style={{
-                      padding: '6px 14px', borderRadius: 10,
-                      background: '#00ACC1', border: 'none',
-                      color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-                    }}
-                  >
-                    {t('re.done')}
-                  </button>
-                )}
+              </div>
               </div>
             )}
 
@@ -608,7 +617,6 @@ const RoomEditor: React.FC = () => {
               onSplitWall={setSplitEdgeIdx}
               onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
               onPlaceLighting={setPlacingLighting}
-              onPlaceNiche={setPlacingNiche}
               onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
               onHeight={setCardHeight}
             />
