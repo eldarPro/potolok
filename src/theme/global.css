@@ -201,6 +201,60 @@
   --color: #fff;
 }
 
+/* iOS mode draws a 0.55px hairline under the last toolbar (.header-ios ion-toolbar:last-of-type);
+   coloured headers flow straight into their page, so drop it */
+ion-header.blue-header ion-toolbar:last-of-type,
+ion-header.dark-header ion-toolbar:last-of-type {
+  --border-width: 0;
+}
+
+/* ── Dark header: canvas / photo workspaces (room editor, AI visualization) ── */
+.dark-header {
+  --ion-toolbar-color: #fff;
+  border-bottom: none !important;
+  box-shadow: none;
+}
+
+.dark-header ion-toolbar {
+  --background: #1a1a2e;
+  --color: #fff;
+  --border-width: 0;
+}
+
+.dark-header ion-back-button,
+.dark-header ion-button {
+  --color: #fff;
+}
+
+/* Page under a dark header: at fractional zoom the header/content seam lets the
+   page background show through, so keep it dark instead of the default white */
+.ion-page.dark-page {
+  background: #1a1a2e;
+}
+
+/* Two-line title right after the back button: name + muted subtitle */
+.dark-header__title {
+  padding: 0 4px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.dark-header__name {
+  font-size: 18px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark-header__sub {
+  font-size: 12px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .blue-hero {
   background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   color: #fff;

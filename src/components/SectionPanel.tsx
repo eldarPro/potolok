@@ -22,7 +22,7 @@ export type PanelSection = 'diagonals' | 'fabric' | 'profile' | 'lighting' | 'ni
 
 const META: Record<PanelSection, { icon: string; color: string; title: string; kind?: ItemKind }> = {
   diagonals:   { icon: resizeOutline,       color: '#F9A825', title: 'sec.diagonals' },
-  fabric:      { icon: layersOutline,       color: '#1E88E5', title: 'sec.fabric',      kind: 'fabric' },
+  fabric:      { icon: layersOutline,       color: '#1E88E5', title: 'mat.tabFabric',     kind: 'fabric' },
   profile:     { icon: reorderThreeOutline, color: '#AB47BC', title: 'sec.profile',     kind: 'profile' },
   lighting:    { icon: bulbOutline,         color: '#F9A825', title: 'sec.lighting',    kind: 'lighting' },
   niche:       { icon: albumsOutline,       color: '#00ACC1', title: 'sec.niches',      kind: 'niche' },

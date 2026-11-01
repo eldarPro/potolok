@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, createOutline, shapesOutline, bluetoothOutline, chevronForwardOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, resizeOutline, scanOutline, createOutline, shapesOutline, bluetoothOutline, chevronForwardOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group, Rect, Wedge, Arc } from 'react-konva';
 import Konva from 'konva';
 import {
@@ -25,6 +25,7 @@ import {
 import { snapNicheEnd } from '../lib/nicheEdit';
 import { hasCornice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
+import './CeilingCanvas.css';
 
 /** What a tap on the finished drawing picked — the element card acts on it */
 export type CanvasSelection =
@@ -132,6 +133,8 @@ interface Props {
   onOutOfBounds?: () => void;
   onOpenBluetooth?: () => void;
   onOpenManualMeasure?: () => void;
+  /** Opens/closes the diagonals panel — a button in the toolbar over the drawing */
+  onToggleDiagonals?: () => void;
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
   /** Height of the canvas bottom covered by the element card — the selection is kept above it */
@@ -141,6 +144,25 @@ interface Props {
 type Tool = 'draw' | 'move';
 
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
+
+/** Height of the toolbar over the drawing, plus a gap */
+const TOOLBAR_H = 88;
+
+const ToolBtn: React.FC<{
+  icon: string; label: string; onClick?: () => void; disabled?: boolean;
+  /** orange tool (diagonals); active — its panel is open */
+  accent?: boolean; active?: boolean;
+}> = ({ icon, label, onClick, disabled, accent, active }) => (
+  <button
+    className={`cv-tool${accent ? ' cv-tool--accent' : ''}${active ? ' cv-tool--active' : ''}`}
+    onClick={onClick} disabled={disabled}
+  >
+    <span className="cv-tool__btn">
+      <IonIcon icon={icon} />
+    </span>
+    <span className="cv-tool__label">{label}</span>
+  </button>
+);
 
 const CeilingCanvas: React.FC<Props> = ({
   room, onChange, width, height,
@@ -166,6 +188,7 @@ const CeilingCanvas: React.FC<Props> = ({
   onOutOfBounds,
   onOpenBluetooth,
   onOpenManualMeasure,
+  onToggleDiagonals,
   selection = null,
   onSelect,
   obscuredBottom = 0,
@@ -241,7 +264,42 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const isClosed = closed || points.length >= MIN_POINTS;
 
-  const fitView = useCallback((pts: Point[]) => {
+  // Current viewport for the fit animation, which starts from wherever the user left it
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const fitAnim = useRef<number | null>(null);
+  useEffect(() => () => { if (fitAnim.current !== null) cancelAnimationFrame(fitAnim.current); }, []);
+
+  /** The «Центр» button: glide to the fitted view; already there — a short
+   *  shrink-and-back pulse, so the tap visibly did something */
+  const animateTo = useCallback((to: { x: number; y: number; scale: number }) => {
+    if (fitAnim.current !== null) cancelAnimationFrame(fitAnim.current);
+    const from = viewportRef.current;
+    const settled = Math.abs(from.x - to.x) < 2 && Math.abs(from.y - to.y) < 2
+      && Math.abs(from.scale - to.scale) / to.scale < 0.01;
+    const dur = settled ? 320 : 280;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      if (settled) {
+        // zoom out by 6% around the screen centre and back
+        const z = 1 - 0.06 * Math.sin(Math.PI * k);
+        setViewport({ scale: to.scale * z, x: width / 2 - (width / 2 - to.x) * z, y: height / 2 - (height / 2 - to.y) * z });
+      } else {
+        const e = 1 - Math.pow(1 - k, 3);
+        setViewport({
+          scale: from.scale + (to.scale - from.scale) * e,
+          x: from.x + (to.x - from.x) * e,
+          y: from.y + (to.y - from.y) * e,
+        });
+      }
+      fitAnim.current = k < 1 ? requestAnimationFrame(step) : null;
+      if (k >= 1) setViewport(to);
+    };
+    fitAnim.current = requestAnimationFrame(step);
+  }, [width, height]);
+
+  const fitView = useCallback((pts: Point[], animate = false) => {
     if (pts.length === 0) return;
     const rot = rotationRef.current;
     const shown = pts.map(p => {
@@ -256,11 +314,15 @@ const CeilingCanvas: React.FC<Props> = ({
     const bh = maxY - minY || 1;
     // a canvas squeezed by the section panel keeps a smaller margin
     const padX = Math.min(60, width * 0.15), padY = Math.min(60, height * 0.15);
-    const scale = Math.min(MAX_ZOOM, (width - padX * 2) / bw, (height - padY * 2) / bh);
+    // the toolbar over the drawing takes the top — keep the outline below it
+    const padTop = Math.max(padY, TOOLBAR_H);
+    const scale = Math.min(MAX_ZOOM, (width - padX * 2) / bw, (height - padTop - padY) / bh);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    setViewport({ scale, x: width / 2 - cx * scale, y: height / 2 - cy * scale });
-  }, [width, height]);
+    const to = { scale, x: width / 2 - cx * scale, y: (padTop + height - padY) / 2 - cy * scale };
+    if (animate) animateTo(to);
+    else setViewport(to);
+  }, [width, height, animateTo]);
 
   // Re-sync whenever the outline itself changes — not just its point count or
   // perimeter: reshaping by a diagonal keeps both and only moves corners.
@@ -1594,32 +1656,36 @@ const CeilingCanvas: React.FC<Props> = ({
         </Layer>
       </Stage>
 
-      {/* Floating undo/redo buttons */}
-      <div style={{
-        position: 'absolute', top: 10, left: 10,
-        display: 'flex', gap: 8,
-        pointerEvents: 'auto',
-      }}>
-        {placingNiche ? null : placingLighting ? (
-          <>
-            <button onClick={onUndoLightingPoint} disabled={!canUndoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
-            </button>
-            <button onClick={onRedoLightingPoint} disabled={!canRedoLighting} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoLighting ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoLighting ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={handleUndoBtn} disabled={!canUndoBtn} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canUndoBtn ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canUndoBtn ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowUndoOutline} style={{ fontSize: 22 }} />
-            </button>
-            <button onClick={handleRedoBtn} disabled={!canRedoBtn} style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: canRedoBtn ? 'pointer' : 'default', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: canRedoBtn ? '#fff' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IonIcon icon={arrowRedoOutline} style={{ fontSize: 22 }} />
-            </button>
-          </>
-        )}
-      </div>
+      {/* Toolbar over the drawing: undo/redo, then the outline's own tools */}
+      {/* Hidden on an empty drawing, unless there is something to undo/redo (e.g. right after clearing) */}
+      {!placingNiche && (points.length > 0 || canUndoBtn || canRedoBtn || placingLighting) && (
+        <div className="cv-tools">
+          {placingLighting ? (
+            <>
+              <ToolBtn icon={arrowUndoOutline} label={t('cv.undo')} onClick={onUndoLightingPoint} disabled={!canUndoLighting} />
+              <ToolBtn icon={arrowRedoOutline} label={t('cv.redo')} onClick={onRedoLightingPoint} disabled={!canRedoLighting} />
+            </>
+          ) : (
+            <>
+              <ToolBtn icon={arrowUndoOutline} label={t('cv.undo')} onClick={handleUndoBtn} disabled={!canUndoBtn} />
+              <ToolBtn icon={arrowRedoOutline} label={t('cv.redo')} onClick={handleRedoBtn} disabled={!canRedoBtn} />
+              {/* outline tools only once the outline is closed (it then has an area) */}
+              {room.areaSqm > 0 && (
+                <>
+                  <div className="cv-tools__sep" />
+                  {onToggleDiagonals && points.length >= 4 && (
+                    <ToolBtn
+                      icon={resizeOutline} label={t('mat.tabDiag')} onClick={onToggleDiagonals}
+                      accent active={showDiagonals}
+                    />
+                  )}
+                  <ToolBtn icon={scanOutline} label={t('cv.fit')} onClick={() => fitView(points, true)} />
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Empty state overlay — choose how to create the outline */}
       {points.length === 0 && !manualStarted && (

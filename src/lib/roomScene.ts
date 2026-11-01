@@ -9,7 +9,7 @@
 import { crossLine, crossWidthCm, nicheShape } from './nicheGeometry';
 import * as THREE from 'three';
 import { Room, LightingType } from '../types';
-import { Point, tessellateRoom, pointInPolygon, pxToMeters } from './geometry';
+import { Point, tessellateRoom, pointInPolygon, pxToMeters, GRID_SIZE, CM_PER_GRID } from './geometry';
 
 /** Not stored per room yet — a typical apartment ceiling */
 export const DEFAULT_CEILING_HEIGHT_M = 2.7;
@@ -487,4 +487,30 @@ export function drawingPrompt(room: Room): string {
     niches ? 'Тёмная полоса у стены — скрытая ниша для штор, добавь в неё шторы.' : '',
     'Комната пустая, без мебели и декора: только гладкие светлые стены, напольное покрытие и окно с дневным светом.',
   ].filter(Boolean).join(' ');
+}
+
+/** A plain 4 × 5 m room — the base for a visualization made from a description alone. */
+export function renderBlankRoom(): Promise<RoomSceneResult> {
+  const px = (cm: number) => (cm * GRID_SIZE) / CM_PER_GRID;
+  const room: Room = {
+    id: 'blank', name: '', points: [[0, 0], [400, 0], [400, 500], [0, 500]].map(([x, y]) => ({ x: px(x), y: px(y) })),
+    fabricId: null, fabric: null, profileSegments: [], lighting: [], selectedAccessories: [], selectedServices: [],
+    selectedNiches: [], areaSqm: 20, perimeterM: 18, visualization: null,
+  };
+  return renderRoomScene(room);
+}
+
+const BLANK_ROOM_PROMPT = [
+  'Это 3D-эскиз пустой комнаты с натяжным потолком. Преврати его в фотореалистичную фотографию комнаты после ремонта — главное в кадре потолок.',
+  'Сохрани ракурс камеры и форму комнаты.',
+  'Комната пустая, без мебели и декора: светлые стены, напольное покрытие и окно с дневным светом.',
+].join(' ');
+
+/**
+ * Prompt for turning a sketch into a photo: the room's drawing (or the blank room) plus
+ * the client's wishes, which win over the drawing where they disagree.
+ */
+export function sketchPrompt(room: Room | null, wishes: string): string {
+  const base = room ? drawingPrompt(room) : BLANK_ROOM_PROMPT;
+  return wishes ? `${base} Пожелания клиента — выполни их обязательно: ${wishes}` : base;
 }

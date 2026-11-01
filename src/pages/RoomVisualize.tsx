@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, useIonViewWillEnter,
+  IonPage, IonHeader, IonToolbar, IonButtons, IonBackButton, useIonViewWillEnter,
 } from '@ionic/react';
 import { chevronBackOutline } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
@@ -41,13 +41,16 @@ const RoomVisualize: React.FC = () => {
   };
 
   return (
-    <IonPage>
-      <IonHeader className="blue-header">
+    <IonPage className="dark-page">
+      <IonHeader className="dark-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${projectId}/room/${roomId}`} />
           </IonButtons>
-          <IonTitle>{t('viz.title')}</IonTitle>
+          <div className="dark-header__title">
+            <div className="dark-header__name">{t('viz.title')}</div>
+            <div className="dark-header__sub">{[room.name, project.clientName].filter(Boolean).join(' · ')}</div>
+          </div>
         </IonToolbar>
       </IonHeader>
 

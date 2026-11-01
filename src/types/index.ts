@@ -190,6 +190,8 @@ export interface VisualizationVersion {
   image: string; // data URL (base64 JPEG)
   prompt: string; // '' for the original, unedited photo
   createdAt: string;
+  /** A 3D sketch, not a photo: the next edit has to turn it into a photo first */
+  sketch?: boolean;
 }
 
 export interface RoomVisualization {

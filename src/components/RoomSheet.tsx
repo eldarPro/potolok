@@ -2,10 +2,9 @@ import React, { useRef, useState } from 'react';
 import { IonIcon } from '@ionic/react';
 import {
   layersOutline, reorderThreeOutline, bulbOutline, buildOutline, briefcaseOutline, albumsOutline,
-  resizeOutline, checkmarkCircle, alertCircle, addOutline, chevronForwardOutline,
+  checkmarkCircle, alertCircle, addOutline, chevronForwardOutline,
 } from 'ionicons/icons';
 import { ProjectPricing, Room } from '../types';
-import { roomDiagonals, diagonalCm } from '../lib/diagonals';
 import { countRealCorners } from '../lib/geometry';
 import { calcRoomClientPrice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
@@ -62,13 +61,6 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
   const drawn = room.areaSqm > 0;
   const pts = room.points;
 
-  // ── Diagonals ──
-  const diags = drawn ? roomDiagonals(pts) : [];
-  const diagText = diags
-    .slice(0, 2)
-    .map(d => `${d.label} ${diagonalCm(pts, d.i, d.j)} см`)
-    .join(' · ') + (diags.length > 2 ? ' …' : '');
-
   // ── Profiles ──
   const segs = room.profileSegments ?? [];
   const wallsWithoutProfile = drawn ? pts.filter((_, i) => !segs.some(s => s.edgeIndex === i)).length : 0;
@@ -81,16 +73,11 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
 
   const rows: Row[] = [
     {
-      section: 'diagonals', icon: resizeOutline, color: '#F9A825',
-      title: t('sec.diagonals'), short: t('mat.tabDiag'),
-      sub: !drawn ? '—' : diags.length === 0 ? t('rs.diagNone') : diagText,
-      status: diags.length === 0 ? 'none' : 'ok',
-    },
-    {
       section: 'fabric', icon: layersOutline, color: '#1E88E5',
-      title: t('sec.fabric'), short: t('mat.tabFabric'),
+      title: t('mat.tabFabric'), short: t('mat.tabFabric'),
       sub: room.fabric ? room.fabric.title : t('rs.notSelected'),
-      status: room.fabric ? 'ok' : 'need',
+      // nothing to check before there is a ceiling to cover
+      status: !drawn ? 'none' : room.fabric ? 'ok' : 'need',
     },
     {
       section: 'profile', icon: reorderThreeOutline, color: '#8E24AA',

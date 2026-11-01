@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonIcon,
+  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonFooter, IonIcon, IonTextarea, IonSpinner,
   useIonRouter, useIonToast, useIonViewWillEnter,
 } from '@ionic/react';
-import { cameraOutline, imagesOutline, sparklesOutline } from 'ionicons/icons';
+import { cameraOutline, imagesOutline, sparklesOutline, arrowForwardOutline, closeOutline } from 'ionicons/icons';
+import { useHistory } from 'react-router-dom';
 import { loadFittings, upsertFitting, loadProjects } from '../lib/storage';
 import { fileToDataUrl, downscaleDataUrl } from '../lib/image';
 import { uuid } from '../lib/uuid';
-import { Fitting } from '../types';
+import { Fitting, VisualizationVersion } from '../types';
 import { useT } from '../lib/i18n';
 import './Fittings.css';
 
@@ -24,11 +25,19 @@ interface RecentItem {
 
 const lastImage = (versions: { image: string }[]) => versions[versions.length - 1].image;
 
+/** Example descriptions offered on an empty tab */
+const EXAMPLES = ['fit.ex1', 'fit.ex2', 'fit.ex3', 'fit.ex4'];
+
 const Fittings: React.FC = () => {
   const { t } = useT();
   const router = useIonRouter();
+  const history = useHistory();
   const [presentToast] = useIonToast();
   const [recent, setRecent] = useState<RecentItem[]>([]);
+
+  const [text, setText] = useState('');
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -57,16 +66,9 @@ const Fittings: React.FC = () => {
     setRecent([...fittings, ...rooms].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   });
 
-  const startFitting = async (file: File) => {
+  const attachPhoto = async (file: File) => {
     try {
-      const image = await downscaleDataUrl(await fileToDataUrl(file));
-      const now = new Date().toISOString();
-      const fitting: Fitting = {
-        id: uuid(), createdAt: now, updatedAt: now,
-        visualization: { versions: [{ id: uuid(), image, prompt: '', createdAt: now }] },
-      };
-      upsertFitting(fitting);
-      router.push(`/fitting/${fitting.id}`);
+      setPhoto(await downscaleDataUrl(await fileToDataUrl(file)));
     } catch {
       presentToast({ message: t('viz.photoError'), duration: 2500, color: 'danger', position: 'bottom' });
     }
@@ -74,8 +76,38 @@ const Fittings: React.FC = () => {
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) startFitting(f);
+    if (f) attachPhoto(f);
     e.target.value = '';
+  };
+
+  /**
+   * Starts a fitting from the attached photo, or — with only a description — from a blank
+   * room sketch; the fitting page then generates from the description straight away.
+   */
+  const send = async () => {
+    const description = text.trim();
+    if (sending || (!description && !photo)) return;
+    setSending(true);
+    try {
+      const now = new Date().toISOString();
+      let original: VisualizationVersion;
+      if (photo) {
+        original = { id: uuid(), image: photo, prompt: '', createdAt: now };
+      } else {
+        const { renderBlankRoom } = await import('../lib/roomScene');
+        const image = await downscaleDataUrl((await renderBlankRoom()).image);
+        original = { id: uuid(), image, prompt: '', createdAt: now, sketch: true };
+      }
+      const fitting: Fitting = { id: uuid(), createdAt: now, updatedAt: now, visualization: { versions: [original] } };
+      upsertFitting(fitting);
+      setText('');
+      setPhoto(null);
+      history.push({ pathname: `/fitting/${fitting.id}`, state: description ? { prompt: description } : undefined });
+    } catch {
+      presentToast({ message: t(photo ? 'viz.storageError' : 'viz.sketchError'), duration: 2500, color: 'danger', position: 'bottom' });
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -87,21 +119,15 @@ const Fittings: React.FC = () => {
       </IonHeader>
 
       <IonContent className="blue-page">
-        <div className="blue-hero" />
-
-        <div className="fittings-actions blue-hero-overlap">
-          <button className="fittings-action fittings-action--main" onClick={() => cameraInputRef.current?.click()}>
-            <IonIcon icon={cameraOutline} />{t('fit.takePhoto')}
-          </button>
-          <button className="fittings-action card" onClick={() => photoInputRef.current?.click()}>
-            <IonIcon icon={imagesOutline} />{t('fit.fromGallery')}
-          </button>
-        </div>
-
         {recent.length === 0 ? (
           <div className="fittings-empty">
             <IonIcon icon={sparklesOutline} />
             <p>{t('fit.emptyHint')}</p>
+            <div className="fittings-examples">
+              {EXAMPLES.map(key => (
+                <button key={key} className="fittings-example" onClick={() => setText(t(key))}>{t(key)}</button>
+              ))}
+            </div>
           </div>
         ) : (<>
           <div className="fittings-section">{t('fit.recent')}</div>
@@ -121,6 +147,37 @@ const Fittings: React.FC = () => {
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onFile} />
         <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFile} />
       </IonContent>
+
+      <IonFooter className="fittings-composer">
+        {photo && (
+          <div className="fittings-composer__photo">
+            <img src={photo} alt="" />
+            <button aria-label={t('fit.removePhoto')} onClick={() => setPhoto(null)} disabled={sending}>
+              <IonIcon icon={closeOutline} />
+            </button>
+          </div>
+        )}
+        <div className="fittings-composer__row">
+          <button className="fittings-composer__icon" aria-label={t('fit.takePhoto')} disabled={sending} onClick={() => cameraInputRef.current?.click()}>
+            <IonIcon icon={cameraOutline} />
+          </button>
+          <button className="fittings-composer__icon" aria-label={t('fit.fromGallery')} disabled={sending} onClick={() => photoInputRef.current?.click()}>
+            <IonIcon icon={imagesOutline} />
+          </button>
+          <IonTextarea
+            value={text}
+            onIonInput={e => setText(e.detail.value ?? '')}
+            placeholder={t('fit.composerPH')}
+            autoGrow
+            rows={1}
+            disabled={sending}
+            className="fittings-composer__input"
+          />
+          <button className="fittings-composer__send" aria-label={t('viz.generate')} disabled={sending || (!text.trim() && !photo)} onClick={send}>
+            {sending ? <IonSpinner name="crescent" /> : <IonIcon icon={arrowForwardOutline} />}
+          </button>
+        </div>
+      </IonFooter>
     </IonPage>
   );
 };

@@ -1,44 +1,3 @@
-/* ── Header title: room name + client ── */
-.editor-header__title {
-  padding: 0 4px;
-  min-width: 0;
-  line-height: 1.2;
-}
-
-.editor-header__name {
-  font-size: 18px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.editor-header__sub {
-  font-size: 12px;
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Dark header continuing the canvas ── */
-.editor-header {
-  --ion-toolbar-color: #fff;
-  border-bottom: none !important;
-  box-shadow: none;
-}
-
-.editor-header ion-toolbar {
-  --background: #1a1a2e;
-  --color: #fff;
-  --border-width: 0;
-}
-
-.editor-header ion-back-button,
-.editor-header ion-button {
-  --color: #fff;
-}
-
 /* ── Room menu: popover under the ⋮ button ── */
 .room-menu {
   position: fixed;
@@ -184,7 +143,7 @@
 }
 
 /* ── AI visualization button next to the menu ── */
-.editor-header ion-button.editor-header__ai {
+.dark-header ion-button.editor-header__ai {
   --background: linear-gradient(135deg, #7C4DFF, #1E88E5);
   --border-radius: 12px;
   --padding-start: 10px;

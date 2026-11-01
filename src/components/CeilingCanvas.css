@@ -1,0 +1,28 @@
+/* Toolbar over the drawing: undo/redo | diagonals, fit */
+.cv-tools {
+  position: absolute; top: 8px; left: 8px;
+  display: flex; align-items: flex-start; gap: 4px;
+  padding: 6px 6px 4px; border-radius: 18px;
+  background: rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+.cv-tools__sep { width: 1px; align-self: stretch; margin: 6px 3px 18px; background: rgba(255, 255, 255, 0.1); }
+.cv-tool {
+  min-width: 48px; padding: 0 2px; border: none; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.cv-tool:disabled { cursor: default; }
+.cv-tool__btn { transition: transform 0.12s ease, background 0.12s ease; }
+.cv-tool:not(:disabled):active .cv-tool__btn { transform: scale(0.9); background: rgba(255, 255, 255, 0.14); }
+.cv-tool__btn {
+  position: relative; width: 44px; height: 44px; border-radius: 14px;
+  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(8px);
+  color: #fff; font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+}
+.cv-tool:disabled .cv-tool__btn { color: rgba(255, 255, 255, 0.3); }
+.cv-tool__label { font-size: 10px; font-weight: 700; white-space: nowrap; color: rgba(255, 255, 255, 0.55); }
+.cv-tool:disabled .cv-tool__label { color: rgba(255, 255, 255, 0.3); }
+.cv-tool--accent .cv-tool__btn { color: #F9A825; }
+.cv-tool--active .cv-tool__btn { background: #F9A825; color: #16182a; }
+.cv-tool--active .cv-tool__label { color: #F9A825; }

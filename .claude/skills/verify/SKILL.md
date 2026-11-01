@@ -40,6 +40,6 @@ Room shape: see `createRoom()` in `src/lib/storage.ts` (empty `points`, `scale: 
 - Mouse clicks in draw mode place a point on anything but a placed vertex
   (wall hit bands, the preview line); closing = click within 24 px of point 0.
 - After a committed polygon exists, vertex screen position = replicate
-  `fitView`: `scale = min(4, (W−120)/bw, (H−120)/bh)`, centre the bbox.
+  `fitView`: `padY = min(60, H·0.15)`, `padTop = max(padY, 88)` (toolbar), `scale = min(4, (W−120)/bw, (H−padTop−padY)/bh)`, bbox centred between padTop and H−padY.
 - Clear the drawing via the ⋮ toolbar menu → «Очистить чертёж» (remounts the
   canvas via `canvasKey`).

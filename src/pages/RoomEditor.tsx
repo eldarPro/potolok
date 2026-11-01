@@ -415,15 +415,15 @@ const RoomEditor: React.FC = () => {
   };
 
   return (
-    <IonPage style={{ display: 'flex', flexDirection: 'column' }}>
-      <IonHeader className="editor-header">
+    <IonPage className="dark-page" style={{ display: 'flex', flexDirection: 'column' }}>
+      <IonHeader className="dark-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${projectId}`} />
           </IonButtons>
-          <div className="editor-header__title">
-            <div className="editor-header__name">{room.name}</div>
-            {project.clientName && <div className="editor-header__sub">{project.clientName}</div>}
+          <div className="dark-header__title">
+            <div className="dark-header__name">{room.name}</div>
+            {project.clientName && <div className="dark-header__sub">{project.clientName}</div>}
           </div>
           <IonButtons slot="end">
             <IonButton className="editor-header__ai" onClick={() => router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push')}>
@@ -476,6 +476,7 @@ const RoomEditor: React.FC = () => {
                 })}
                 onOpenBluetooth={() => setBluetoothOpen(true)}
                 onOpenManualMeasure={() => setManualMeasureOpen(true)}
+                onToggleDiagonals={() => { setSelection(null); setSection(section === 'diagonals' ? null : 'diagonals'); }}
                 selection={section ? focus : liveSelection}
                 onSelect={handleCanvasSelect}
                 obscuredBottom={obscuredBottom}
@@ -513,7 +514,8 @@ const RoomEditor: React.FC = () => {
             </div>
           )}
           {!placingLighting && !placingNiche ? (
-            <RoomSheet
+            // nothing to fill in until the outline is drawn — the canvas guides that
+            room.areaSqm > 0 && <RoomSheet
               active={section}
               room={room}
               pricing={project.pricing}

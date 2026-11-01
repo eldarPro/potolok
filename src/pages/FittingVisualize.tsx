@@ -5,7 +5,7 @@ import {
   useIonRouter, useIonToast, useIonViewWillEnter,
 } from '@ionic/react';
 import { chevronBackOutline, addOutline } from 'ionicons/icons';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { getFitting, upsertFitting, deleteFitting, loadProjects, upsertProject, createProject, createRoom } from '../lib/storage';
 import { Fitting, Project, Room, RoomVisualization } from '../types';
 import VisualizeWorkspace from '../components/VisualizeWorkspace';
@@ -15,6 +15,8 @@ import './FittingVisualize.css';
 const FittingVisualize: React.FC = () => {
   const { t } = useT();
   const { id } = useParams<{ id: string }>();
+  // the description typed on the Try-on tab, generated from right away
+  const { state } = useLocation<{ prompt?: string } | undefined>();
   const router = useIonRouter();
   const [presentToast] = useIonToast();
 
@@ -75,20 +77,22 @@ const FittingVisualize: React.FC = () => {
   };
 
   return (
-    <IonPage>
-      <IonHeader className="blue-header">
+    <IonPage className="dark-page">
+      <IonHeader className="dark-header">
         <IonToolbar>
           <IonButtons slot="start">
             <IonBackButton text="" icon={chevronBackOutline} defaultHref="/tabs/fittings" />
           </IonButtons>
-          <IonTitle>{t('fit.title')}</IonTitle>
+          <div className="dark-header__title">
+            <div className="dark-header__name">{t('fit.title')}</div>
+          </div>
           <IonButtons slot="end">
             <IonButton className="fitting-save-btn" onClick={() => setSaveOpen(true)}>{t('common.save')}</IonButton>
           </IonButtons>
         </IonToolbar>
       </IonHeader>
 
-      <VisualizeWorkspace visualization={fitting.visualization} onChange={persist} fileName={t('fit.title')} />
+      <VisualizeWorkspace visualization={fitting.visualization} onChange={persist} fileName={t('fit.title')} autoPrompt={state?.prompt} />
 
       <IonActionSheet
         isOpen={saveOpen}

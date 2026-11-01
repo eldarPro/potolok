@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   IonContent, IonIcon, IonTextarea, IonSpinner, IonAlert, useIonToast,
 } from '@ionic/react';
@@ -39,10 +39,12 @@ interface Props {
   room?: Room;
   /** Download name, without extension */
   fileName: string;
+  /** A description to generate from as soon as the page opens */
+  autoPrompt?: string;
 }
 
 /** Photo, AI edits and their history — the page content of a room visualization or a fitting. */
-const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fileName }) => {
+const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fileName, autoPrompt }) => {
   const { t } = useT();
   const [presentToast] = useIonToast();
 
@@ -96,17 +98,29 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (description = prompt) => {
     if (!current || busy) return;
-    const text = prompt.trim();
+    const text = description.trim();
     if (!text) return;
+    setPrompt(text);
     setBusy(true);
     try {
-      await generateFrom(versions, text, editRequest(text));
+      // a sketch still has to become a photo, so it gets the sketch prompt with the text as wishes
+      const request = current.sketch
+        ? (await import('../lib/roomScene')).sketchPrompt(room ?? null, text)
+        : editRequest(text);
+      await generateFrom(versions, text, request);
     } finally {
       setBusy(false);
     }
   };
+
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoPrompt || autoStarted.current || !current) return;
+    autoStarted.current = true;
+    handleGenerate(autoPrompt);
+  }, [autoPrompt, current]);
 
   // The 3D sketch becomes the "original" (versions[0]); the AI pass on top of it is versions[1].
   const handleFromDrawing = async () => {
@@ -122,7 +136,7 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
         // boxes are in 0–1000 frame units, so downscaling doesn't move them
         const image = await downscaleDataUrl(scene.image);
         layout = scene.layout;
-        sketch = { id: uuid(), image, prompt: '', createdAt: new Date().toISOString() };
+        sketch = { id: uuid(), image, prompt: '', createdAt: new Date().toISOString(), sketch: true };
         text = drawingPrompt(room);
       } catch {
         presentToast({ message: t('viz.sketchError'), duration: 2500, color: 'danger', position: 'bottom' });

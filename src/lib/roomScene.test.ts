@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawingPrompt } from './roomScene';
+import { drawingPrompt, sketchPrompt } from './roomScene';
 import { Room, LightingCatalogItem } from '../types';
 
 const room = (lighting: Room['lighting'] = []): Room => ({
@@ -27,5 +27,17 @@ describe('drawingPrompt', () => {
     expect(text).toContain('Спот GX53 (встраиваемый точечный светильник) — 2 шт.');
     expect(text).toContain('Других светильников на потолке нет');
     expect(text).not.toContain('без единого светильника');
+  });
+});
+
+describe('sketchPrompt', () => {
+  it('builds on the blank room when there is no drawing', () => {
+    const text = sketchPrompt(null, 'чёрный глянец');
+    expect(text).toContain('пустой комнаты');
+    expect(text).toMatch(/Пожелания клиента.*чёрный глянец$/);
+  });
+
+  it('builds on the drawing when there is one', () => {
+    expect(sketchPrompt(room(), '')).toBe(drawingPrompt(room()));
   });
 });

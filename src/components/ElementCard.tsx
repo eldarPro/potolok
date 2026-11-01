@@ -516,7 +516,7 @@ const ElementCard: React.FC<Props> = props => {
       onPick: id => { const f = props.fabrics.find(x => x.id === id); if (f) onChange({ fabricId: f.id, fabric: { ...f } }); },
     };
     body = <>
-      {head(layersOutline, '#4C9AFF', fabric ? fabric.title : t('sec.fabric'),
+      {head(layersOutline, '#4C9AFF', fabric ? fabric.title : t('mat.tabFabric'),
         `${room.areaSqm.toFixed(2)} м² · ${room.perimeterM.toFixed(2)} ${t('unit.m')} · ${t('re.corners')}: ${countRealCorners(pts)}`)}
       {props.fabrics.length > 0 && selectRow(
         t('ec.fabric'),

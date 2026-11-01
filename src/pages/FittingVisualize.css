@@ -1,7 +1,7 @@
-.blue-header ion-button.fitting-save-btn {
+.dark-header ion-button.fitting-save-btn {
   font-weight: 600;
   text-transform: none;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   --padding-start: 12px;
   --padding-end: 12px;
