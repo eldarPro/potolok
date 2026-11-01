@@ -264,7 +264,7 @@
 
 .spanel__sym {
   width: 28px;
-  text-align: center;
+  display: inline-flex; align-items: center; justify-content: center;
   font-size: 20px;
   flex-shrink: 0;
 }
@@ -529,6 +529,7 @@
   font-size: 24px;
   line-height: 30px;
   height: 30px;
+  display: flex; align-items: center;
 }
 
 /* steppers */

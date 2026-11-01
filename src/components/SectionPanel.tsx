@@ -16,6 +16,8 @@ import { reshapedRoom, resizedPoints, wallCm, setWallProfile, setAllProfiles, ro
 import { roomItems, lineTotal, nicheCost, ItemKind } from '../lib/pricing';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
+import { lightColor } from '../lib/lighting';
+import { LightIcon } from './LightMarks';
 import { useConfirm } from './Dialogs';
 import { wallArcIcon, wallLineIcon } from '../lib/icons';
 import { createPortal } from 'react-dom';
@@ -89,7 +91,6 @@ const useSubPage = (page: SubPage | null, key: unknown) => {
 };
 
 const rub = (n: number) => `${Math.round(n).toLocaleString('ru')} ₽`;
-const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
 /**
  * Everything about the room, one section at a time, under the drawing — the
@@ -587,7 +588,7 @@ const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onP
       {lightings.length > SEARCH_FROM && <Search value={q} onChange={setQ} />}
       <div className="spanel__tiles">
         {lightings.filter(l => matches(q, l.title)).map(l => (
-          <Tile key={l.id} symbol={l.symbol} color={lightColor(l.color)} title={l.title}
+          <Tile key={l.id} symbol={<LightIcon type={l.type} color={l.color} size={22} />} color={lightColor(l.color)} title={l.title}
             sub={`${rub(price(l))}/${l.placement === 'path' ? t('unit.m') : t('unit.pcs')}`}
             onClick={() => onPlaceLighting(l)} />
         ))}
@@ -595,7 +596,7 @@ const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onP
       {groups.length > 0 && <div className="spanel__sub">{t('sp.inRoom')}</div>}
       {groups.map(g => (
         <div key={g.item.id} className="spanel__row">
-          <span className="spanel__sym" style={{ color: lightColor(g.item.color) }}>{g.item.symbol}</span>
+          <span className="spanel__sym"><LightIcon type={g.item.type} color={g.item.color} size={18} /></span>
           <button className="spanel__grow spanel__plain" onClick={() => onPickElement({ kind: 'light', id: g.els[0].id })}>
             {g.item.title}<small>{amount(g)}</small>
           </button>
@@ -718,7 +719,7 @@ const CountBody: React.FC<Props> = ({ section, room, pricing, accessories, servi
 };
 
 const Tile: React.FC<{
-  symbol: string; title: string; sub: string; color: string;
+  symbol: React.ReactNode; title: string; sub: string; color: string;
   disabled?: boolean; onClick: () => void;
 }> = ({ symbol, title, sub, color, disabled, onClick }) => (
   <button className="spanel__tile" disabled={disabled} onClick={onClick}>

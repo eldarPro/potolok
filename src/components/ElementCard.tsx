@@ -23,6 +23,7 @@ import {
 } from '../lib/roomEdit';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
+import { LightIcon } from './LightMarks';
 import { wallArcIcon, wallLineIcon } from '../lib/icons';
 import './ElementCard.css';
 
@@ -43,7 +44,6 @@ interface Props {
   onHeight: (px: number) => void;
 }
 
-const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 const rub = (n: number) => `${Math.round(n).toLocaleString('ru')} ₽`;
 const NICHE_COLOR = '#00ACC1';
 // A sharper corner sends the point far off along a near-flat arc
@@ -298,9 +298,7 @@ const ElementCard: React.FC<Props> = props => {
     const same = props.lightings.filter(l => l.placement === (isPath ? 'path' : 'point'));
     const replace = (l: LightingCatalogItem) =>
       onChange({ lighting: (room.lighting ?? []).map(e => e.id === el.id ? { ...e, catalogItemId: l.id, catalogItem: { ...l } } : e) });
-    const lightMark = (l: LightingCatalogItem) => isPath
-      ? lineMark(lightColor(l.color))
-      : <span className="ecard__symbol" style={{ color: lightColor(l.color) }}>{l.symbol}</span>;
+    const lightMark = (l: LightingCatalogItem) => <span className="ecard__symbol"><LightIcon type={l.type} color={l.color} size={20} /></span>;
     pick = {
       title: t('ec.type'),
       sub: isPath ? `${qty.toFixed(2)} ${t('unit.m')}` : undefined,

@@ -1,5 +1,6 @@
 import { Project, ProjectPricing, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile, Fitting } from '../types';
 import { uuid } from './uuid';
+import { refreshLooks } from './catalogSync';
 import { CM_PER_GRID } from './geometry';
 
 const KEY = 'ceiling_projects';
@@ -34,7 +35,12 @@ export function loadProjects(): Project[] {
   try {
     const raw = localStorage.getItem(KEY);
     const projects = raw ? JSON.parse(raw) : [];
-    return projects.map((p: any) => ({ ...p, rooms: (p.rooms ?? []).map(migrateRoomScale) }));
+    // rooms show the price list's current look of what they use (their prices stay their own)
+    const fabrics = loadFabrics(), lightings = loadLightings();
+    return projects.map((p: any) => ({
+      ...p,
+      rooms: (p.rooms ?? []).map((r: any) => refreshLooks(migrateRoomScale(r), fabrics, lightings)),
+    }));
   } catch {
     return [];
   }

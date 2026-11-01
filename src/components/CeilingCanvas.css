@@ -26,3 +26,18 @@
 .cv-tool--accent .cv-tool__btn { color: #F9A825; }
 .cv-tool--active .cv-tool__btn { background: #F9A825; color: #16182a; }
 .cv-tool--active .cv-tool__label { color: #F9A825; }
+
+/* Lighting legend at the bottom of the drawing */
+.cv-legend {
+  position: absolute; left: 8px; right: 8px; bottom: 28px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+  pointer-events: none;
+}
+.cv-legend__chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 7px; border-radius: 999px;
+  background: rgba(14, 15, 26, 0.86); border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11.5px; color: rgba(255, 255, 255, 0.78); white-space: nowrap;
+}
+.cv-legend__chip b { color: #fff; font-weight: 700; }
+.cv-legend__swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.35); }

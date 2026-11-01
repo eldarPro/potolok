@@ -218,8 +218,8 @@
 .ecard__symbol {
   font-size: 18px;
   line-height: 1;
-  width: 18px;
-  text-align: center;
+  min-width: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 
 .ecard__swatch {

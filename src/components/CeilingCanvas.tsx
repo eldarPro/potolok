@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { IonIcon } from '@ionic/react';
-import { arrowUndoOutline, arrowRedoOutline, resizeOutline, scanOutline, createOutline, shapesOutline, bluetoothOutline, chevronForwardOutline } from 'ionicons/icons';
+import { arrowUndoOutline, arrowRedoOutline, resizeOutline, scanOutline, createOutline, shapesOutline, bluetoothOutline, chevronForwardOutline, sunnyOutline } from 'ionicons/icons';
 import { Stage, Layer, Line, Circle, Text, Group, Rect, Wedge, Arc } from 'react-konva';
 import Konva from 'konva';
 import {
@@ -17,7 +17,7 @@ import { layoutLabels, calloutJoin, LABEL } from '../lib/canvasLabels';
 // edgeWouldCrossRoom check below can't be fooled by a reflex arc looping
 // around a shared corner without technically crossing a wall segment.
 const MAX_WALL_BULGE = 1;
-import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNicheWall, RoomNicheCross, WallPoint } from '../types';
+import { Room, LightingCatalogItem, LightingType, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNicheWall, RoomNicheCross, WallPoint } from '../types';
 import {
   nicheShape, nicheSpan, chainCmAt, pointAlongChain, inwardNormal, isStraightWall, chainLengthCm,
   crossLine, crossBand, wallPointXY, wallLengthCm, snapWallCm, squareCmOn,
@@ -25,6 +25,11 @@ import {
 import { snapNicheEnd } from '../lib/nicheEdit';
 import { hasCornice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
+import { pointLightGuides, pathLabelAnchor } from '../lib/lightGuides';
+import { GLOW, BARE_TRACK, darkSpots, trackSpotAim, bareTracks, CHANDELIER_ARMS } from '../lib/lightGlow';
+import { LIGHTING_META, lightColor } from '../lib/lighting';
+import { FabricGlow } from './FabricGlow';
+import { PointLightMark, PathLightMark, LightIcon, PointGlow, PathGlow, GlowPointMark, GlowPathMark, ChandelierGlow, TrackBeam } from './LightMarks';
 import './CeilingCanvas.css';
 
 /** What a tap on the finished drawing picked — the element card acts on it */
@@ -145,8 +150,6 @@ interface Props {
 
 type Tool = 'draw' | 'move';
 
-const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
-
 /** Height of the toolbar over the drawing, plus a gap */
 const TOOLBAR_H = 88;
 
@@ -215,6 +218,8 @@ const CeilingCanvas: React.FC<Props> = ({
   const prevRoomId = useRef(room.id);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const [drawRedoStack, setDrawRedoStack] = useState<Point[][]>([]);
+  // The glow view: the ceiling at night, each light's reach drawn, dark patches marked
+  const [glow, setGlow] = useState(false);
   const selKey = selectionKey(selection);
   const selectedPoint = selection?.kind === 'corner' ? selection.index : null;
   const selectedWall = selection?.kind === 'wall' ? selection.index : null;
@@ -1035,6 +1040,61 @@ const CeilingCanvas: React.FC<Props> = ({
     return [];
   })();
 
+  // Tracks a track spot can sit on, and the set-out of the selected point light
+  const trackRuns = (room.lighting ?? []).flatMap(e => e.kind === 'path' && e.catalogItem.type === 'track' ? [e.points] : []);
+  const glowOn = glow && isClosed && !showDiagonals && (room.lighting ?? []).length > 0;
+  const roomOutline = isClosed ? tessellateRoom(points, true) : [];
+  // tracks with no track spots on them light up themselves
+  const bare = useMemo(() => bareTracks(room.lighting ?? [], cm2px),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [room.lighting]);
+  const darkMarks = useMemo(
+    () => glowOn ? darkSpots(tessellateRoom(points, true), room.lighting ?? [], cm2px) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [glowOn, points, room.lighting],
+  );
+  const lightGuides = (() => {
+    if (!isClosed || showDiagonals || placingLighting || placingNiche) return [];
+    const el = (room.lighting ?? []).find(e => e.id === selectedLighting);
+    if (el?.kind !== 'point') return [];
+    const others = (room.lighting ?? []).flatMap(e => e.kind === 'point' && e.id !== el.id ? [{ x: e.x, y: e.y }] : []);
+    return pointLightGuides(points, el, others);
+  })();
+  // Labels in screen space: set-out numbers of the selected light, and each light run's length
+  const lightPills: { at: Point; text: string; color: string; bold?: boolean; bg?: string }[] = (() => {
+    if (showDiagonals || !isClosed) return [];
+    const out: { at: Point; text: string; color: string; bold?: boolean; bg?: string }[] = lightGuides.map(g => ({
+      at: { x: (g.from.x + g.to.x) / 2, y: (g.from.y + g.to.y) / 2 }, text: `${Math.round(g.cm)}`, color: SEL, bold: true,
+    }));
+    for (const at of darkMarks) out.push({ at, text: `⚠ ${t('cv.dark')}`, color: '#ffb4a8', bg: 'rgba(70,20,24,0.9)' });
+    for (const e of room.lighting ?? []) {
+      // a run's length only while it is picked — the legend has the totals
+      if (e.kind !== 'path' || e.id !== selectedLighting) continue;
+      const a = pathLabelAnchor(e.points);
+      if (!a) continue;
+      // beside the run, on the room's side — the other side is often the wall and its length
+      const off = 16 / viewport.scale;
+      const left = { x: a.at.x + a.dir.y * off, y: a.at.y - a.dir.x * off };
+      const right = { x: a.at.x - a.dir.y * off, y: a.at.y + a.dir.x * off };
+      out.push({
+        at: pointInPolygon(left, roomOutline) ? left : right,
+        text: `${e.lengthM.toFixed(1)} ${t('unit.m')}`,
+        color: e.catalogItem.type === 'line' ? '#fff' : lightColor(e.catalogItem.color),
+        bold: e.id === selectedLighting,
+      });
+    }
+    return out;
+  })();
+
+  // Legend under the drawing: one chip per kind of light, in catalog order
+  const legend = (Object.keys(LIGHTING_META) as LightingType[]).flatMap(type => {
+    const els = (room.lighting ?? []).filter(e => e.catalogItem.type === type);
+    if (!els.length) return [];
+    const unit = LIGHTING_META[type].placement === 'point' ? 'pcs' as const : 'm' as const;
+    const amount = unit === 'pcs' ? els.length : els.reduce((sum, e) => sum + (e.kind === 'path' ? e.lengthM : 0), 0);
+    return [{ type, unit, amount, color: els[0].catalogItem.color }];
+  });
+
   // Screen point the selection is about — kept clear of the element card
   const selectionAnchor = (): Point | null => {
     if (!selection) return null;
@@ -1147,8 +1207,9 @@ const CeilingCanvas: React.FC<Props> = ({
               <Line
                 points={outlinePoints(points)}
                 closed
-                fill={fabricSelected ? 'rgba(249,168,37,0.16)' : 'rgba(56,128,255,0.18)'}
+                fill={fabricSelected ? 'rgba(249,168,37,0.16)' : glowOn ? '#0e1226' : 'rgba(56,128,255,0.18)'}
                 stroke="#3880ff"
+                opacity={glowOn ? 0.9 : 1}
                 strokeWidth={2 * px}
                 onClick={e => pick(e, { kind: 'fabric' })}
                 onTap={e => pick(e, { kind: 'fabric' })}
@@ -1158,6 +1219,32 @@ const CeilingCanvas: React.FC<Props> = ({
               )}
             </>
           )}
+
+          {/* ── Glow view: each light's reach, kept inside the room — under the walls, corners and marks ── */}
+          {glowOn && (
+            <Group
+              listening={false}
+              clipFunc={ctx => { ctx.beginPath(); roomOutline.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }}
+            >
+              {(room.lighting ?? []).map(e => {
+                const g = bare.has(e.id) ? BARE_TRACK : GLOW[e.catalogItem.type] ?? GLOW.spot;
+                if (!g.power) return null;
+                const r = cm2px(g.radiusCm), type = e.catalogItem.type;
+                if (e.kind === 'path') return <PathGlow key={e.id} points={e.points} r={r} type={type} power={g.power} angle={rotation.angle} />;
+                if (e.catalogItem.type === 'track_spot') {
+                  const aim = trackSpotAim(e, trackRuns, cm2px, roomOutline);
+                  // a beam reaching about twice as far as its light lands
+                  return <TrackBeam key={e.id} x={e.x} y={e.y} angle={aim.angle ?? 0} len={2 * cm2px(GLOW.track_spot.throwCm ?? 70)} drawAngle={rotation.angle} power={g.power} />;
+                }
+                if (type === 'chandelier') return <ChandelierGlow key={e.id} x={e.x} y={e.y} r={r} armR={cm2px(CHANDELIER_ARMS.cm)} power={g.power} />;
+                return <PointGlow key={e.id} x={e.x} y={e.y} r={r} type={type} power={g.power} />;
+              })}
+              {/* the chosen fabric's colour over the light */}
+              <FabricGlow outline={roomOutline} color={room.fabric?.color ?? '#ffffff'} />
+            </Group>
+          )}
+          {/* the walls back on top of the light and the fabric */}
+          {glowOn && <Line points={outlinePoints(points)} closed stroke="#3880ff" strokeWidth={2 * px} opacity={0.9} listening={false} />}
 
           {/* In-progress polygon */}
           {!closed && points.length > 1 && (
@@ -1388,60 +1475,62 @@ const CeilingCanvas: React.FC<Props> = ({
             );
           })}
 
-          {/* ── Placed point lighting elements ── (lighting, niches and wall
-              lengths stay off the drawing while diagonals are checked) */}
-          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
-            const el = e as RoomLightingPoint;
+          {/* ── Placed lighting ── (lighting, niches and wall lengths stay off
+              the drawing while diagonals are checked). Lines first, so track
+              spots sit on top of their track. */}
+          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
+            const el = e as RoomLightingPath;
             const isSel = selectedLighting === el.id;
+            const pts = flat(el.points);
             return (
               <Group key={el.id}>
-                {isSel && (
-                  <Circle
-                    x={el.x} y={el.y} radius={18 * px}
-                    fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2 * px}
-                    listening={false}
-                  />
-                )}
-                <Circle
-                  x={el.x} y={el.y} radius={16 * px}
-                  fill="transparent"
+                {isSel && <Line points={pts} stroke={SEL} strokeWidth={16 * px} opacity={0.35} lineCap="round" lineJoin="round" listening={false} />}
+                {glowOn
+                  ? <GlowPathMark type={el.catalogItem.type} points={el.points} px={px} lit={bare.has(el.id)} />
+                  : <PathLightMark type={el.catalogItem.type} color={el.catalogItem.color} points={el.points} px={px} />}
+                <Line
+                  points={pts} stroke="transparent" strokeWidth={6 * px} hitStrokeWidth={20 * px}
                   listening={!placingLighting && !placingNiche}
                   onClick={e => pick(e, { kind: 'light', id: el.id })}
                   onTap={e => pick(e, { kind: 'light', id: el.id })}
-                />
-                <Text
-                  x={el.x} y={el.y}
-                  offsetX={10 * px} offsetY={10 * px}
-                  rotation={-rotation.angle}
-                  text={el.catalogItem.symbol}
-                  fontSize={20 * px}
-                  fill={lightColor(el.catalogItem.color)}
-                  shadowColor="rgba(0,0,0,0.6)" shadowBlur={4}
-                  listening={false}
                 />
               </Group>
             );
           })}
 
-          {/* ── Placed path lighting elements ── */}
-          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
-            const el = e as RoomLightingPath;
+          {/* Set-out lines from the selected point light to the walls and its nearest neighbour */}
+          {lightGuides.map((g, i) => (
+            <Line
+              key={`lg${i}`} points={flat([g.from, g.to])}
+              stroke={SEL} strokeWidth={1.3 * px} dash={[5 * px, 4 * px]} opacity={g.kind === 'light' ? 0.7 : 1}
+              listening={false}
+            />
+          ))}
+
+          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
+            const el = e as RoomLightingPoint;
             const isSel = selectedLighting === el.id;
+            const angle = el.catalogItem.type === 'track_spot' ? trackSpotAim(el, trackRuns, cm2px, roomOutline).angle : null;
             return (
-              <Line
-                key={el.id}
-                points={el.points.flatMap(p => [p.x, p.y])}
-                stroke={lightColor(el.catalogItem.color)}
-                strokeWidth={(isSel ? 9 : 5) * px}
-                lineCap="round"
-                lineJoin="round"
-                shadowColor={isSel ? SEL : undefined}
-                shadowBlur={isSel ? 12 : 0}
-                listening={!placingLighting && !placingNiche}
-                hitStrokeWidth={20 * px}
-                onClick={e => pick(e, { kind: 'light', id: el.id })}
-                onTap={e => pick(e, { kind: 'light', id: el.id })}
-              />
+              <Group key={el.id}>
+                {isSel && (
+                  <Circle
+                    x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 26 : 15) * px}
+                    fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2 * px}
+                    listening={false}
+                  />
+                )}
+                {glowOn
+                  ? <GlowPointMark type={el.catalogItem.type} x={el.x} y={el.y} px={px} armR={cm2px(CHANDELIER_ARMS.cm)} angle={angle} />
+                  : <PointLightMark type={el.catalogItem.type} color={el.catalogItem.color} x={el.x} y={el.y} px={px} angle={angle} />}
+                <Circle
+                  x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 22 : 16) * px}
+                  fill="transparent"
+                  listening={!placingLighting && !placingNiche}
+                  onClick={e => pick(e, { kind: 'light', id: el.id })}
+                  onTap={e => pick(e, { kind: 'light', id: el.id })}
+                />
+              </Group>
             );
           })}
 
@@ -1645,6 +1734,15 @@ const CeilingCanvas: React.FC<Props> = ({
                 </Group>
               );
             })}
+            {lightPills.map((p, i) => {
+              const at = toStage(worldToScreen(p.at)), w = p.text.length * 6.6 + 14, h = 18;
+              return (
+                <Group key={`lp${i}`} x={at.x} y={at.y} scaleX={px} scaleY={px} listening={false}>
+                  <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2} fill={p.bg ?? 'rgba(14,15,26,0.9)'} stroke={p.bold ? SEL : 'rgba(255,255,255,0.14)'} strokeWidth={1} />
+                  <Text x={-w / 2} y={-h / 2} width={w} height={h} align="center" verticalAlign="middle" text={p.text} fontSize={10.5} fontStyle="bold" fill={p.color} />
+                </Group>
+              );
+            })}
             {labelLayout.letters.map((l, i) => {
               const at = toStage(l);
               return (
@@ -1686,10 +1784,38 @@ const CeilingCanvas: React.FC<Props> = ({
                       accent active={showDiagonals}
                     />
                   )}
+                  {(room.lighting ?? []).length > 0 && (
+                    <ToolBtn icon={sunnyOutline} label={t('cv.glow')} onClick={() => setGlow(g => !g)} accent active={glow && !showDiagonals} />
+                  )}
                 </>
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Glow view: which fabric the ceiling is shown in */}
+      {glowOn && !selection && !placingLighting && !placingNiche && (
+        <div className="cv-legend">
+          <div className="cv-legend__chip">
+            <span className="cv-legend__swatch" style={{ background: room.fabric?.color ?? 'transparent' }} />
+            {room.fabric
+              ? <span>{room.fabric.title}</span>
+              : <span>{t('cv.noFabric')}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Legend: what each mark is and how much of it there is */}
+      {legend.length > 0 && !glowOn && !hideTools && !selection && !placingLighting && !placingNiche && !showDiagonals && (
+        <div className="cv-legend">
+          {legend.map(g => (
+            <div key={g.type} className="cv-legend__chip">
+              <LightIcon type={g.type} color={g.color} />
+              <span>{t(LIGHTING_META[g.type]?.label ?? g.type)}</span>
+              <b>{g.unit === 'pcs' ? `${g.amount} ${t('unit.pcs')}` : `${g.amount.toFixed(1)} ${t('unit.m')}`}</b>
+            </div>
+          ))}
         </div>
       )}
 

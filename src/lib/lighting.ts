@@ -23,3 +23,6 @@ export const UNIT_LABEL: Record<LightingUnit, string> = {
   pcs: 'unit.pcs',
   meter: 'unit.m',
 };
+
+/** Light colours from the catalog are near-white; pure white would vanish on the grid as a strip */
+export const lightColor = (color: string) => (!color || color === '#ffffff' ? '#ffeb3b' : color);
