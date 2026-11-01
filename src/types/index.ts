@@ -198,6 +198,14 @@ export interface RoomVisualization {
   versions: VisualizationVersion[];
 }
 
+/** A quick visualization on a client's photo, made before there is a project for it */
+export interface Fitting {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  visualization: RoomVisualization;
+}
+
 // --- Room & Project ---
 
 export interface Room {

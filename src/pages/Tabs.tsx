@@ -1,10 +1,11 @@
 import React from 'react';
 import { Redirect, Route } from 'react-router-dom';
 import { IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel, IonRouterOutlet } from '@ionic/react';
-import { folderOutline, pricetagOutline, personOutline } from 'ionicons/icons';
+import { folderOutline, sparklesOutline, pricetagOutline, personOutline } from 'ionicons/icons';
 import { useT } from '../lib/i18n';
 
 import ProjectList from './ProjectList';
+import Fittings from './Fittings';
 import PriceList from './PriceList';
 import Cabinet from './Cabinet';
 import Profile from './Profile';
@@ -17,6 +18,7 @@ const Tabs: React.FC = () => {
   <IonTabs>
     <IonRouterOutlet>
       <Route exact path="/tabs/projects" component={ProjectList} />
+      <Route exact path="/tabs/fittings" component={Fittings} />
       <Route exact path="/tabs/prices" component={PriceList} />
       <Route exact path="/tabs/cabinet" component={Cabinet} />
       <Route exact path="/tabs/cabinet/profile" component={Profile} />
@@ -29,6 +31,10 @@ const Tabs: React.FC = () => {
       <IonTabButton tab="projects" href="/tabs/projects">
         <IonIcon icon={folderOutline} />
         <IonLabel>{t('tab.projects')}</IonLabel>
+      </IonTabButton>
+      <IonTabButton tab="fittings" href="/tabs/fittings">
+        <IonIcon icon={sparklesOutline} />
+        <IonLabel>{t('tab.fittings')}</IonLabel>
       </IonTabButton>
       <IonTabButton tab="prices" href="/tabs/prices">
         <IonIcon icon={pricetagOutline} />

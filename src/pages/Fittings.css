@@ -1,0 +1,110 @@
+/* ── Camera / gallery ── */
+.fittings-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.fittings-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  border: none;
+  border-radius: var(--radius-card);
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fittings-action ion-icon {
+  font-size: 24px;
+}
+
+.fittings-action--main {
+  background: linear-gradient(135deg, #7C4DFF, var(--color-primary));
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(124, 77, 255, 0.35);
+}
+
+.fittings-action:active {
+  opacity: 0.8;
+}
+
+/* ── Recent ── */
+.fittings-section {
+  padding: 22px 20px 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.fittings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 16px 24px;
+}
+
+.fittings-card {
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fittings-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #000;
+}
+
+.fittings-card__body {
+  padding: 8px 10px 10px;
+}
+
+.fittings-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fittings-card__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fittings-card__sub--linked {
+  color: var(--color-primary);
+}
+
+.fittings-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 32px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.fittings-empty ion-icon {
+  font-size: 40px;
+  color: #7C4DFF;
+}

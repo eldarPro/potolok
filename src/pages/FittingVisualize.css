@@ -1,0 +1,19 @@
+.blue-header ion-button.fitting-save-btn {
+  font-weight: 600;
+  text-transform: none;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  margin-right: 8px;
+}
+
+.fitting-picker__empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.fitting-picker__warn {
+  color: var(--ion-color-warning-shade) !important;
+}

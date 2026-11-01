@@ -6,7 +6,7 @@ import {
 } from '@ionic/react';
 import {
   chevronBackOutline, closeOutline, ellipsisVerticalOutline,
-  createOutline, colorPaletteOutline, refreshOutline, trashOutline,
+  createOutline, sparklesOutline, refreshOutline, trashOutline,
 } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches, loadFabrics, loadAccessories, loadServices } from '../lib/storage';
@@ -426,6 +426,9 @@ const RoomEditor: React.FC = () => {
             {project.clientName && <div className="editor-header__sub">{project.clientName}</div>}
           </div>
           <IonButtons slot="end">
+            <IonButton className="editor-header__ai" onClick={() => router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push')}>
+              <IonIcon slot="start" icon={sparklesOutline} />AI
+            </IonButton>
             <IonButton fill="clear" onClick={() => setMenuOpen(true)}>
               <IonIcon slot="icon-only" icon={ellipsisVerticalOutline} />
             </IonButton>
@@ -659,7 +662,6 @@ const RoomEditor: React.FC = () => {
         <RoomMenu
           onClose={() => setMenuOpen(false)}
           actions={[
-            { icon: colorPaletteOutline, label: t('viz.menuItem'), onClick: () => router.push(`/project/${projectId}/room/${roomId}/visualize`, 'forward', 'push') },
             { icon: createOutline, label: t('re.editName'), onClick: () => setRenameOpen(true) },
             { icon: refreshOutline, label: t('re.clearDraft'), onClick: clearDrawing },
             { icon: trashOutline, label: t('re.deleteRoom'), danger: true, onClick: () => setDeleteConfirmOpen(true) },

@@ -182,3 +182,21 @@
   color: #04181b;
   font-weight: 800;
 }
+
+/* ── AI visualization button next to the menu ── */
+.editor-header ion-button.editor-header__ai {
+  --background: linear-gradient(135deg, #7C4DFF, #1E88E5);
+  --border-radius: 12px;
+  --padding-start: 10px;
+  --padding-end: 12px;
+  height: 36px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-right: 4px;
+}
+
+.editor-header__ai ion-icon {
+  font-size: 17px;
+  margin-right: 5px;
+}

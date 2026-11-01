@@ -92,14 +92,21 @@
   font-size: 13px;
 }
 
-.viz-photo__delete {
+.viz-photo__tools {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.viz-photo__tool {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border: none;
   color: #fff;
   display: flex;
@@ -107,6 +114,10 @@
   justify-content: center;
   font-size: 17px;
   cursor: pointer;
+}
+
+.viz-photo__tool:active {
+  opacity: 0.7;
 }
 
 /* ── History strip ── */
@@ -172,12 +183,8 @@
   cursor: pointer;
 }
 
-.viz-toolbar__btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
 
-/* ── Presets ── */
+/* ── Section label ── */
 .viz-presets__label {
   font-size: 11px;
   font-weight: 700;
@@ -185,30 +192,6 @@
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-bottom: 8px;
-}
-
-.viz-presets__row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.viz-chip {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.viz-chip:active {
-  opacity: 0.7;
 }
 
 /* ── Prompt ── */
@@ -221,11 +204,26 @@
 .viz-prompt__input {
   --background: rgba(255, 255, 255, 0.06);
   --color: #fff;
-  --placeholder-color: rgba(255, 255, 255, 0.35);
-  --padding-start: 12px;
-  --padding-end: 12px;
-  --padding-top: 10px;
-  --padding-bottom: 10px;
+  --placeholder-color: rgba(255, 255, 255, 0.45);
+  --placeholder-opacity: 1;
+  /* the border shows focus; Ionic's own underline would double it */
+  --highlight-color-focused: transparent;
+  --padding-start: 14px;
+  --padding-end: 14px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
   border-radius: 14px;
-  font-size: 14px;
+  overflow: hidden;
+  font-size: 15px;
+  transition: border-color 0.15s;
+}
+
+.viz-prompt__input.textarea-disabled {
+  opacity: 0.5;
+}
+
+.viz-prompt__input.has-focus {
+  border-color: #1E88E5;
+  --background: rgba(30, 136, 229, 0.08);
 }

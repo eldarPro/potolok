@@ -1,4 +1,4 @@
-import { Project, ProjectPricing, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile } from '../types';
+import { Project, ProjectPricing, Room, CatalogItem, LightingCatalogItem, AdditionalService, Accessory, NicheItem, MasterProfile, Fitting } from '../types';
 import { uuid } from './uuid';
 import { CM_PER_GRID } from './geometry';
 
@@ -77,6 +77,15 @@ export function createProject(partial: Omit<Project, 'id' | 'createdAt' | 'updat
     ...partial,
   };
 }
+
+// --- Fittings (visualizations without a project) ---
+
+const FITTINGS_KEY = 'ceiling_fittings';
+
+export const loadFittings  = () => loadList<Fitting>(FITTINGS_KEY);
+export const getFitting    = (id: string) => loadFittings().find(f => f.id === id) ?? null;
+export const deleteFitting = (id: string) => deleteListItem(FITTINGS_KEY, id);
+export const upsertFitting = (item: Fitting) => upsertListItem(FITTINGS_KEY, item);
 
 // --- Price list catalog ---
 
