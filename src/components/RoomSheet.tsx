@@ -39,6 +39,8 @@ interface Props {
   pricing?: ProjectPricing;
   onOpenSection: (section: SheetSection) => void;
   onOpenEstimate: () => void;
+  /** the section open in the panel above — the bar then only switches sections */
+  active?: SheetSection | null;
 }
 
 // The room total is plain text that opens this room in the project estimate
@@ -47,7 +49,7 @@ const totalButtonStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.2, cursor: 'pointer',
 };
 
-const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstimate }) => {
+const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstimate, active = null }) => {
   const { t } = useT();
   const [expanded, setExpandedState] = useState(readExpanded);
   const touchY = useRef<number | null>(null);
@@ -192,13 +194,13 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
       {/* ── Collapsed: summary + one icon per section ── */}
       <div style={{
         position: 'relative', zIndex: 2, flexShrink: 0,
-        marginTop: -18,
+        marginTop: active ? 0 : -18,
         background: '#16182a',
-        borderRadius: '20px 20px 0 0',
-        boxShadow: '0 -8px 30px rgba(0,0,0,0.5)',
-        paddingBottom: 'max(14px, env(safe-area-inset-bottom, 14px))',
+        borderRadius: active ? 0 : '20px 20px 0 0',
+        boxShadow: active ? undefined : '0 -8px 30px rgba(0,0,0,0.5)',
+        paddingBottom: active ? 'max(10px, env(safe-area-inset-bottom, 10px))' : 'max(14px, env(safe-area-inset-bottom, 14px))',
       }}>
-        {summary}
+        {!active && summary}
         <div style={{ display: 'flex', padding: '0 6px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           {rows.map(r => (
             <button
@@ -212,7 +214,8 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
             >
               <div style={{
                 width: 40, height: 40, borderRadius: 12,
-                background: `${r.color}26`, color: r.color,
+                background: r.section === active ? r.color : `${r.color}26`,
+                color: r.section === active ? '#16182a' : r.color,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: r.status === 'need' ? '0 0 0 1.5px #ff6b66' : undefined,
               }}>
@@ -222,7 +225,8 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
               <span style={{
                 fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
                 maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
-                color: r.status === 'ok' || r.status === 'need' ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.4)',
+                color: r.section === active ? '#fff'
+                  : r.status === 'ok' || r.status === 'need' ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.4)',
               }}>
                 {r.short}
               </span>
@@ -232,7 +236,7 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
       </div>
 
       {/* ── Expanded: full list over the drawing ── */}
-      {expanded && (
+      {expanded && !active && (
         <div
           onClick={() => setExpanded(false)}
           style={{ position: 'absolute', inset: 0, zIndex: 3, background: 'rgba(0,0,0,0.45)' }}
@@ -244,16 +248,16 @@ const RoomSheet: React.FC<Props> = ({ room, pricing, onOpenSection, onOpenEstima
         background: '#16182a',
         borderRadius: '20px 20px 0 0',
         boxShadow: '0 -8px 30px rgba(0,0,0,0.5)',
-        transform: expanded ? 'translateY(0)' : 'translateY(105%)',
+        transform: expanded && !active ? 'translateY(0)' : 'translateY(105%)',
         transition: 'transform 0.25s ease',
-        pointerEvents: expanded ? 'auto' : 'none',
+        pointerEvents: expanded && !active ? 'auto' : 'none',
         paddingBottom: 'max(14px, env(safe-area-inset-bottom, 14px))',
       }}>
         {summary}
         {rows.map(r => (
           <button
             key={r.section}
-            onClick={() => onOpenSection(r.section)}
+            onClick={() => { setExpanded(false); onOpenSection(r.section); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 12, width: '100%',
               padding: '9px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',

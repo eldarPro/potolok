@@ -3,16 +3,16 @@ import { IonIcon } from '@ionic/react';
 import {
   closeOutline, checkmarkOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
   analyticsOutline, albumsOutline, layersOutline, cutOutline, ellipseOutline,
-  copyOutline, addCircleOutline, trashOutline, eyeOffOutline, listOutline,
+  addCircleOutline, trashOutline, listOutline,
   arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline, sunnyOutline,
 } from 'ionicons/icons';
 import {
-  Room, CatalogItem, LightingCatalogItem, NicheItem, ProjectPricing, RoomLightingPoint, RoomLightingPath,
+  Room, CatalogItem, LightingCatalogItem, NicheItem, ProjectPricing, RoomLightingPath,
   RoomNichePath, RoomNicheElement, RoomNicheWall, RoomNicheCross,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
 import { SheetSection } from './RoomSheet';
-import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, pointInPolygon, tessellateRoom, GRID_SIZE, nicheFreeEnds } from '../lib/geometry';
+import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, nicheFreeEnds } from '../lib/geometry';
 import { hasCornice, nicheCapId, nicheCost, NicheCostPart } from '../lib/pricing';
 import { nicheMetrics, nicheShape, nicheSpan, crossLine, crossCorners, crossWidthCm, wallLengthCm } from '../lib/nicheGeometry';
 import { setNicheSizes, changeNicheWalls, setCrossEnd, DEPTH_OPTIONS, clampDepth } from '../lib/nicheEdit';
@@ -283,10 +283,6 @@ const ElementCard: React.FC<Props> = props => {
       </div>
       {actions([
         { icon: listOutline, label: t('ec.allDiagonals'), onClick: () => props.onOpenSection('diagonals') },
-        {
-          icon: eyeOffOutline, label: t('ec.hideDiagonal'),
-          onClick: () => { onChange({ hiddenDiagonals: [...(room.hiddenDiagonals ?? []), key] }); close(); },
-        },
       ])}
     </>;
   }
@@ -314,17 +310,6 @@ const ElementCard: React.FC<Props> = props => {
       selectedId: el.catalogItemId,
       onPick: id => { const l = same.find(x => x.id === id); if (l) replace(l); },
     };
-    const copy = () => {
-      const p = el as RoomLightingPoint;
-      const outline = tessellateRoom(pts, true);
-      const spot = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]
-        .map(([dx, dy]) => ({ x: p.x + dx * GRID_SIZE, y: p.y + dy * GRID_SIZE }))
-        .find(q => pointInPolygon(q, outline));
-      if (!spot) { props.onToast(t('ec.noRoom')); return; }
-      const dup: RoomLightingPoint = { ...p, id: uuid(), ...spot };
-      onChange({ lighting: [...(room.lighting ?? []), dup] });
-      onSelect({ kind: 'light', id: dup.id });
-    };
     body = <>
       {head(isPath ? analyticsOutline : bulbOutline, '#F9A825', item.title,
         isPath ? `${qty.toFixed(2)} ${t('unit.m')} · ${priceOf(item)} ₽/${unit}` : `${priceOf(item)} ₽ + ${t('mat.install')} ${installOf(item)} ₽`)}
@@ -334,7 +319,6 @@ const ElementCard: React.FC<Props> = props => {
         <b>{rub(priceOf(item) * qty)}</b>
       </div>
       {actions([
-        ...(!isPath ? [{ icon: copyOutline, label: t('ec.copy'), onClick: copy }] : []),
         { icon: addCircleOutline, label: t('ec.addMore'), onClick: () => props.onPlaceLighting(item) },
         {
           icon: trashOutline, label: t('common.delete'), danger: true,

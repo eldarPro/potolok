@@ -106,6 +106,9 @@ interface Props {
   onChange: (updated: Partial<Room>) => void;
   width: number;
   height: number;
+  /** The diagonals section is open: diagonals on the drawing, and nothing but
+   *  the outline and corner letters around them */
+  showDiagonals?: boolean;
   placingLighting?: LightingCatalogItem | null;
   inProgressLightingPath?: { x: number; y: number }[];
   onLightingTap?: (pt: { x: number; y: number }) => void;
@@ -141,6 +144,7 @@ const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
 
 const CeilingCanvas: React.FC<Props> = ({
   room, onChange, width, height,
+  showDiagonals = false,
   placingLighting = null,
   inProgressLightingPath = [],
   onLightingTap,
@@ -236,7 +240,6 @@ const CeilingCanvas: React.FC<Props> = ({
   const TOUCH_PLACE_DELAY = 60;
 
   const isClosed = closed || points.length >= MIN_POINTS;
-  const showDiagonals = room.showDiagonals !== false;
 
   const fitView = useCallback((pts: Point[]) => {
     if (pts.length === 0) return;
@@ -251,8 +254,9 @@ const CeilingCanvas: React.FC<Props> = ({
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const bw = maxX - minX || 1;
     const bh = maxY - minY || 1;
-    const padding = 60;
-    const scale = Math.min(MAX_ZOOM, (width - padding * 2) / bw, (height - padding * 2) / bh);
+    // a canvas squeezed by the section panel keeps a smaller margin
+    const padX = Math.min(60, width * 0.15), padY = Math.min(60, height * 0.15);
+    const scale = Math.min(MAX_ZOOM, (width - padX * 2) / bw, (height - padY * 2) / bh);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     setViewport({ scale, x: width / 2 - cx * scale, y: height / 2 - cy * scale });
@@ -317,12 +321,6 @@ const CeilingCanvas: React.FC<Props> = ({
       x: (q.x + rotation.x) * viewport.scale + viewport.x,
       y: (q.y + rotation.y) * viewport.scale + viewport.y,
     };
-  };
-
-  // Text rotation (in the drawing's frame) that reads upright on screen.
-  const uprightDeg = (deg: number) => {
-    const onScreen = normDeg(deg + rotation.angle);
-    return onScreen > 90 || onScreen < -90 ? deg + 180 : deg;
   };
 
   // One screen pixel in drawing units: marks, strokes and text are sized in
@@ -828,54 +826,11 @@ const CeilingCanvas: React.FC<Props> = ({
     return { i, a, b, points: [a.x, a.y, ...sampleArc(a, b, a.bulge, 24).flatMap(p => [p.x, p.y])] };
   }) : [];
 
-  // Diagonals only once the room is closed — every one the triangulation
-  // needs to fix the shape. While drawing they'd just be noise: the wall
-  // length and the live angle are what matter then.
-  type DiagonalHint = { a: Point; b: Point; labelI: string; labelJ: string; key: string; i?: number; j?: number };
-  const closedDiagonals: DiagonalHint[] = showDiagonals && closed && points.length >= 4
-    ? roomDiagonals(points).filter(d => !room.hiddenDiagonals?.includes(d.key)).map(d => ({
-        a: points[d.i], b: points[d.j], labelI: labels[d.i], labelJ: labels[d.j], key: `diag-${d.key}`, i: d.i, j: d.j,
-      }))
+  // Diagonals only with their section open, and once the room is closed —
+  // every one the triangulation needs to fix the shape
+  const diagonals = showDiagonals && closed && points.length >= 4
+    ? roomDiagonals(points).map(d => ({ a: points[d.i], b: points[d.j], key: `diag-${d.key}`, i: d.i, j: d.j }))
     : [];
-
-  const diagonals: DiagonalHint[] = closedDiagonals;
-
-  // Diagonals usually cross near their midpoints (always, in a quad), so
-  // labels parked at the middle pile up on each other. Slide each label along
-  // its own diagonal, away from crossings and labels already placed, but no
-  // further than it takes to clear them — stays centred when nothing's near.
-  const diagonalLabels = (() => {
-    const crossings: Point[] = [];
-    for (let i = 0; i < diagonals.length; i++) {
-      for (let j = i + 1; j < diagonals.length; j++) {
-        const { a: p, b: p2 } = diagonals[i], { a: q, b: q2 } = diagonals[j];
-        const rx = p2.x - p.x, ry = p2.y - p.y, sx = q2.x - q.x, sy = q2.y - q.y;
-        const den = rx * sy - ry * sx;
-        if (Math.abs(den) < 1e-9) continue;
-        const t = ((q.x - p.x) * sy - (q.y - p.y) * sx) / den;
-        const u = ((q.x - p.x) * ry - (q.y - p.y) * rx) / den;
-        if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) crossings.push({ x: p.x + rx * t, y: p.y + ry * t });
-      }
-    }
-    const placed: { p: Point; halfW: number }[] = [];
-    return diagonals.map(d => {
-      const text = `${d.labelI}–${d.labelJ} ${fmtCm(pxToCm(dist(d.a, d.b)))}`;
-      const w = (text.length * 6 + 10) * px;
-      let best = { t: 0.5, score: -Infinity };
-      for (let t = 0.25; t <= 0.751; t += 0.025) {
-        const p = { x: d.a.x + (d.b.x - d.a.x) * t, y: d.a.y + (d.b.y - d.a.y) * t };
-        const clear = Math.min(
-          ...crossings.map(c => dist(p, c) / (w / 2 + 6 * px)),
-          ...placed.map(o => dist(p, o.p) / (w / 2 + o.halfW + 4 * px)),
-        );
-        const score = Math.min(clear, 1) - Math.abs(t - 0.5) * 0.01;
-        if (score > best.score) best = { t, score };
-      }
-      const p = { x: d.a.x + (d.b.x - d.a.x) * best.t, y: d.a.y + (d.b.y - d.a.y) * best.t };
-      placed.push({ p, halfW: w / 2 });
-      return { ...d, text, w, p };
-    });
-  })();
 
   const nearStart = !placingLighting && !closed && points.length >= MIN_POINTS && cursor
     ? dist(cursor, points[0]) * viewport.scale < CLOSE_THRESHOLD
@@ -1170,44 +1125,44 @@ const CeilingCanvas: React.FC<Props> = ({
             </>
           )}
 
-          {/* Diagonals with lengths */}
-          {diagonalLabels.map(({ a, b, key, text, w, p, i, j }) => {
-            const angle = uprightDeg(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); // keep text upright, never upside-down
-            // the pill is drawn in screen px, scaled down to the drawing
-            const h = 15, pw = w / px;
+          {/* Diagonals — lengths are in the section's list, not on the drawing.
+              With one selected the rest fade back and the selected one is
+              drawn last, on top of every crossing */}
+          {[...diagonals]
+            .sort((x, y) => Number(selectedDiag != null && selectedDiag.i === x.i && selectedDiag.j === x.j)
+              - Number(selectedDiag != null && selectedDiag.i === y.i && selectedDiag.j === y.j))
+            .map(({ a, b, key, i, j }) => {
             const isSel = selectedDiag != null && selectedDiag.i === i && selectedDiag.j === j;
-            const tappable = closed && i != null && j != null;
+            const dimmed = selectedDiag != null && !isSel;
             return (
-              <Group key={key}>
+              <Group key={key} opacity={dimmed ? 0.25 : 1}>
                 <Line
                   points={[a.x, a.y, b.x, b.y]}
                   stroke="#F9A825"
-                  strokeWidth={(isSel ? 4 : 1.5) * px}
-                  dash={[8 * px, 6 * px]}
+                  strokeWidth={(isSel ? 3.5 : 1.5) * px}
+                  dash={isSel ? undefined : [8 * px, 6 * px]}
                   opacity={isSel ? 1 : 0.85}
                   shadowColor={isSel ? SEL : undefined}
                   shadowBlur={isSel ? 10 : 0}
-                  listening={false}
+                  hitStrokeWidth={18 * px}
+                  onClick={e => pick(e, { kind: 'diagonal', i, j })}
+                  onTap={e => pick(e, { kind: 'diagonal', i, j })}
                 />
-                {/* Pill sits right on the line so the dashes never run through the text */}
-                <Group
-                  x={p.x} y={p.y} rotation={angle} scaleX={px} scaleY={px}
-                  listening={tappable}
-                  onClick={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
-                  onTap={e => tappable && pick(e, { kind: 'diagonal', i: i!, j: j! })}
-                >
-                  <Rect
-                    x={-pw / 2} y={-h / 2} width={pw} height={h} cornerRadius={h / 2}
-                    fill="rgba(18,22,38,0.88)" stroke="rgba(249,168,37,0.5)" strokeWidth={0.75}
-                  />
-                  <Text
-                    text={text} x={-pw / 2} y={-h / 2} width={pw} height={h}
-                    align="center" verticalAlign="middle"
-                    fontSize={10} fontStyle="bold" fill="#F9A825"
-                  />
-                  {/* wider invisible target than the pill itself */}
-                  <Rect x={-pw / 2 - 6} y={-h / 2 - 8} width={pw + 12} height={h + 16} fill="transparent" />
-                </Group>
+                {/* the selected one's length, just above the line at its middle */}
+                {isSel && (() => {
+                  const deg = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+                  const upright = Math.abs(normDeg(deg + rotation.angle)) > 90 ? deg + 180 : deg;
+                  const w = 80, h = LABEL.font + 4;
+                  return (
+                    <Text
+                      x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} rotation={upright} scaleX={px} scaleY={px}
+                      width={w} height={h} offsetX={w / 2} offsetY={h + 3} align="center" verticalAlign="bottom"
+                      text={fmtCm(pxToCm(dist(a, b)))} fontSize={LABEL.font} fontStyle="bold" fill={SEL}
+                      shadowColor="rgba(0,0,0,0.9)" shadowBlur={4}
+                      listening={false}
+                    />
+                  );
+                })()}
               </Group>
             );
           })}
@@ -1365,8 +1320,9 @@ const CeilingCanvas: React.FC<Props> = ({
             );
           })}
 
-          {/* ── Placed point lighting elements ── */}
-          {(room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
+          {/* ── Placed point lighting elements ── (lighting, niches and wall
+              lengths stay off the drawing while diagonals are checked) */}
+          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
             const el = e as RoomLightingPoint;
             const isSel = selectedLighting === el.id;
             return (
@@ -1400,7 +1356,7 @@ const CeilingCanvas: React.FC<Props> = ({
           })}
 
           {/* ── Placed path lighting elements ── */}
-          {(room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
+          {!showDiagonals && (room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
             const el = e as RoomLightingPath;
             const isSel = selectedLighting === el.id;
             return (
@@ -1484,7 +1440,7 @@ const CeilingCanvas: React.FC<Props> = ({
               the wall, its edge solid; a curtain track (гардина) shows its
               rail with runners, a niche for a cornice shows the cornice;
               a cap closes each end that stops short of a wall ── */}
-          {(room.selectedNiches ?? []).map(el => {
+          {!showDiagonals && (room.selectedNiches ?? []).map(el => {
             if (el.kind === 'count') return null;
             const isSel = selectedNicheEl === el.id;
             const listen = !placingNiche && !placingLighting;
@@ -1577,7 +1533,7 @@ const CeilingCanvas: React.FC<Props> = ({
               drawing and the text always reads upright. */}
           <Group>
             {labelLayout.walls.map((l, i) => {
-              if (!l) return null;
+              if (!l || showDiagonals) return null;
               const text = wallsIn[i]!.text;
               const sel = i === selectedWall;
               const onPick = (e: Konva.KonvaEventObject<Event>) => pick(e, { kind: 'wall', index: i });

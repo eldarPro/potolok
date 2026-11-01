@@ -1,24 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   IonPage, IonHeader, IonToolbar,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonActionSheet, IonAlert,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonAlert,
   useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
 import {
   chevronBackOutline, closeOutline, ellipsisVerticalOutline,
   createOutline, colorPaletteOutline, refreshOutline, trashOutline,
 } from 'ionicons/icons';
-import { useParams, useHistory } from 'react-router-dom';
-import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches, loadFabrics } from '../lib/storage';
+import { useParams } from 'react-router-dom';
+import { getProject, upsertProject, loadProfiles, loadLightings, loadNiches, loadFabrics, loadAccessories, loadServices } from '../lib/storage';
 import { uuid } from '../lib/uuid';
-import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, WallPoint } from '../types';
+import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, WallPoint, Accessory, AdditionalService } from '../types';
 import CeilingCanvas, { CanvasSelection, selectionKey } from '../components/CeilingCanvas';
 import ElementCard from '../components/ElementCard';
 import WallSplitScreen from '../components/WallSplitScreen';
 import RoomSheet from '../components/RoomSheet';
+import SectionPanel, { PanelSection } from '../components/SectionPanel';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
 import ManualMeasureModal from '../components/ManualMeasureModal';
-import { edgeLengthM, dist, pxToMeters } from '../lib/geometry';
+import { edgeLengthM, dist, pxToMeters, Point } from '../lib/geometry';
 import { isStraightWall } from '../lib/nicheGeometry';
 import { newWallNiche, newCrossNiche } from '../lib/nicheEdit';
 import { roomDiagonals, diagonalKey } from '../lib/diagonals';
@@ -30,7 +31,6 @@ const RoomEditor: React.FC = () => {
   const { t } = useT();
   const { projectId, roomId } = useParams<{ projectId: string; roomId: string }>();
   const router = useIonRouter();
-  const history = useHistory();
   const [presentToast] = useIonToast();
   const [project, setProject] = useState<Project | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
@@ -38,6 +38,15 @@ const RoomEditor: React.FC = () => {
   const [lightings, setLightings] = useState<LightingCatalogItem[]>([]);
   const [fabrics, setFabrics] = useState<CatalogItem[]>([]);
   const [niches, setNiches] = useState<NicheItem[]>([]);
+  const [accessories, setAccessories] = useState<Accessory[]>([]);
+  const [services, setServices] = useState<AdditionalService[]>([]);
+  // The room section open under the drawing; the drawing is its preview:
+  // `focus` is what's highlighted there, `preview` the typed, unapplied shape
+  const [section, setSection] = useState<PanelSection | null>(null);
+  const [focus, setFocus] = useState<CanvasSelection | null>(null);
+  const [preview, setPreview] = useState<Point[] | null>(null);
+  const [panelExpanded, setPanelExpanded] = useState(false);
+  useEffect(() => { setFocus(null); setPreview(null); }, [section]);
 
   // The element picked on the drawing — its card replaces the room panel
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
@@ -54,7 +63,6 @@ const RoomEditor: React.FC = () => {
   const [pathRedoStack, setPathRedoStack] = useState<{ x: number; y: number }[]>([]);
   // IDs of lights placed in the current session (for cancel to remove them)
   const [lightingSessionIds, setLightingSessionIds] = useState<Set<string>>(new Set());
-  const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
 
   const [placingNiche, setPlacingNiche] = useState<NicheItem | null>(null);
   // Placing a niche across the room (two taps) rather than along a wall, and its first end
@@ -81,6 +89,8 @@ const RoomEditor: React.FC = () => {
     setLightings(loadLightings());
     setFabrics(loadFabrics());
     setNiches(loadNiches());
+    setAccessories(loadAccessories());
+    setServices(loadServices());
   };
 
   useEffect(() => {
@@ -101,17 +111,6 @@ const RoomEditor: React.FC = () => {
       setRedoStack([]);
     }
     load();
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('pickLighting') === '1') {
-      setLightingPickerOpen(true);
-      history.replace(window.location.pathname);
-    }
-    const placeNicheId = params.get('placeNiche');
-    if (placeNicheId) {
-      const found = loadNiches().find(n => n.id === placeNicheId);
-      if (found) setPlacingNiche(found);
-      history.replace(window.location.pathname);
-    }
   });
 
   // Set up ResizeObserver after room is loaded (ref is null until JSX renders)
@@ -136,6 +135,7 @@ const RoomEditor: React.FC = () => {
     setPathRedoStack([]);
     setLightingSessionIds(new Set());
     setPlacingNiche(null);
+    setSection(null);
   });
 
   if (!project || !room) return null;
@@ -143,13 +143,12 @@ const RoomEditor: React.FC = () => {
   // A selection outlives what it points at after undo, delete or a redraw — drop it then
   const liveSelection = ((): CanvasSelection | null => {
     const s = selection;
-    if (!s || room.areaSqm === 0 || placingLighting || placingNiche) return null;
+    if (!s || room.areaSqm === 0 || placingLighting || placingNiche || section) return null;
     const n = room.points.length;
     if (s.kind === 'corner' || s.kind === 'wall') return s.index < n ? s : null;
     if (s.kind === 'diagonal') {
       const key = diagonalKey(s.i, s.j);
-      return room.showDiagonals !== false && !room.hiddenDiagonals?.includes(key)
-        && roomDiagonals(room.points).some(d => d.key === key) ? s : null;
+      return roomDiagonals(room.points).some(d => d.key === key) ? s : null;
     }
     if (s.kind === 'light') return (room.lighting ?? []).some(e => e.id === s.id) ? s : null;
     if (s.kind === 'niche') return (room.selectedNiches ?? []).some(e => e.id === s.id && e.kind !== 'count') ? s : null;
@@ -211,6 +210,8 @@ const RoomEditor: React.FC = () => {
         room.areaSqm === 0
       ) {
         undoTarget = { ...room, points: partial.points, areaSqm: 0, perimeterM: 0, profileSegments: [] };
+        // the next step after closing the outline: check its diagonals
+        if (partial.points.length >= 4) { setSelection(null); setSection('diagonals'); }
       }
       setUndoStack(prev => [...prev.slice(-30), undoTarget]);
       setRedoStack([]);
@@ -320,6 +321,7 @@ const RoomEditor: React.FC = () => {
   };
 
   const handleFinishPlacingLighting = () => {
+    commitLightingPath();
     setPlacingLighting(null);
     setLightingPathPts([]);
     setPathRedoStack([]);
@@ -335,8 +337,9 @@ const RoomEditor: React.FC = () => {
     setLightingSessionIds(new Set());
   };
 
-  const finishLightingPath = () => {
-    if (!placingLighting || lightingPathPts.length < 2) return;
+  // A line drawn so far goes into the room on «Готово»
+  const commitLightingPath = () => {
+    if (!placingLighting || placingLighting.placement !== 'path' || lightingPathPts.length < 2) return;
     let totalPx = 0;
     for (let i = 0; i < lightingPathPts.length - 1; i++)
       totalPx += dist(lightingPathPts[i], lightingPathPts[i + 1]);
@@ -346,11 +349,13 @@ const RoomEditor: React.FC = () => {
       points: lightingPathPts, lengthM: pxToMeters(totalPx),
     };
     updateRoom({ lighting: [...(room.lighting ?? []), newEl] });
-    setPlacingLighting(null);
+    setLightingSessionIds(prev => new Set([...prev, newEl.id]));
     setLightingPathPts([]);
     setPathRedoStack([]);
-    setLightingSessionIds(new Set());
   };
+
+  // How much of the type being placed went in during this placing
+  const placedNow = (room.lighting ?? []).filter(e => lightingSessionIds.has(e.id) && e.catalogItemId === placingLighting?.id).length;
 
   const hasLightingTools = lightings.length > 0 && room.areaSqm > 0;
   const isPlacingPath = placingLighting?.placement === 'path';
@@ -396,6 +401,19 @@ const RoomEditor: React.FC = () => {
 
   const handleCancelPlacingNiche = () => { setPlacingNiche(null); setCrossStart(null); };
 
+  // With a section open, a tap on the wall or diagonal it edits picks its row;
+  // anything else closes the section and opens that element's card
+  const handleCanvasSelect = (s: CanvasSelection | null) => {
+    if (section) {
+      if (!s || (section === 'profile' && s.kind === 'wall') || (section === 'diagonals' && s.kind === 'diagonal')) {
+        setFocus(s);
+        return;
+      }
+      setSection(null);
+    }
+    setSelection(s);
+  };
+
   return (
     <IonPage style={{ display: 'flex', flexDirection: 'column' }}>
       <IonHeader className="editor-header">
@@ -426,10 +444,11 @@ const RoomEditor: React.FC = () => {
             {canvasSize.width > 0 && canvasSize.height > 0 && (
               <CeilingCanvas
                 key={canvasKey}
-                room={room}
+                room={preview ? { ...room, points: preview } : room}
                 onChange={updateRoom}
                 width={canvasSize.width}
                 height={canvasSize.height}
+                showDiagonals={section === 'diagonals'}
                 placingLighting={placingLighting}
                 inProgressLightingPath={lightingPathPts}
                 onLightingTap={handleLightingTap}
@@ -454,8 +473,8 @@ const RoomEditor: React.FC = () => {
                 })}
                 onOpenBluetooth={() => setBluetoothOpen(true)}
                 onOpenManualMeasure={() => setManualMeasureOpen(true)}
-                selection={liveSelection}
-                onSelect={setSelection}
+                selection={section ? focus : liveSelection}
+                onSelect={handleCanvasSelect}
                 obscuredBottom={obscuredBottom}
               />
             )}
@@ -464,12 +483,38 @@ const RoomEditor: React.FC = () => {
             </div>
           </div>{/* end canvas */}
 
-          {/* ── Bottom: summary sheet, or the finish bar while placing ── */}
+          {/* ── Bottom: the open section, the summary bar, or the finish bar while placing ── */}
+          {section && !placingLighting && !placingNiche && (
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, ...(panelExpanded ? { flex: '0 0 68%' } : { flex: '0 1 auto', maxHeight: '50%' }) }}>
+              <SectionPanel
+                section={section}
+                room={room}
+                pricing={project.pricing}
+                fabrics={fabrics}
+                profiles={profiles}
+                lightings={lightings}
+                niches={niches}
+                accessories={accessories}
+                services={services}
+                onChange={updateRoom}
+                onPlaceLighting={l => { setFocus(null); setPlacingLighting(l); }}
+                onPlaceNiche={n => { setSection(null); setNicheCross(false); setPlacingNiche(n); }}
+                focus={focus}
+                onFocus={setFocus}
+                onPickElement={s => { setSection(null); setSelection(s); }}
+                onPreview={setPreview}
+                expanded={panelExpanded}
+                onExpand={setPanelExpanded}
+                onClose={() => setSection(null)}
+              />
+            </div>
+          )}
           {!placingLighting && !placingNiche ? (
             <RoomSheet
+              active={section}
               room={room}
               pricing={project.pricing}
-              onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
+              onOpenSection={s => { setSelection(null); setSection(section === s ? null : s); }}
               onOpenEstimate={() => router.push(`/project/${projectId}/summary?room=${roomId}`)}
             />
           ) : (
@@ -481,71 +526,40 @@ const RoomEditor: React.FC = () => {
             paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
           }}>
 
-            {/* Point lighting finish bar */}
-            {placingLighting?.placement === 'point' && (
+            {/* Lighting placing bar: how many so far */}
+            {placingLighting && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
                 marginBottom: 12, padding: '10px 14px',
                 background: 'rgba(249,168,37,0.12)',
                 borderRadius: 14,
                 border: '1px solid rgba(249,168,37,0.3)',
               }}>
-                <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingLighting.title} · {lightingSessionIds.size} {t('mc.pcs')}
-                </span>
-                <button
-                  onClick={handleCancelPlacingLighting}
-                  style={{
-                    background: 'none', border: 'none', padding: 4,
-                    cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
-                  }}
-                >
-                  <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
-                </button>
-                <button
-                  onClick={handleFinishPlacingLighting}
-                  style={{
-                    padding: '6px 14px', borderRadius: 10,
-                    background: '#F9A825', border: 'none',
-                    color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-                  }}
-                >
-                  {t('re.done')}
-                </button>
-              </div>
-            )}
-
-            {/* Path lighting finish bar */}
-            {isPlacingPath && lightingPathPts.length >= 2 && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                marginBottom: 12, padding: '10px 14px',
-                background: 'rgba(249,168,37,0.12)',
-                borderRadius: 14,
-                border: '1px solid rgba(249,168,37,0.3)',
-              }}>
-                <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                  {placingLighting?.title} · {lightingPathPts.length} {t('re.points')}
-                </span>
-                <button
-                  onClick={() => { setPlacingLighting(null); setLightingPathPts([]); }}
-                  style={{
-                    background: 'none', border: 'none', padding: 4,
-                    cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
-                  }}
-                >
-                  <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
-                </button>
-                <button
-                  onClick={finishLightingPath}
-                  style={{
-                    padding: '6px 14px', borderRadius: 10,
-                    background: '#F9A825', border: 'none',
-                    color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-                  }}
-                >
-                  {t('re.done')}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                    {isPlacingPath
+                      ? `${t('re.lineHint')} · ${lightingPathPts.length} ${t('re.points')}`
+                      : `${t('re.spotHint')} · ${placedNow} ${t('mc.pcs')}`}
+                  </span>
+                  <button
+                    onClick={handleCancelPlacingLighting}
+                    style={{
+                      background: 'none', border: 'none', padding: 4,
+                      cursor: 'pointer', color: 'rgba(255,255,255,0.35)', flexShrink: 0,
+                    }}
+                  >
+                    <IonIcon icon={closeOutline} style={{ fontSize: 20, display: 'block' }} />
+                  </button>
+                  <button
+                    onClick={handleFinishPlacingLighting}
+                    style={{
+                      padding: '6px 14px', borderRadius: 10,
+                      background: '#F9A825', border: 'none',
+                      color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    {t('re.done')}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -615,7 +629,7 @@ const RoomEditor: React.FC = () => {
               onChange={updateRoom}
               onSelect={setSelection}
               onSplitWall={setSplitEdgeIdx}
-              onOpenSection={section => router.push(`/project/${projectId}/room/${roomId}/materials/${section}`)}
+              onOpenSection={s => { setSelection(null); setSection(s); }}
               onPlaceLighting={setPlacingLighting}
               onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
               onHeight={setCardHeight}
@@ -681,19 +695,6 @@ const RoomEditor: React.FC = () => {
           { text: t('common.delete'), role: 'destructive', handler: deleteRoom },
         ]}
         onDidDismiss={() => setDeleteConfirmOpen(false)}
-      />
-
-      <IonActionSheet
-        isOpen={lightingPickerOpen}
-        header={t('re.pickLighting')}
-        buttons={[
-          ...lightings.map(l => ({
-            text: `${l.symbol}  ${l.title} — ${l.price.toLocaleString('ru')} ₽/${l.placement === 'path' ? 'м' : t('mc.pcs')}`,
-            handler: () => { setPlacingLighting(l); setLightingPickerOpen(false); },
-          })),
-          { text: t('common.cancel'), role: 'cancel' as const },
-        ]}
-        onDidDismiss={() => setLightingPickerOpen(false)}
       />
 
       {bluetoothOpen && room && canvasSize.width > 0 && (

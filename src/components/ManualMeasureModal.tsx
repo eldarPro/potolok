@@ -494,14 +494,23 @@ const TemplateForm: React.FC<{ tpl: ShapeTemplate; onApply: (pts: Pt[]) => void 
     return mirrored ? mirrorPts(pts) : pts;
   };
 
-  // Entered sizes (blank → default), and the template as drawn on the schematic
+  // A blank size stands in at its default scaled like the sizes already
+  // entered (geometric mean of entered / default), so one small wall doesn't
+  // clash with full-size defaults — «не сходятся» only when entries clash
+  const blankDef = useMemo(() => {
+    const ratios = tpl.params.map(p => parseNum(values[p.key] ?? '') / p.def).filter(r => r > 0);
+    const k = ratios.length ? Math.exp(ratios.reduce((s, r) => s + Math.log(r), 0) / ratios.length) : 1;
+    return Object.fromEntries(tpl.params.map(p => [p.key, Math.max(1, Math.round(p.def * k))]));
+  }, [tpl, values]);
+
+  // Entered sizes (blank → scaled default), and the template as drawn on the schematic
   const shape = useMemo(() => {
     const v = Object.fromEntries(tpl.params.map(p => {
       const n = parseNum(values[p.key] ?? '');
-      return [p.key, n > 0 ? n : p.def];
+      return [p.key, n > 0 ? n : blankDef[p.key]];
     }));
     return tpl.build(v);
-  }, [tpl, values]);
+  }, [tpl, values, blankDef]);
   const schematic = useMemo(() => tpl.build(defaults(tpl))!, [tpl]);
 
   const shown = shape ?? schematic;
@@ -565,7 +574,7 @@ const TemplateForm: React.FC<{ tpl: ShapeTemplate; onApply: (pts: Pt[]) => void 
             <WallBadge name={p.name} done={isSet(p.key)} />
             <input
               type="number" inputMode="decimal" min="0" step="1"
-              value={values[p.key] ?? ''} placeholder={String(p.def)}
+              value={values[p.key] ?? ''} placeholder={String(blankDef[p.key])}
               onChange={e => setValues(v => ({ ...v, [p.key]: e.target.value }))}
               onFocus={() => setFocus(p.key)}
               onBlur={() => setFocus(f => (f === p.key ? null : f))}
