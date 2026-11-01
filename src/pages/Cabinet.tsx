@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonList, IonItem, IonLabel, IonIcon, IonActionSheet,
+  IonList, IonItem, IonLabel, IonIcon,
   useIonViewWillEnter,
 } from '@ionic/react';
 import {
@@ -11,13 +11,18 @@ import { useHistory } from 'react-router-dom';
 import { MasterProfile } from '../types';
 import { loadMasterProfile } from '../lib/storage';
 import { useT, LANGS } from '../lib/i18n';
+import { useMenu } from '../components/Dialogs';
 import './Cabinet.css';
 
 const Cabinet: React.FC = () => {
   const history = useHistory();
   const { t, lang, setLang } = useT();
   const [profile, setProfile] = useState<MasterProfile>(loadMasterProfile());
-  const [showLangPicker, setShowLangPicker] = useState(false);
+  const menu = useMenu();
+  const openLangPicker = () => menu({
+    title: t('cab.language'),
+    items: LANGS.map(l => ({ label: `${l.flag}  ${l.name}`, selected: lang === l.code, onClick: () => setLang(l.code) })),
+  });
 
   useEffect(() => {
     setProfile(loadMasterProfile());
@@ -68,26 +73,12 @@ const Cabinet: React.FC = () => {
               <IonIcon icon={bookOutline} slot="start" className="cabinet-menu-icon" />
               <IonLabel>{t('cab.handbook')}</IonLabel>
             </IonItem>
-            <IonItem button detail onClick={() => setShowLangPicker(true)} lines="none">
+            <IonItem button detail onClick={openLangPicker} lines="none">
               <IonIcon icon={languageOutline} slot="start" className="cabinet-menu-icon" />
               <IonLabel>{t('lang.changeItem')}</IonLabel>
             </IonItem>
           </IonList>
         </div>
-
-        <IonActionSheet
-          isOpen={showLangPicker}
-          header={t('cab.language')}
-          buttons={[
-            ...LANGS.map(l => ({
-              text: `${l.flag}  ${l.name}`,
-              cssClass: lang === l.code ? 'lang-action-selected' : undefined,
-              handler: () => setLang(l.code),
-            })),
-            { text: t('common.cancel'), role: 'cancel' },
-          ]}
-          onDidDismiss={() => setShowLangPicker(false)}
-        />
       </IonContent>
     </IonPage>
   );

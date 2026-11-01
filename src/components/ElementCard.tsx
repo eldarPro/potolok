@@ -1,8 +1,8 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IonIcon } from '@ionic/react';
 import {
-  closeOutline, checkmarkOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
-  analyticsOutline, albumsOutline, layersOutline, cutOutline, ellipseOutline,
+  closeOutline, checkmarkOutline, chevronBackOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
+  analyticsOutline, albumsOutline, layersOutline, cutOutline,
   addCircleOutline, trashOutline, listOutline,
   arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline, sunnyOutline,
 } from 'ionicons/icons';
@@ -23,6 +23,7 @@ import {
 } from '../lib/roomEdit';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
+import { wallArcIcon, wallLineIcon } from '../lib/icons';
 import './ElementCard.css';
 
 interface Props {
@@ -204,9 +205,9 @@ const ElementCard: React.FC<Props> = props => {
       {actions([
         { icon: cutOutline, label: t('mat.split'), onClick: () => props.onSplitWall(i) },
         curved
-          ? { icon: removeOutline, label: t('ec.straighten'), onClick: () => { const r = bendEdge(room, i, 0); if (r) onChange(r); } }
+          ? { icon: wallLineIcon, label: t('ec.straighten'), onClick: () => { const r = bendEdge(room, i, 0); if (r) onChange(r); } }
           : {
-            icon: ellipseOutline, label: t('ec.round'), onClick: () => {
+            icon: wallArcIcon, label: t('ec.round'), onClick: () => {
               const r = roundEdge(room, i);
               if (r) onChange(r); else props.onToast(t('ec.cantRound'));
             },
@@ -579,14 +580,27 @@ const NumField: React.FC<{
 /** Bottom list of all choices for the picked element, with what each would cost here */
 const PickerSheet: React.FC<{ spec: PickSpec; onClose: () => void }> = ({ spec, onClose }) => {
   const choose = (id: string | null) => { spec.onPick(id); onClose(); };
+  // Hardware «back» closes the list instead of leaving the page
+  useEffect(() => {
+    const onBack = (e: Event) => {
+      (e as CustomEvent).detail.register(150, onClose);
+    };
+    document.addEventListener('ionBackButton', onBack);
+    return () => document.removeEventListener('ionBackButton', onBack);
+  }, [onClose]);
   return (
     <div className="epick">
       <div className="epick__backdrop" onClick={onClose} />
       <div className="epick__panel">
         <div className="ecard__handle" />
         <div className="epick__head">
-          <div className="epick__title">{spec.title}</div>
-          {spec.sub && <div className="epick__sub">{spec.sub}</div>}
+          <button className="epick__back" onClick={onClose} aria-label="back">
+            <IonIcon icon={chevronBackOutline} />
+          </button>
+          <div className="epick__head-text">
+            <div className="epick__title">{spec.title}</div>
+            {spec.sub && <div className="epick__sub">{spec.sub}</div>}
+          </div>
         </div>
         <div className="epick__list">
           {spec.options.map(o => (

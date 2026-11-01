@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
-  IonAlert, useIonViewWillEnter, useIonRouter,
+  useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
 import { addOutline, chevronBackOutline, layersOutline, reorderThreeOutline } from 'ionicons/icons';
 import ActionButton from '../../components/ActionButton';
 import { CatalogItem } from '../../types';
 import { loadFabrics, deleteFabric, loadProfiles, deleteProfile } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
+import { useConfirm } from '../../components/Dialogs';
 import PriceItemCard from './PriceItemCard';
 import './ItemCard.css';
 
@@ -25,16 +26,20 @@ const CatalogList: React.FC<Props> = ({ category }) => {
   const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = () => setItems(category === 'fabrics' ? loadFabrics() : loadProfiles());
   useIonViewWillEnter(load);
 
-  const confirmDelete = () => {
-    if (!deleteId) return;
-    if (category === 'fabrics') deleteFabric(deleteId);
-    else deleteProfile(deleteId);
-    setDeleteId(null);
+  const askDelete = async (id: string, title: string) => {
+    const ok = await confirm({
+      title: t('pl.deleteTitle'),
+      message: <><b>«{title}»</b><br />{t('pl.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    if (!ok) return;
+    if (category === 'fabrics') deleteFabric(id);
+    else deleteProfile(id);
     load();
   };
 
@@ -83,7 +88,7 @@ const CatalogList: React.FC<Props> = ({ category }) => {
                 ]}
                 description={item.description}
                 onEdit={() => router.push(`${basePath}/${item.id}/edit`)}
-                onDelete={() => setDeleteId(item.id)}
+                onDelete={() => askDelete(item.id, item.title)}
               />
             ))}
           </div>
@@ -94,17 +99,6 @@ const CatalogList: React.FC<Props> = ({ category }) => {
             <IonIcon icon={addOutline} />
           </IonFabButton>
         </IonFab>
-
-        <IonAlert
-          isOpen={!!deleteId}
-          header={t('pl.deleteTitle')}
-          message={t('pl.deleteMsg')}
-          buttons={[
-            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
-            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
-          ]}
-          onDidDismiss={() => setDeleteId(null)}
-        />
       </IonContent>
     </IonPage>
   );

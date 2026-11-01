@@ -135,6 +135,8 @@ interface Props {
   onOpenManualMeasure?: () => void;
   /** Opens/closes the diagonals panel — a button in the toolbar over the drawing */
   onToggleDiagonals?: () => void;
+  /** a section panel is open — the drawing gets all the room, no toolbar over it */
+  hideTools?: boolean;
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
   /** Height of the canvas bottom covered by the element card — the selection is kept above it */
@@ -189,6 +191,7 @@ const CeilingCanvas: React.FC<Props> = ({
   onOpenBluetooth,
   onOpenManualMeasure,
   onToggleDiagonals,
+  hideTools = false,
   selection = null,
   onSelect,
   obscuredBottom = 0,
@@ -315,14 +318,14 @@ const CeilingCanvas: React.FC<Props> = ({
     // a canvas squeezed by the section panel keeps a smaller margin
     const padX = Math.min(60, width * 0.15), padY = Math.min(60, height * 0.15);
     // the toolbar over the drawing takes the top — keep the outline below it
-    const padTop = Math.max(padY, TOOLBAR_H);
+    const padTop = hideTools ? padY : Math.max(padY, TOOLBAR_H);
     const scale = Math.min(MAX_ZOOM, (width - padX * 2) / bw, (height - padTop - padY) / bh);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const to = { scale, x: width / 2 - cx * scale, y: (padTop + height - padY) / 2 - cy * scale };
     if (animate) animateTo(to);
     else setViewport(to);
-  }, [width, height, animateTo]);
+  }, [width, height, hideTools, animateTo]);
 
   // Re-sync whenever the outline itself changes — not just its point count or
   // perimeter: reshaping by a diagonal keeps both and only moves corners.
@@ -865,7 +868,10 @@ const CeilingCanvas: React.FC<Props> = ({
     const n = points.length;
     const prev = points[(i - 1 + n) % n], v = points[i], next = points[(i + 1) % n];
     const winding = points.reduce((s, p, k) => { const q = points[(k + 1) % n]; return s + p.x * q.y - q.x * p.y; }, 0);
-    return angleMark(prev, v, next, cornerWedge(prev, v, next, winding), i === selectedPoint);
+    const wedge = cornerWedge(prev, v, next, winding);
+    // a corner on a straight run (a split point) has no angle worth drawing — unless it's being dragged
+    if (draggingPoint == null && Math.abs(wedge.deg - 180) < 0.5) return null;
+    return angleMark(prev, v, next, wedge, i === selectedPoint);
   })();
 
   const angleMarks = [liveCorner, firstWallCorner, cornerMark].filter((m): m is NonNullable<AngleMark> => m != null);
@@ -1658,7 +1664,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
       {/* Toolbar over the drawing: undo/redo, then the outline's own tools */}
       {/* Hidden on an empty drawing, unless there is something to undo/redo (e.g. right after clearing) */}
-      {!placingNiche && (points.length > 0 || canUndoBtn || canRedoBtn || placingLighting) && (
+      {!placingNiche && !hideTools && (points.length > 0 || canUndoBtn || canRedoBtn || placingLighting) && (
         <div className="cv-tools">
           {placingLighting ? (
             <>
@@ -1673,13 +1679,13 @@ const CeilingCanvas: React.FC<Props> = ({
               {room.areaSqm > 0 && (
                 <>
                   <div className="cv-tools__sep" />
+                  <ToolBtn icon={scanOutline} label={t('cv.fit')} onClick={() => fitView(points, true)} />
                   {onToggleDiagonals && points.length >= 4 && (
                     <ToolBtn
                       icon={resizeOutline} label={t('mat.tabDiag')} onClick={onToggleDiagonals}
                       accent active={showDiagonals}
                     />
                   )}
-                  <ToolBtn icon={scanOutline} label={t('cv.fit')} onClick={() => fitView(points, true)} />
                 </>
               )}
             </>

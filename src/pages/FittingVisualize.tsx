@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton,
-  IonActionSheet, IonAlert, IonModal, IonContent, IonList, IonItem, IonLabel, IonIcon,
+  IonModal, IonContent, IonList, IonItem, IonLabel, IonIcon,
   useIonRouter, useIonToast, useIonViewWillEnter,
 } from '@ionic/react';
-import { chevronBackOutline, addOutline } from 'ionicons/icons';
+import { chevronBackOutline, addOutline, addCircleOutline, folderOpenOutline } from 'ionicons/icons';
 import { useLocation, useParams } from 'react-router-dom';
 import { getFitting, upsertFitting, deleteFitting, loadProjects, upsertProject, createProject, createRoom } from '../lib/storage';
 import { Fitting, Project, Room, RoomVisualization } from '../types';
 import VisualizeWorkspace from '../components/VisualizeWorkspace';
 import { useT } from '../lib/i18n';
+import { useMenu, usePrompt } from '../components/Dialogs';
 import './FittingVisualize.css';
 
 const FittingVisualize: React.FC = () => {
@@ -21,8 +22,8 @@ const FittingVisualize: React.FC = () => {
   const [presentToast] = useIonToast();
 
   const [fitting, setFitting] = useState<Fitting | null>(null);
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const menu = useMenu();
+  const prompt = usePrompt();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [pickedProject, setPickedProject] = useState<Project | null>(null);
@@ -70,6 +71,28 @@ const FittingVisualize: React.FC = () => {
     moveTo(project, createRoom(roomName.trim() || t('fit.defaultRoom')), true);
   };
 
+  const askNewProject = async () => {
+    const v = await prompt({
+      title: t('fit.saveNew'), confirmText: t('common.save'), dark: true,
+      fields: [
+        // a project needs a client name, as on the new-project form
+        { name: 'client', placeholder: t('fit.clientPH'), required: true },
+        { name: 'room', placeholder: t('fit.roomPH'), value: t('fit.defaultRoom') },
+      ],
+    });
+    if (v) saveToNewProject(v.client, v.room ?? '');
+  };
+
+  const openSave = () => menu({
+    title: t('fit.saveTitle'),
+    subtitle: t('fit.saveHint'),
+    dark: true,
+    items: [
+      { icon: addCircleOutline, label: t('fit.saveNew'), onClick: askNewProject },
+      { icon: folderOpenOutline, label: t('fit.saveExisting'), onClick: openPicker },
+    ],
+  });
+
   const openPicker = () => {
     setProjects(loadProjects());
     setPickedProject(null);
@@ -87,45 +110,13 @@ const FittingVisualize: React.FC = () => {
             <div className="dark-header__name">{t('fit.title')}</div>
           </div>
           <IonButtons slot="end">
-            <IonButton className="fitting-save-btn" onClick={() => setSaveOpen(true)}>{t('common.save')}</IonButton>
+            <IonButton className="fitting-save-btn" onClick={openSave}>{t('common.save')}</IonButton>
           </IonButtons>
         </IonToolbar>
       </IonHeader>
 
       <VisualizeWorkspace visualization={fitting.visualization} onChange={persist} fileName={t('fit.title')} autoPrompt={state?.prompt} />
 
-      <IonActionSheet
-        isOpen={saveOpen}
-        onDidDismiss={() => setSaveOpen(false)}
-        header={t('fit.saveTitle')}
-        subHeader={t('fit.saveHint')}
-        buttons={[
-          { text: t('fit.saveNew'), handler: () => setNewProjectOpen(true) },
-          { text: t('fit.saveExisting'), handler: openPicker },
-          { text: t('common.cancel'), role: 'cancel' },
-        ]}
-      />
-
-      <IonAlert
-        isOpen={newProjectOpen}
-        onDidDismiss={() => setNewProjectOpen(false)}
-        header={t('fit.saveNew')}
-        inputs={[
-          { name: 'client', type: 'text', placeholder: t('fit.clientPH') },
-          { name: 'room', type: 'text', placeholder: t('fit.roomPH'), value: t('fit.defaultRoom') },
-        ]}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          {
-            text: t('common.save'),
-            // a project needs a client name, as on the new-project form; false keeps the alert open
-            handler: (d: { client: string; room: string }) => {
-              if (!d.client?.trim()) return false;
-              saveToNewProject(d.client, d.room ?? '');
-            },
-          },
-        ]}
-      />
 
       <IonModal isOpen={pickerOpen} onDidDismiss={() => setPickerOpen(false)} initialBreakpoint={0.75} breakpoints={[0, 0.75, 1]}>
         <IonHeader>

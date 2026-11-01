@@ -1,0 +1,401 @@
+/* Brand popups: confirmation card, action sheet, card with inputs (see Dialogs.tsx) */
+.dlg {
+  position: fixed;
+  inset: 0;
+  bottom: var(--kb-height, 0px); /* stay above the on-screen keyboard (lib/keyboard.ts) */
+  z-index: 40000; /* above Ionic overlays and the room menu */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 28px;
+  animation: dlg-fade 0.16s ease-out;
+  transition: bottom 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.dlg__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.dlg--dark .dlg__backdrop {
+  background: rgba(5, 7, 15, 0.6);
+}
+
+.dlg__card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  padding: 26px 22px 20px;
+  border-radius: 22px;
+  text-align: center;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111827);
+  box-shadow: 0 20px 60px rgba(17, 24, 39, 0.25);
+  animation: dlg-pop 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.dlg--dark .dlg__card {
+  background: #23263b;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.dlg--closing {
+  animation: dlg-fade-out 0.16s ease-in forwards;
+}
+
+.dlg--closing .dlg__card {
+  animation: dlg-pop-out 0.16s ease-in forwards;
+}
+
+.dlg__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+}
+
+.dlg__icon--danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+
+.dlg__icon--warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+}
+
+.dlg--dark .dlg__icon--danger {
+  background: rgba(239, 83, 80, 0.16);
+  color: #EF5350;
+}
+
+.dlg__title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.dlg__msg {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--color-text-secondary, #6B7280);
+  white-space: pre-line;
+}
+
+.dlg--dark .dlg__msg {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.dlg__btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.dlg__btn {
+  flex: 1;
+  height: 50px;
+  border: none;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.08s, filter 0.08s;
+}
+
+.dlg__btn:active {
+  transform: scale(0.97);
+  filter: brightness(0.94);
+}
+
+.dlg__btn--cancel {
+  background: #F3F4F6;
+  color: var(--color-text, #111827);
+}
+
+.dlg--dark .dlg__btn--cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.dlg__btn--danger {
+  background: #EF4444;
+  color: #fff;
+}
+
+.dlg__btn--warning {
+  background: #F59E0B;
+  color: #1a1a1a;
+}
+
+@keyframes dlg-fade { from { opacity: 0; } }
+@keyframes dlg-fade-out { to { opacity: 0; } }
+@keyframes dlg-pop { from { opacity: 0; transform: scale(0.92); } }
+@keyframes dlg-pop-out { to { opacity: 0; transform: scale(0.96); } }
+
+.dlg__msg b {
+  font-weight: 600;
+  color: var(--color-text, #111827);
+}
+
+.dlg--dark .dlg__msg b {
+  color: #fff;
+}
+
+.dlg__btn:disabled {
+  opacity: 0.45;
+  transform: none;
+  filter: none;
+}
+
+.dlg__btn--primary {
+  background: var(--color-primary, #1E88E5);
+  color: #fff;
+}
+
+/* ── Card with inputs ── */
+.dlg__card--form {
+  text-align: left;
+  padding: 24px 20px 18px;
+}
+
+.dlg__card--form .dlg__title {
+  margin-bottom: 6px;
+}
+
+.dlg__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.dlg__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dlg__field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #6B7280);
+}
+
+.dlg__input {
+  width: 100%;
+  height: 50px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--color-border, #E5E7EB);
+  background: var(--color-bg, #F7F8FA);
+  color: inherit;
+  font: inherit;
+  font-size: 16px; /* 16px keeps iOS from zooming in */
+  outline: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.dlg__input:focus {
+  border-color: var(--color-primary, #1E88E5);
+  background: var(--color-surface, #fff);
+}
+
+.dlg__input::placeholder {
+  color: var(--color-text-muted, #9CA3AF);
+}
+
+.dlg--dark .dlg__field-label {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dlg--dark .dlg__input {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dlg--dark .dlg__input:focus {
+  border-color: #64B5F6;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dlg--dark .dlg__input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dlg__link-danger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  border: none;
+  background: none;
+  color: #EF4444;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Bottom action sheet ── */
+.dlg--sheet {
+  align-items: flex-end;
+  padding: 0;
+}
+
+.dlg__sheet {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 24px 24px 0 0;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111827);
+  box-shadow: 0 -10px 40px rgba(17, 24, 39, 0.18);
+  animation: dlg-up 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.dlg--dark .dlg__sheet {
+  background: #1c1f30;
+  color: #fff;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.dlg--sheet.dlg--closing .dlg__sheet {
+  animation: dlg-down 0.17s ease-in forwards;
+}
+
+.dlg__grab {
+  width: 40px;
+  height: 5px;
+  margin: 0 auto 14px;
+  border-radius: 3px;
+  background: rgba(128, 128, 140, 0.35);
+}
+
+.dlg__sheet-head {
+  padding: 0 6px 12px;
+}
+
+.dlg__sheet-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.dlg__sheet-sub {
+  margin-top: 3px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text-secondary, #6B7280);
+}
+
+.dlg--dark .dlg__sheet-sub {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dlg__items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 18px;
+  background: var(--color-bg, #F7F8FA);
+}
+
+.dlg--dark .dlg__items {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dlg__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dlg__item:active {
+  background: rgba(128, 128, 140, 0.12);
+}
+
+.dlg__item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 12px;
+  font-size: 20px;
+  background: var(--color-primary-light, #E3F2FD);
+  color: var(--color-primary, #1E88E5);
+}
+
+.dlg--dark .dlg__item-icon {
+  background: rgba(100, 181, 246, 0.14);
+  color: #64B5F6;
+}
+
+.dlg__item-label {
+  flex: 1;
+}
+
+.dlg__item--danger {
+  color: #EF4444;
+}
+
+.dlg__item--danger .dlg__item-icon {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+
+.dlg--dark .dlg__item--danger {
+  color: #EF5350;
+}
+
+.dlg__item--selected {
+  background: var(--color-surface, #fff);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06);
+}
+
+.dlg__item-check {
+  font-size: 22px;
+  color: var(--color-primary, #1E88E5);
+}
+
+.dlg__sheet-cancel {
+  width: 100%;
+  margin-top: 10px;
+}
+
+@keyframes dlg-up { from { transform: translateY(100%); } }
+@keyframes dlg-down { to { transform: translateY(100%); } }

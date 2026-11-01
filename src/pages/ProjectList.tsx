@@ -9,6 +9,7 @@ import {
 } from '@ionic/react';
 import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, optionsOutline, personOutline, callOutline, locationOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
+import { useConfirm } from '../components/Dialogs';
 import { projectEstimate } from '../lib/pricing';
 import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
@@ -88,7 +89,15 @@ const ProjectList: React.FC = () => {
   const refresh = () => setProjects(loadProjects());
   useIonViewWillEnter(() => { refresh(); });
 
-  const handleDelete = (id: string) => {
+  const confirm = useConfirm();
+  const handleDelete = async (id: string, name: string, slider: HTMLIonItemSlidingElement | null) => {
+    const ok = await confirm({
+      title: t('pd.deleteTitle'),
+      message: <><b>«{name}»</b><br />{t('proj.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    slider?.close();
+    if (!ok) return;
     deleteProject(id);
     refresh();
   };
@@ -249,7 +258,7 @@ const ProjectList: React.FC = () => {
                     </IonItem>
 
                     <IonItemOptions side="end">
-                      <IonItemOption color="danger" onClick={() => handleDelete(p.id)}>
+                      <IonItemOption color="danger" onClick={e => handleDelete(p.id, p.clientName, (e.currentTarget as HTMLElement).closest('ion-item-sliding'))}>
                         <IonIcon slot="icon-only" icon={trashOutline} />
                       </IonItemOption>
                     </IonItemOptions>

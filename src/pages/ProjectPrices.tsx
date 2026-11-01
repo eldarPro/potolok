@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonIcon, IonAlert, useIonViewWillEnter,
+  IonButtons, IonBackButton, IonIcon, useIonViewWillEnter,
 } from '@ionic/react';
 import { chevronBackOutline, addOutline, chevronForwardOutline } from 'ionicons/icons';
 import { useParams } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { EstimateItem, ItemPrices, projectEstimate, projectItems, roomsUsing, wi
 import { KIND_CATALOG_KEY, fmtRub, itemTitle, unitLabel } from '../lib/estimateFormat';
 import PriceEditSheet from '../components/PriceEditSheet';
 import { useT } from '../lib/i18n';
+import { useConfirm, usePrompt } from '../components/Dialogs';
 import './ProjectPrices.css';
 
 type LinesKey = 'clientLines' | 'workerLines';
@@ -22,8 +23,8 @@ const ProjectPrices: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [editing, setEditing] = useState<EstimateItem | null>(null);
-  const [lineEdit, setLineEdit] = useState<{ key: LinesKey; line: EstimateAdjustment | null } | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
+  const prompt = usePrompt();
+  const confirm = useConfirm();
   const [discountDraft, setDiscountDraft] = useState('');
 
   const load = () => {
@@ -60,22 +61,47 @@ const ProjectPrices: React.FC = () => {
     save({ ...pricing, [key]: lines });
   };
 
-  const deleteLine = (key: LinesKey, line: EstimateAdjustment) =>
-    save({ ...pricing, [key]: pricing[key].filter(l => l.id !== line.id) });
+  const deleteLine = async (key: LinesKey, line: EstimateAdjustment) => {
+    const ok = await confirm({
+      title: t('pl.deleteTitle'),
+      message: <><b>«{line.title}»</b><br />{t('pl.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    if (ok) save({ ...pricing, [key]: pricing[key].filter(l => l.id !== line.id) });
+  };
+
+  const openLine = async (key: LinesKey, line: EstimateAdjustment | null) => {
+    const v = await prompt({
+      title: t(key === 'clientLines' ? 'pp.clientLines' : 'pp.workerLines'),
+      message: t('pp.lineHint'),
+      confirmText: t('common.save'),
+      fields: [
+        { name: 'title', placeholder: t('pp.lineTitle'), value: line?.title ?? '', required: true },
+        { name: 'amount', type: 'number', placeholder: t('pp.lineAmount'), value: line ? String(line.amount) : '', required: true },
+      ],
+      destructive: line ? { text: t('common.delete'), onClick: () => deleteLine(key, line) } : undefined,
+    });
+    if (v) saveLine(key, line, v.title, v.amount);
+  };
+
+  const askReset = async () => {
+    const ok = await confirm({ title: t('pp.resetTitle'), message: t('pp.resetMsg'), confirmText: t('pe.reset'), tone: 'warning' });
+    if (ok) save({ ...pricing, overrides: {} });
+  };
 
   const linesCard = (key: LinesKey, titleKey: string) => (
     <div className="card prices-card">
       <div className="prices-card__label">{t(titleKey)}</div>
       {pricing[key].length === 0 && <div className="prices-empty">{t('pp.noLines')}</div>}
       {pricing[key].map(l => (
-        <button key={l.id} className="prices-row" onClick={() => setLineEdit({ key, line: l })}>
+        <button key={l.id} className="prices-row" onClick={() => openLine(key, l)}>
           <span className="prices-row__name">{l.title}</span>
           <span className={`prices-row__value${l.amount < 0 ? ' prices-row__value--minus' : ''}`}>
             {l.amount < 0 ? '−' : '+'}{fmtRub(Math.abs(l.amount))}
           </span>
         </button>
       ))}
-      <button className="prices-add" onClick={() => setLineEdit({ key, line: null })}>
+      <button className="prices-add" onClick={() => openLine(key, null)}>
         <IonIcon icon={addOutline} />{t('pp.addLine')}
       </button>
     </div>
@@ -146,7 +172,7 @@ const ProjectPrices: React.FC = () => {
           </div>
 
           {changedCount > 0 && (
-            <button className="prices-reset" onClick={() => setConfirmReset(true)}>{t('pp.resetAll')}</button>
+            <button className="prices-reset" onClick={() => askReset()}>{t('pp.resetAll')}</button>
           )}
         </div>
 
@@ -159,40 +185,7 @@ const ProjectPrices: React.FC = () => {
         />
       </IonContent>
 
-      <IonAlert
-        isOpen={!!lineEdit}
-        onDidDismiss={() => setLineEdit(null)}
-        header={lineEdit ? t(lineEdit.key === 'clientLines' ? 'pp.clientLines' : 'pp.workerLines') : ''}
-        message={t('pp.lineHint')}
-        inputs={[
-          { name: 'title', type: 'text', placeholder: t('pp.lineTitle'), value: lineEdit?.line?.title ?? '' },
-          { name: 'amount', type: 'number', placeholder: t('pp.lineAmount'), value: lineEdit?.line ? String(lineEdit.line.amount) : '' },
-        ]}
-        buttons={[
-          ...(lineEdit?.line ? [{
-            text: t('common.delete'), role: 'destructive',
-            handler: () => { if (lineEdit?.line) deleteLine(lineEdit.key, lineEdit.line); },
-          }] : []),
-          { text: t('common.cancel'), role: 'cancel' },
-          {
-            text: t('common.save'),
-            handler: (v: { title: string; amount: string }) => {
-              if (lineEdit) saveLine(lineEdit.key, lineEdit.line, v.title, v.amount);
-            },
-          },
-        ]}
-      />
 
-      <IonAlert
-        isOpen={confirmReset}
-        onDidDismiss={() => setConfirmReset(false)}
-        header={t('pp.resetTitle')}
-        message={t('pp.resetMsg')}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          { text: t('pe.reset'), role: 'destructive', handler: () => save({ ...pricing, overrides: {} }) },
-        ]}
-      />
     </IonPage>
   );
 };

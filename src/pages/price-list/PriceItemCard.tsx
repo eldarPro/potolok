@@ -1,6 +1,7 @@
 import React from 'react';
-import { IonIcon, useIonActionSheet } from '@ionic/react';
-import { ellipsisVertical } from 'ionicons/icons';
+import { IonIcon } from '@ionic/react';
+import { ellipsisVertical, createOutline, trashOutline } from 'ionicons/icons';
+import { useMenu } from '../../components/Dialogs';
 import { useT } from '../../lib/i18n';
 
 export interface PriceLine {
@@ -33,16 +34,15 @@ const PriceColumn: React.FC<{ kind: 'client' | 'worker'; label: string; lines: P
 
 const PriceItemCard: React.FC<Props> = ({ title, swatch, tags, client, worker, description, onEdit, onDelete }) => {
   const { t } = useT();
-  const [presentMenu] = useIonActionSheet();
+  const menu = useMenu();
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
-    presentMenu({
-      header: title,
-      buttons: [
-        { text: t('common.edit'), handler: onEdit },
-        { text: t('common.delete'), role: 'destructive', handler: onDelete },
-        { text: t('common.cancel'), role: 'cancel' },
+    menu({
+      title,
+      items: [
+        { icon: createOutline, label: t('common.edit'), onClick: onEdit },
+        { icon: trashOutline, label: t('common.delete'), danger: true, onClick: onDelete },
       ],
     });
   };

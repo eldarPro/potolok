@@ -1,21 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { IonIcon, IonToggle } from '@ionic/react';
 import {
   resizeOutline, layersOutline, reorderThreeOutline, bulbOutline, albumsOutline, buildOutline, briefcaseOutline,
   closeOutline, chevronBackOutline, chevronDownOutline, checkmarkOutline, ellipsisVerticalOutline,
-  trashOutline, searchOutline,
+  trashOutline, searchOutline, cutOutline, addOutline,
 } from 'ionicons/icons';
 import {
   Room, ProjectPricing, CatalogItem, LightingCatalogItem, NicheItem, Accessory, AdditionalService,
   RoomAccessoryItem, RoomServiceItem, RoomNicheCount, RoomLightingElement,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
-import { Point, edgeLabel } from '../lib/geometry';
+import { Point, edgeLabel, vertexLabels, nextVertexLabel } from '../lib/geometry';
 import { roomDiagonals, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm, diagonalCm, diagonalKey } from '../lib/diagonals';
-import { reshapedRoom, resizedPoints, wallCm, setWallProfile, setAllProfiles } from '../lib/roomEdit';
+import { reshapedRoom, resizedPoints, wallCm, setWallProfile, setAllProfiles, roundEdge, bendEdge, splitEdge } from '../lib/roomEdit';
 import { roomItems, lineTotal, nicheCost, ItemKind } from '../lib/pricing';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
+import { useConfirm } from './Dialogs';
+import { wallArcIcon, wallLineIcon } from '../lib/icons';
+import { createPortal } from 'react-dom';
 import './SectionPanel.css';
 
 export type PanelSection = 'diagonals' | 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
@@ -52,12 +55,38 @@ interface Props {
   onFocus: (s: CanvasSelection | null) => void;
   /** close the panel and pick the element on the drawing, where its card has the rest */
   onPickElement: (s: CanvasSelection) => void;
+  /** the wall being split (a sub-page of profiles), or null */
+  splitWall: number | null;
+  onSplitWall: (index: number | null) => void;
+  /** a not-yet-applied split — the drawing shows the new corner and parts meanwhile */
+  onPreviewRoom: (partial: Partial<Room> | null) => void;
+  onToast: (message: string) => void;
   /** typed sizes not yet applied — the drawing shows them meanwhile */
   onPreview: (points: Point[] | null) => void;
   expanded: boolean;
   onExpand: (v: boolean) => void;
   onClose: () => void;
+  /** open a new item form of this price-list category (from an empty list) */
+  onAddToPriceList: (category: string) => void;
 }
+
+/**
+ * A section can open a sub-page (e.g. picking one wall's profile). Its title
+ * and the way back then take over the panel header instead of the list.
+ */
+interface SubPage { crumb: string; title: string; tag?: string; onBack: () => void }
+const SubPageCtx = createContext<(p: SubPage | null) => void>(() => {});
+const AddToPriceCtx = createContext<(category: string) => void>(() => {});
+const useSubPage = (page: SubPage | null, key: unknown) => {
+  const set = useContext(SubPageCtx);
+  const ref = useRef(page);
+  ref.current = page;
+  useEffect(() => {
+    if (!ref.current) { set(null); return; }
+    set({ ...ref.current, onBack: () => ref.current?.onBack() });
+    return () => set(null);
+  }, [key]);
+};
 
 const rub = (n: number) => `${Math.round(n).toLocaleString('ru')} ₽`;
 const lightColor = (color: string) => (color === '#ffffff' ? '#ffeb3b' : color);
@@ -72,6 +101,7 @@ const SectionPanel: React.FC<Props> = props => {
   const { t } = useT();
   const meta = META[section];
   const touchY = useRef<number | null>(null);
+  const [sub, setSub] = useState<SubPage | null>(null);
 
   const total = meta.kind
     ? roomItems(room, pricing).filter(i => i.kind === meta.kind).reduce((s, i) => s + lineTotal(i, 'client'), 0)
@@ -89,20 +119,37 @@ const SectionPanel: React.FC<Props> = props => {
   };
 
   return (
-    <div className="spanel" style={{ '--accent': meta.color } as React.CSSProperties}>
+    <div className={`spanel${section === 'diagonals' ? ' spanel--last' : ''}`} style={{ '--accent': meta.color } as React.CSSProperties}>
       <div className="spanel__head" {...grab}>
         <div className="spanel__grab" onClick={() => onExpand(!expanded)}><i /></div>
-        <div className="spanel__title">
-          <span className="spanel__icon" style={{ background: `${meta.color}26`, color: meta.color }}>
-            <IonIcon icon={meta.icon} />
-          </span>
-          <span className="spanel__name">{t(meta.title)}</span>
-          {total > 0 && <span className="spanel__total">{rub(total)}</span>}
-          <button className="spanel__close" onClick={onClose} aria-label={t('sp.close')}>
-            <IonIcon icon={closeOutline} />
-          </button>
-        </div>
+        {sub ? (
+          <div className="spanel__title">
+            <button className="spanel__iconbtn spanel__backbtn" onClick={sub.onBack} aria-label={t('sp.back')}>
+              <IonIcon icon={chevronBackOutline} />
+            </button>
+            <span className="spanel__subname">
+              <small>{sub.crumb}</small>
+              <span>{sub.title}{sub.tag && <i className="spanel__tag">{sub.tag}</i>}</span>
+            </span>
+            <button className="spanel__close" onClick={onClose} aria-label={t('sp.close')}>
+              <IonIcon icon={closeOutline} />
+            </button>
+          </div>
+        ) : (
+          <div className="spanel__title">
+            <span className="spanel__icon" style={{ background: `${meta.color}26`, color: meta.color }}>
+              <IonIcon icon={meta.icon} />
+            </span>
+            <span className="spanel__name">{t(meta.title)}</span>
+            {total > 0 && <span className="spanel__total">{rub(total)}</span>}
+            <button className="spanel__close" onClick={onClose} aria-label={t('sp.close')}>
+              <IonIcon icon={closeOutline} />
+            </button>
+          </div>
+        )}
       </div>
+      <AddToPriceCtx.Provider value={props.onAddToPriceList}>
+      <SubPageCtx.Provider value={setSub}>
       {room.areaSqm === 0 && (section === 'diagonals' || section === 'profile' || section === 'lighting')
         ? <div className="spanel__body"><Empty text={t('mat.drawFirst')} /></div>
         : section === 'diagonals' ? <DiagonalsBody {...props} />
@@ -111,13 +158,27 @@ const SectionPanel: React.FC<Props> = props => {
         : section === 'lighting' ? <LightingBody {...props} />
         : section === 'niche' ? <NicheBody {...props} />
         : <CountBody {...props} />}
+      </SubPageCtx.Provider>
+      </AddToPriceCtx.Provider>
     </div>
   );
 };
 
-const Empty: React.FC<{ text: string; sub?: string }> = ({ text, sub }) => (
-  <div className="spanel__empty"><b>{text}</b>{sub && <span>{sub}</span>}</div>
-);
+/** `addTo` — price-list category: shows a button straight to a new item form; saving it returns here */
+const Empty: React.FC<{ text: string; sub?: string; addTo?: string }> = ({ text, sub, addTo }) => {
+  const { t } = useT();
+  const addToPrice = useContext(AddToPriceCtx);
+  return (
+    <div className="spanel__empty">
+      <b>{text}</b>{sub && <span>{sub}</span>}
+      {addTo && (
+        <button className="spanel__empty-btn" onClick={() => addToPrice(addTo)}>
+          <IonIcon icon={addOutline} />{t('sp.addToPriceList')}
+        </button>
+      )}
+    </div>
+  );
+};
 
 const Search: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
   const { t } = useT();
@@ -132,21 +193,11 @@ const Search: React.FC<{ value: string; onChange: (v: string) => void }> = ({ va
 
 const matches = (q: string, title: string) => !q.trim() || title.toLowerCase().includes(q.trim().toLowerCase());
 
-/** The apply button pinned under a scrolling list of typed sizes */
-const ApplyBar: React.FC<{ label: string; onApply: () => void; onReset: () => void }> = ({ label, onApply, onReset }) => {
-  const { t } = useT();
-  return (
-    <div className="spanel__apply">
-      <button className="spanel__btn spanel__btn--ghost" onClick={onReset}>{t('common.cancel')}</button>
-      <button className="spanel__btn" onClick={onApply}>{label}</button>
-    </div>
-  );
-};
-
 // ═══ Diagonals ═══
 // The walls stay as they are; typing a diagonal reshapes the outline around
 // it. Only n − 3 diagonals are free — for a quad, the one typed last drives
-// and the other follows.
+// and the other follows. While typing the drawing previews the shape; leaving
+// the field (or Enter) saves it as one undo step, like any other change here.
 const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPreview }) => {
   const { t } = useT();
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -171,6 +222,10 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
   const previewKey = dirty ? JSON.stringify(pts) : '';
   useEffect(() => { onPreview(dirty ? pts : null); }, [previewKey]);
   useEffect(() => () => onPreview(null), []);
+
+  const commit = () => {
+    if (dirty && pts) { onChange(reshapedRoom(room, pts, fixing)); setDraft({}); setDriver(null); }
+  };
 
   const edit = (key: string, raw: string) => {
     setDriver(key);
@@ -206,6 +261,8 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
                   value={draft[d.key] ?? String(diagonalCm(pts ?? room.points, d.i, d.j))}
                   onChange={e => edit(d.key, e.target.value)}
                   onFocus={e => { onFocus({ kind: 'diagonal', i: d.i, j: d.j }); e.target.select(); }}
+                  onBlur={commit}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 />
                 <span>{t('re.cm')}</span>
               </label>
@@ -213,10 +270,6 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
           );
         })}
       </div>
-      {dirty && pts && (
-        <ApplyBar label={t('diag.apply')} onReset={() => { setDraft({}); setDriver(null); }}
-          onApply={() => { onChange(reshapedRoom(room, pts, fixing)); setDraft({}); }} />
-      )}
     </>
   );
 };
@@ -225,7 +278,7 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
 const FabricBody: React.FC<Props> = ({ room, pricing, fabrics, onChange }) => {
   const { t } = useT();
   const [q, setQ] = useState('');
-  if (fabrics.length === 0) return <div className="spanel__body"><Empty text={t('mat.noFabrics')} /></div>;
+  if (fabrics.length === 0) return <div className="spanel__body"><Empty text={t('mat.noFabrics')} addTo="fabrics" /></div>;
   const price = (f: CatalogItem) => pricing?.overrides[f.id]?.price ?? f.price;
   return (
     <div className="spanel__body">
@@ -249,43 +302,148 @@ const FabricBody: React.FC<Props> = ({ room, pricing, fabrics, onChange }) => {
 };
 
 // ═══ Profiles: one row per wall — its length and its profile ═══
-const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus, onFocus, onPickElement, onPreview }) => {
+const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus, onFocus, onPreview, splitWall, onSplitWall, onPreviewRoom, onToast }) => {
   const { t } = useT();
   const [draft, setDraft] = useState<Record<number, string>>({});
   // the wall (or 'all') whose profile is being picked — the list replaces the walls
-  const [picking, setPicking] = useState<number | 'all' | null>(null);
+  const [picking, setPicking] = useState<number | 'all' | 'part1' | 'part2' | null>(null);
   const [q, setQ] = useState('');
+  // ⋮ of a wall row: what the row itself can't do (split, round) — anchored to the button
+  const [menu, setMenu] = useState<{ i: number; rect: DOMRect } | null>(null);
   const shape = room.points.map(p => `${p.x},${p.y}`).join(';');
   useEffect(() => { setDraft({}); }, [shape]);
 
   const segOf = (i: number) => room.profileSegments?.find(s => s.edgeIndex === i);
   // Typed lengths go in wall order, each on top of the previous one, so the
-  // drawing (and every other field) shows exactly what «Применить» will save.
+  // drawing (and every other field) previews what leaving the field will save.
   let pts: Point[] = room.points;
   for (const [k, raw] of Object.entries(draft).sort((x, y) => +x[0] - +y[0])) {
     const i = +k, cm = Math.round(parseFloat(raw));
     if (cm > 0 && cm !== wallCm(pts, i)) pts = resizedPoints(pts, i, cm) ?? pts;
   }
   const dirty = pts !== room.points;
+  const commit = () => { if (dirty) { onChange(reshapedRoom(room, pts)); setDraft({}); } };
   const previewKey = dirty ? JSON.stringify(pts) : '';
   useEffect(() => { onPreview(dirty ? pts : null); }, [previewKey]);
   useEffect(() => () => onPreview(null), []);
 
   const price = (p: CatalogItem) => pricing?.overrides[p.id]?.price ?? p.price;
+  const byId = (id: string | null) => profiles.find(p => p.id === id) ?? null;
+  const back = () => { setPicking(null); setQ(''); };
 
-  if (picking != null) {
-    const current = picking === 'all' ? null : segOf(picking)?.profileId ?? null;
-    const choose = (p: CatalogItem | null) => {
-      if (picking === 'all') { if (p) onChange(setAllProfiles(room, p)); }
-      else onChange(setWallProfile(room, picking, p));
-      setPicking(null); setQ('');
+  // ── Splitting a wall: where (from its first corner) and a profile per part ──
+  const splitting = splitWall != null && splitWall < room.points.length ? splitWall : null;
+  const [split, setSplit] = useState<{ raw: string; first: string | null; second: string | null }>({ raw: '', first: null, second: null });
+  const splitTotal = splitting == null ? 0 : wallCm(room.points, splitting);
+  useEffect(() => {
+    if (splitting == null) return;
+    const id = segOf(splitting)?.profileId ?? null;
+    setSplit({ raw: String(Math.round(splitTotal / 2)), first: id, second: id });
+    setPicking(null);
+  }, [splitting]);
+  const splitCm = Math.round(parseFloat(split.raw));
+  const splitValid = splitting != null && splitCm > 0 && splitCm < splitTotal;
+  const splitResult = splitValid ? splitEdge(room, splitting!, splitCm, byId(split.first), byId(split.second)) : null;
+  useEffect(() => {
+    onPreviewRoom(splitResult);
+    // the new corner on the drawing — it's right after the split wall's first corner
+    onFocus(splitResult && splitting != null ? { kind: 'corner', index: splitting + 1 } : null);
+  }, [splitting, splitValid && splitCm, split.first, split.second, room]);
+  useEffect(() => () => onPreviewRoom(null), []);
+  const labels = vertexLabels(room.points);
+  const splitNames = splitting == null ? null : (() => {
+    const la = labels[splitting], lb = labels[(splitting + 1) % room.points.length], mid = nextVertexLabel(room.points);
+    return { la, lb, wall: `${la}–${lb}`, part1: `${la}–${mid}`, part2: `${mid}–${lb}` };
+  })();
+  const cancelSplit = () => { onSplitWall(null); back(); };
+
+  const isPart = picking === 'part1' || picking === 'part2';
+  useSubPage(
+    splitNames && isPart ? {
+      crumb: `${t('mat.splitWall')} ${splitNames.wall}`,
+      title: t('prof.sheetTitle'),
+      tag: picking === 'part1' ? splitNames.part1 : splitNames.part2,
+      onBack: back,
+    }
+    : splitNames ? { crumb: t('sec.profile'), title: t('mat.splitWall'), tag: splitNames.wall, onBack: cancelSplit }
+    : picking == null ? null
+    : {
+      crumb: t('sec.profile'),
+      title: picking === 'all' ? t('mat.applyAll') : t('prof.sheetTitle'),
+      tag: picking === 'all' ? undefined : edgeLabel(room.points, picking as number).replace(/ /g, ''),
+      onBack: back,
+    },
+    `${splitting}:${picking}`,
+  );
+
+  if (splitNames && !isPart) {
+    const setFrom = (raw: string) => setSplit(x => ({ ...x, raw }));
+    const toRaw = splitCm > 0 && splitCm < splitTotal ? String(splitTotal - splitCm) : '';
+    const setTo = (raw: string) => {
+      const v = Math.round(parseFloat(raw));
+      setSplit(x => ({ ...x, raw: v > 0 && v < splitTotal ? String(splitTotal - v) : x.raw }));
+    };
+    const frac = splitValid ? splitCm / splitTotal : 0.5;
+    const color = (id: string | null) => byId(id)?.color ?? '#ff6b66';
+    const partRow = (part: 'part1' | 'part2', name: string, id: string | null) => {
+      const p = byId(id);
+      return (
+        <button className="spanel__row spanel__split-part" onClick={() => setPicking(part)}>
+          <span className="spanel__split-name">{name}</span>
+          <span className={`spanel__swatch spanel__swatch--line${p ? '' : ' spanel__swatch--none'}`} style={p ? { background: p.color } : undefined} />
+          <span className="spanel__grow">{p ? p.title : t('mat.noProfileBtn')}</span>
+          <IonIcon icon={chevronDownOutline} className="spanel__split-chev" />
+        </button>
+      );
     };
     return (
       <div className="spanel__body">
-        <button className="spanel__back" onClick={() => { setPicking(null); setQ(''); }}>
-          <IonIcon icon={chevronBackOutline} />
-          {picking === 'all' ? t('mat.applyAllHeader') : `${t('prof.sheetTitle')} ${edgeLabel(room.points, picking).replace(/ /g, '')}`}
+        <div className="spanel__split-bar" style={{ '--f': `${frac * 100}%`, '--c1': color(split.first), '--c2': color(split.second) } as React.CSSProperties}>
+          <input type="range" min={1} max={splitTotal - 1} step={1} value={splitValid ? splitCm : Math.round(splitTotal / 2)}
+            onChange={e => setFrom(e.target.value)} aria-label={t('mat.splitWall')} />
+        </div>
+        <div className="spanel__split-ends"><span>{splitNames.la}</span><span>{splitTotal} {t('re.cm')}</span><span>{splitNames.lb}</span></div>
+        <div className="spanel__split-fields">
+          {[
+            { label: t('split.from', { p: splitNames.la }), value: split.raw, set: setFrom },
+            { label: t('split.to', { p: splitNames.lb }), value: toRaw, set: setTo },
+          ].map(f => (
+            <label key={f.label} className="spanel__split-field">
+              <small>{f.label}</small>
+              <span className={`spanel__num${splitValid ? '' : ' spanel__num--bad'}`}>
+                <input type="number" inputMode="numeric" min="1" step="1" value={f.value}
+                  onChange={e => f.set(e.target.value)} onFocus={e => e.target.select()} />
+                <span>{t('re.cm')}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {profiles.length > 0 && <>
+          {partRow('part1', splitNames.part1, split.first)}
+          {partRow('part2', splitNames.part2, split.second)}
+        </>}
+        <button className="spanel__split-go" disabled={!splitResult}
+          onClick={() => { if (splitResult) { onChange(splitResult); onPreviewRoom(null); cancelSplit(); } }}>
+          <IonIcon icon={cutOutline} />{t('mat.split')}
         </button>
+      </div>
+    );
+  }
+
+  if (picking != null) {
+    const current = picking === 'all' ? null
+      : picking === 'part1' ? split.first : picking === 'part2' ? split.second
+      : segOf(picking)?.profileId ?? null;
+    const choose = (p: CatalogItem | null) => {
+      if (picking === 'all') { if (p) onChange(setAllProfiles(room, p)); }
+      else if (picking === 'part1') setSplit(x => ({ ...x, first: p?.id ?? null }));
+      else if (picking === 'part2') setSplit(x => ({ ...x, second: p?.id ?? null }));
+      else onChange(setWallProfile(room, picking, p));
+      back();
+    };
+    return (
+      <div className="spanel__body">
+        {profiles.length === 0 && <Empty text={t('mat.noProfiles')} addTo="profiles" />}
         {profiles.length > SEARCH_FROM && <Search value={q} onChange={setQ} />}
         {profiles.filter(p => matches(q, p.title)).map(p => (
           <button key={p.id} className={`spanel__row spanel__pick${p.id === current ? ' spanel__row--picked' : ''}`} onClick={() => choose(p)}>
@@ -322,7 +480,6 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
               <span className="spanel__wallcolor" style={{ background: seg?.profile.color ?? '#ff6b66' }} />
               <span className="spanel__walllabel">
                 {edgeLabel(room.points, i).replace(/ /g, '')}
-                {p.bulge ? <span className="spanel__curve">⌒</span> : null}
               </span>
               <label className={`spanel__num spanel__num--wall${edited ? ' spanel__num--edited' : ''}`}>
                 <input
@@ -330,6 +487,8 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
                   value={draft[i] ?? String(wallCm(pts, i))}
                   onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [i]: v })); }}
                   onFocus={e => { onFocus({ kind: 'wall', index: i }); e.target.select(); }}
+                  onBlur={commit}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 />
                 <span>{t('re.cm')}</span>
               </label>
@@ -338,26 +497,76 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
                 <span>{seg ? seg.profile.title : t('mat.noProfile')}</span>
                 <IonIcon icon={chevronDownOutline} />
               </button>
-              <button className="spanel__iconbtn" onClick={e => { e.stopPropagation(); onPickElement({ kind: 'wall', index: i }); }}>
+              <button className="spanel__iconbtn" aria-label={t('sp.more')}
+                onClick={e => { e.stopPropagation(); onFocus({ kind: 'wall', index: i }); setMenu({ i, rect: e.currentTarget.getBoundingClientRect() }); }}>
                 <IonIcon icon={ellipsisVerticalOutline} />
               </button>
             </div>
           );
         })}
       </div>
-      {dirty && (
-        <ApplyBar label={t('prof.applySize')} onReset={() => setDraft({})}
-          onApply={() => { onChange(reshapedRoom(room, pts)); setDraft({}); }} />
-      )}
+      {menu && menu.i < room.points.length && (() => {
+        const i = menu.i;
+        const curved = !!room.points[i]?.bulge;
+        return (
+          <WallMenu
+            anchor={menu.rect}
+            title={`${t('mat.wall')} ${edgeLabel(room.points, i).replace(/ /g, '')}`}
+            onClose={() => setMenu(null)}
+            actions={[
+              { icon: cutOutline, label: t('mat.split'), onClick: () => onSplitWall(i) },
+              curved
+                ? { icon: wallLineIcon, label: t('ec.straighten'), onClick: () => { const r = bendEdge(room, i, 0); if (r) onChange(r); } }
+                : {
+                  icon: wallArcIcon, label: t('ec.round'), onClick: () => {
+                    const r = roundEdge(room, i);
+                    if (r) onChange(r); else onToast(t('ec.cantRound'));
+                  },
+                },
+            ]}
+          />
+        );
+      })()}
     </>
+  );
+};
+
+/** Popover next to a row's ⋮ — opens upwards when the row sits low on screen */
+const WallMenu: React.FC<{
+  anchor: DOMRect;
+  title: string;
+  actions: { icon: string; label: string; onClick: () => void }[];
+  onClose: () => void;
+}> = ({ anchor, title, actions, onClose }) => {
+  const up = anchor.top > window.innerHeight / 2;
+  const pos: React.CSSProperties = {
+    right: Math.max(8, window.innerWidth - anchor.right),
+    ...(up ? { bottom: window.innerHeight - anchor.top + 4 } : { top: anchor.bottom + 4 }),
+  };
+  // portalled: the page header sits above the panel's stacking context
+  return createPortal(
+    <div className="spanel-menu">
+      <div className="spanel-menu__backdrop" onClick={onClose} />
+      <div className="spanel-menu__panel" style={pos}>
+        <div className="spanel-menu__title">{title}</div>
+        {actions.map(a => (
+          <button key={a.label} className="spanel-menu__item" onClick={() => { onClose(); a.onClick(); }}>
+            <IonIcon icon={a.icon} />
+            <span>{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
   );
 };
 
 // ═══ Lighting: pick a type to place it, then what's in the room ═══
 const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onPlaceLighting, onPickElement }) => {
   const { t } = useT();
+  const confirm = useConfirm();
   const [q, setQ] = useState('');
-  if (lightings.length === 0) return <div className="spanel__body"><Empty text={t('mat.noLightCatalog')} sub={t('mat.noLightCatalogSub')} /></div>;
+  if (lightings.length === 0) return <div className="spanel__body"><Empty text={t('mat.noLightCatalog')} sub={t('mat.noLightCatalogSub')} addTo="lightings" /></div>;
   const els = room.lighting ?? [];
   const groups = lightings
     .map(l => ({ item: l, els: els.filter(e => e.catalogItemId === l.id) }))
@@ -391,7 +600,10 @@ const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onP
             {g.item.title}<small>{amount(g)}</small>
           </button>
           <button className="spanel__iconbtn spanel__iconbtn--danger" aria-label={t('common.delete')}
-            onClick={() => onChange({ lighting: els.filter(e => !g.els.includes(e)) })}>
+            onClick={async () => {
+              if (await confirm({ title: t('sp.removeTitle'), message: `«${g.item.title}», ${amount(g)}`, confirmText: t('common.delete'), dark: true }))
+                onChange({ lighting: els.filter(e => !g.els.includes(e)) });
+            }}>
             <IonIcon icon={trashOutline} />
           </button>
         </div>
@@ -403,7 +615,8 @@ const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onP
 // ═══ Niches: along a wall — placed on the drawing; pieces — counted here ═══
 const NicheBody: React.FC<Props> = ({ room, pricing, niches, onChange, onPlaceNiche, onPickElement }) => {
   const { t } = useT();
-  if (niches.length === 0) return <div className="spanel__body"><Empty text={t('mat.noNicheCatalog')} sub={t('mat.noNicheCatalogSub')} /></div>;
+  const confirm = useConfirm();
+  if (niches.length === 0) return <div className="spanel__body"><Empty text={t('mat.noNicheCatalog')} sub={t('mat.noNicheCatalogSub')} addTo="niches" /></div>;
   const list = room.selectedNiches ?? [];
   const placed = list.filter(n => n.kind !== 'count');
   const price = (n: NicheItem) => pricing?.overrides[n.id]?.price ?? n.price;
@@ -446,7 +659,10 @@ const NicheBody: React.FC<Props> = ({ room, pricing, niches, onChange, onPlaceNi
               {n.niche.title}<small>{len.toFixed(2)} {t('unit.m')}</small>
             </button>
             <button className="spanel__iconbtn spanel__iconbtn--danger" aria-label={t('common.delete')}
-              onClick={() => onChange({ selectedNiches: list.filter(e => e !== n) })}>
+              onClick={async () => {
+                if (await confirm({ title: t('sp.removeTitle'), message: `«${n.niche.title}», ${len.toFixed(2)} ${t('unit.m')}`, confirmText: t('common.delete'), dark: true }))
+                  onChange({ selectedNiches: list.filter(e => e !== n) });
+              }}>
               <IonIcon icon={trashOutline} />
             </button>
           </div>
@@ -464,8 +680,8 @@ const CountBody: React.FC<Props> = ({ section, room, pricing, accessories, servi
   const catalog: { id: string; title: string; price: number; unit?: string }[] = isAcc ? accessories : services;
   if (catalog.length === 0) {
     return <div className="spanel__body">{isAcc
-      ? <Empty text={t('mat.noAccessoryCatalog')} sub={t('mat.noAccessoryCatalogSub')} />
-      : <Empty text={t('mat.noServiceCatalog')} sub={t('mat.noServiceCatalogSub')} />}</div>;
+      ? <Empty text={t('mat.noAccessoryCatalog')} sub={t('mat.noAccessoryCatalogSub')} addTo="accessories" />
+      : <Empty text={t('mat.noServiceCatalog')} sub={t('mat.noServiceCatalogSub')} addTo="services" />}</div>;
   }
   const accList = room.selectedAccessories ?? [];
   const svcList = room.selectedServices ?? [];

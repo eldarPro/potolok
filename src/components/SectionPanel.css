@@ -81,6 +81,9 @@
   flex-shrink: 0;
 }
 
+/* No tab bar under the panel (diagonals) — keep the list clear of the home indicator */
+.spanel--last .spanel__body { padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)); }
+
 .spanel__body {
   flex: 1;
   min-height: 0;
@@ -139,6 +142,23 @@
   font-size: 12px;
   color: rgba(255, 255, 255, 0.45);
 }
+
+.spanel__empty-btn {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(100, 181, 246, 0.14);
+  color: #64b5f6;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.spanel__empty-btn ion-icon { font-size: 18px; }
 
 /* rows: the highlight is a rounded plate inset from the panel edge */
 .spanel__row {
@@ -341,15 +361,12 @@
 }
 
 .spanel__walllabel {
+  position: relative;
   width: 36px;
   font-weight: 800;
   color: #fff;
   flex-shrink: 0;
-}
-
-.spanel__curve {
-  color: #F9A825;
-  margin-left: 2px;
+  white-space: nowrap;
 }
 
 .spanel__select {
@@ -388,24 +405,47 @@
   color: #FFB74D;
 }
 
-.spanel__back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 0 10px;
-  border: none;
-  background: none;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
+/* sub-page header: back · crumb over title · close */
+.spanel__backbtn {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #64b5f6;
+  font-size: 22px;
 }
 
-.spanel__back ion-icon {
-  font-size: 20px;
-  color: #64b5f6;
+.spanel__subname {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.spanel__subname small {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.spanel__subname > span {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spanel__tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 7px;
+  background: rgba(255, 213, 79, 0.15);
+  color: #ffd54f;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 14px;
 }
 
 /* search */
@@ -520,29 +560,196 @@
   color: #fff;
 }
 
-/* apply bar pinned under the list */
-.spanel__apply {
-  flex-shrink: 0;
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+/* ── ⋮ popover of a row (same look as the room menu in the header) ── */
+.spanel-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
 }
 
-.spanel__btn {
-  flex: 2;
-  padding: 12px 14px;
+.spanel-menu__backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.spanel-menu__panel {
+  position: fixed;
+  min-width: 220px;
+  padding: 6px 0;
+  border-radius: 14px;
+  background: #23263b;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.spanel-menu__title {
+  padding: 6px 16px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.spanel-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.spanel-menu__item:active { background: rgba(255, 255, 255, 0.06); }
+
+.spanel-menu__item ion-icon {
+  font-size: 19px;
+  opacity: 0.75;
+}
+
+/* ── Wall split sub-page: the wall as a bar, its two parts, a profile per part ── */
+.spanel__split-bar {
+  position: relative;
+  height: 28px;
+  margin: 4px 2px 0;
+}
+
+/* the two parts, coloured by their profiles */
+.spanel__split-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--c1) 0 var(--f), #1c1f2b var(--f) calc(var(--f) + 2px), var(--c2) calc(var(--f) + 2px) 100%);
+}
+
+.spanel__split-bar input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.spanel__split-bar input::-webkit-slider-runnable-track { height: 28px; background: none; }
+.spanel__split-bar input::-moz-range-track { height: 28px; background: none; }
+
+.spanel__split-bar input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #F9A825;
+  border: 3px solid #1c1f2b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.spanel__split-bar input::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #F9A825;
+  border: 3px solid #1c1f2b;
+}
+
+.spanel__split-ends {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 2px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.spanel__split-ends span:nth-child(2) {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.spanel__split-fields {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.spanel__split-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.spanel__split-field small {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.spanel__split-field .spanel__num {
+  width: 100%;
+  height: 44px;
+}
+
+.spanel__split-field .spanel__num input { font-size: 18px; font-weight: 800; }
+.spanel__split-field .spanel__num:focus-within { border-color: #F9A825; }
+
+.spanel__split-part {
+  width: 100%;
+  margin-top: 8px;
+  padding: 0 12px;
+  height: 46px;
   border: none;
   border-radius: 12px;
-  background: #F9A825;
-  color: #000;
-  font-size: 15px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
   font-weight: 700;
+  text-align: left;
   cursor: pointer;
 }
 
-.spanel__btn--ghost {
-  flex: 1;
+.spanel__split-name {
+  width: 44px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 700;
+}
+
+.spanel__split-chev { color: rgba(255, 255, 255, 0.4); font-size: 16px; }
+
+.spanel__split-go {
+  width: 100%;
+  height: 48px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 14px;
+  background: #F9A825;
+  color: #000;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.spanel__split-go ion-icon { font-size: 18px; }
+
+.spanel__split-go:disabled {
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
 }

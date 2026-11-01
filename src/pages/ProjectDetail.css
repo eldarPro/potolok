@@ -207,16 +207,20 @@
 
 .room-tile__preview--empty {
   flex-direction: column;
-  gap: 4px;
-  background: var(--color-surface);
-  border-bottom: 1px dashed var(--color-border);
-  color: var(--color-primary);
-  font-size: 13px;
-  font-weight: 600;
+  gap: 2px;
+  background: #F3F4F6;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.room-tile__preview--empty ion-icon {
-  font-size: 22px;
+.room-tile__ghost {
+  display: block;
+  fill: rgba(0, 0, 0, 0.03);
+  stroke: #C4C8CE;
+  stroke-width: 1.8;
+  stroke-dasharray: 5 4;
+  stroke-linejoin: round;
 }
 
 .room-tile__body {

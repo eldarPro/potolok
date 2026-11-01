@@ -403,8 +403,30 @@
 }
 
 .epick__head {
-  padding: 12px 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px 12px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.epick__head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.epick__back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .epick__title {

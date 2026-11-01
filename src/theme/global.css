@@ -277,3 +277,9 @@ ion-header.dark-header ion-toolbar:last-of-type {
 .blue-page {
   --background: var(--color-bg);
 }
+
+/* ── On-screen keyboard: lift bottom sheets above it (--kb-height comes from lib/keyboard.ts) ── */
+ion-modal.modal-sheet {
+  bottom: var(--kb-height, 0px);
+  transition: bottom 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}

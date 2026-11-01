@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  IonContent, IonIcon, IonTextarea, IonSpinner, IonAlert, useIonToast,
+  IonContent, IonIcon, IonTextarea, IonSpinner, useIonToast,
 } from '@ionic/react';
 import {
   cameraOutline, imagesOutline, sparklesOutline,
@@ -14,6 +14,7 @@ import { generateCeilingImages, ImageEditError } from '../lib/imageEdit';
 import type { LayoutBox } from '../lib/roomScene';
 import ActionButton from './ActionButton';
 import { useT } from '../lib/i18n';
+import { useConfirm } from './Dialogs';
 import './VisualizeWorkspace.css';
 
 /** The model sometimes adds or drops a fixture — a few variants per run let the user pick a faithful one. */
@@ -50,7 +51,7 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
 
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const confirm = useConfirm();
   const [pending, setPending] = useState<PendingVariants | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -166,7 +167,12 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
 
   const handleUndo = () => { if (versions.length > 1) persist({ versions: versions.slice(0, -1) }); };
   const handleReset = () => { if (versions.length > 1) persist({ versions: [versions[0]] }); };
-  const handleDeletePhoto = () => { persist(null); setDeleteConfirmOpen(false); };
+  const handleDeletePhoto = async () => {
+    const ok = await confirm({
+      title: t('viz.deletePhoto'), message: t('viz.deletePhotoConfirm'), confirmText: t('common.delete'), dark: true,
+    });
+    if (ok) persist(null);
+  };
 
   const handleDownload = () => {
     if (!current) return;
@@ -223,7 +229,7 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
                 <button className="viz-photo__tool" aria-label={t('viz.download')} title={t('viz.download')} onClick={handleDownload}>
                   <IonIcon icon={downloadOutline} />
                 </button>
-                <button className="viz-photo__tool" aria-label={t('viz.deletePhoto')} title={t('viz.deletePhoto')} onClick={() => setDeleteConfirmOpen(true)}>
+                <button className="viz-photo__tool" aria-label={t('viz.deletePhoto')} title={t('viz.deletePhoto')} onClick={handleDeletePhoto}>
                   <IonIcon icon={trashOutline} />
                 </button>
               </div>
@@ -289,16 +295,6 @@ const VisualizeWorkspace: React.FC<Props> = ({ visualization, onChange, room, fi
       />
     </IonContent>
 
-    <IonAlert
-      isOpen={deleteConfirmOpen}
-      onDidDismiss={() => setDeleteConfirmOpen(false)}
-      header={t('viz.deletePhoto')}
-      message={t('viz.deletePhotoConfirm')}
-      buttons={[
-        { text: t('common.cancel'), role: 'cancel' },
-        { text: t('common.delete'), role: 'destructive', handler: handleDeletePhoto },
-      ]}
-    />
     </>
   );
 };

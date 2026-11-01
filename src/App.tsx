@@ -3,6 +3,7 @@ import { Redirect, Route } from 'react-router-dom';
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { LanguageProvider } from './lib/i18n';
+import { DialogProvider } from './components/Dialogs';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -38,6 +39,7 @@ setupIonicReact();
 
 const App: React.FC = () => (
   <LanguageProvider>
+  <DialogProvider>
   <IonApp>
     <IonReactRouter basename={import.meta.env.BASE_URL}>
       <IonRouterOutlet>
@@ -77,6 +79,7 @@ const App: React.FC = () => (
       </IonRouterOutlet>
     </IonReactRouter>
   </IonApp>
+  </DialogProvider>
   </LanguageProvider>
 );
 

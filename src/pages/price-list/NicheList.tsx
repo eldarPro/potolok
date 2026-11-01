@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
-  IonAlert, useIonViewWillEnter, useIonRouter,
+  useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
 import { addOutline, chevronBackOutline, albumsOutline } from 'ionicons/icons';
 import ActionButton from '../../components/ActionButton';
 import { NicheItem } from '../../types';
 import { loadNiches, deleteNiche } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
+import { useConfirm } from '../../components/Dialogs';
 import PriceItemCard, { PriceLine } from './PriceItemCard';
 import './ItemCard.css';
 
@@ -16,15 +17,19 @@ const NicheList: React.FC = () => {
   const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<NicheItem[]>([]);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = () => setItems(loadNiches());
   useIonViewWillEnter(load);
 
-  const confirmDelete = () => {
-    if (!deleteId) return;
-    deleteNiche(deleteId);
-    setDeleteId(null);
+  const askDelete = async (id: string, title: string) => {
+    const ok = await confirm({
+      title: t('pl.deleteTitle'),
+      message: <><b>«{title}»</b><br />{t('pl.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    if (!ok) return;
+    deleteNiche(id);
     load();
   };
 
@@ -82,7 +87,7 @@ const NicheList: React.FC = () => {
                 worker={[{ value: item.priceInstall, unit: unitLabel }, ...extras(item, 'worker')]}
                 description={item.description}
                 onEdit={() => router.push(`/price-list/niches/${item.id}/edit`)}
-                onDelete={() => setDeleteId(item.id)}
+                onDelete={() => askDelete(item.id, item.title)}
               />
               );
             })}
@@ -94,17 +99,6 @@ const NicheList: React.FC = () => {
             <IonIcon icon={addOutline} />
           </IonFabButton>
         </IonFab>
-
-        <IonAlert
-          isOpen={!!deleteId}
-          header={t('pl.deleteTitle')}
-          message={t('pl.deleteMsg')}
-          buttons={[
-            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
-            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
-          ]}
-          onDidDismiss={() => setDeleteId(null)}
-        />
       </IonContent>
     </IonPage>
   );

@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonIcon, IonFab, IonFabButton,
-  IonAlert, useIonViewWillEnter, useIonRouter,
+  useIonViewWillEnter, useIonRouter,
 } from '@ionic/react';
 import { addOutline, chevronBackOutline, briefcaseOutline } from 'ionicons/icons';
 import ActionButton from '../../components/ActionButton';
 import { AdditionalService } from '../../types';
 import { loadServices, deleteService } from '../../lib/storage';
 import { useT } from '../../lib/i18n';
+import { useConfirm } from '../../components/Dialogs';
 import PriceItemCard from './PriceItemCard';
 import './ItemCard.css';
 
@@ -16,15 +17,19 @@ const ServiceList: React.FC = () => {
   const { t } = useT();
   const router = useIonRouter();
   const [items, setItems] = useState<AdditionalService[]>([]);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = () => setItems(loadServices());
   useIonViewWillEnter(load);
 
-  const confirmDelete = () => {
-    if (!deleteId) return;
-    deleteService(deleteId);
-    setDeleteId(null);
+  const askDelete = async (id: string, title: string) => {
+    const ok = await confirm({
+      title: t('pl.deleteTitle'),
+      message: <><b>«{title}»</b><br />{t('pl.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    if (!ok) return;
+    deleteService(id);
     load();
   };
 
@@ -62,7 +67,7 @@ const ServiceList: React.FC = () => {
                 worker={[{ value: item.priceInstall }]}
                 description={item.description}
                 onEdit={() => router.push(`/price-list/services/${item.id}/edit`)}
-                onDelete={() => setDeleteId(item.id)}
+                onDelete={() => askDelete(item.id, item.title)}
               />
             ))}
           </div>
@@ -73,17 +78,6 @@ const ServiceList: React.FC = () => {
             <IonIcon icon={addOutline} />
           </IonFabButton>
         </IonFab>
-
-        <IonAlert
-          isOpen={!!deleteId}
-          header={t('pl.deleteTitle')}
-          message={t('pl.deleteMsg')}
-          buttons={[
-            { text: t('common.cancel'), role: 'cancel', handler: () => setDeleteId(null) },
-            { text: t('common.delete'), role: 'destructive', handler: confirmDelete },
-          ]}
-          onDidDismiss={() => setDeleteId(null)}
-        />
       </IonContent>
     </IonPage>
   );

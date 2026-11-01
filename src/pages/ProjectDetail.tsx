@@ -3,17 +3,18 @@ import {
   IonPage, IonHeader, IonToolbar, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon,
   IonModal, IonItem,
-  IonActionSheet, IonAlert, IonList, IonLabel, IonInput, IonTextarea,
+  IonList, IonLabel, IonInput, IonTextarea,
   useIonRouter, useIonViewWillEnter,
 } from '@ionic/react';
 import {
   chevronBackOutline, addOutline,
   documentTextOutline, ellipsisVerticalOutline, readerOutline,
-  callOutline, locationOutline, chatbubbleOutline, navigateOutline, createOutline, trashOutline,
+  callOutline, locationOutline, chatbubbleOutline, navigateOutline, createOutline, trashOutline, sparklesOutline,
 } from 'ionicons/icons';
 import { Capacitor } from '@capacitor/core';
 import { useParams } from 'react-router-dom';
 import { getProject, upsertProject, createRoom, deleteProject } from '../lib/storage';
+import { useConfirm, useMenu } from '../components/Dialogs';
 import { Project } from '../types';
 import { calcRoomClientPrice, projectEstimate, projectPricing } from '../lib/pricing';
 import ActionButton from '../components/ActionButton';
@@ -42,8 +43,8 @@ const ProjectDetail: React.FC = () => {
   const [newRoomError, setNewRoomError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [roomMenuId, setRoomMenuId] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const menu = useMenu();
+  const confirm = useConfirm();
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -80,7 +81,13 @@ const ProjectDetail: React.FC = () => {
     setTimeout(() => inputRef.current?.focus(), 300);
   };
 
-  const handleDeleteRoom = (roomId: string) => {
+  const handleDeleteRoom = async (roomId: string, name: string) => {
+    const ok = await confirm({
+      title: t('re.deleteRoomTitle'),
+      message: t('re.deleteRoomMsg', { name }),
+      confirmText: t('common.delete'),
+    });
+    if (!ok) return;
     const updated = { ...project, rooms: project.rooms.filter(r => r.id !== roomId), updatedAt: new Date().toISOString() };
     upsertProject(updated);
     setProject(updated);
@@ -103,7 +110,13 @@ const ProjectDetail: React.FC = () => {
     setShowEditModal(false);
   };
 
-  const handleDeleteProject = () => {
+  const handleDeleteProject = async () => {
+    const ok = await confirm({
+      title: t('pd.deleteTitle'),
+      message: <><b>«{project.clientName}»</b><br />{t('pd.deleteMsg')}</>,
+      confirmText: t('common.delete'),
+    });
+    if (!ok) return;
     deleteProject(project.id);
     router.push('/', 'back', 'pop');
   };
@@ -114,7 +127,6 @@ const ProjectDetail: React.FC = () => {
   const totalPrice = projectEstimate(project).clientTotal;
   const drawnCount = project.rooms.filter(r => r.areaSqm > 0).length;
   const tel = (project.phone ?? '').replace(/[^\d+]/g, '');
-  const menuRoom = project.rooms.find(r => r.id === roomMenuId);
 
   return (
     <IonPage>
@@ -128,7 +140,7 @@ const ProjectDetail: React.FC = () => {
             <IonButton fill="clear" onClick={handleOpenEdit} aria-label={t('common.edit')}>
               <IonIcon slot="icon-only" icon={createOutline} />
             </IonButton>
-            <IonButton fill="clear" onClick={() => setShowDeleteConfirm(true)} aria-label={t('common.delete')}>
+            <IonButton fill="clear" onClick={handleDeleteProject} aria-label={t('common.delete')}>
               <IonIcon slot="icon-only" icon={trashOutline} />
             </IonButton>
           </IonButtons>
@@ -220,8 +232,10 @@ const ProjectDetail: React.FC = () => {
                     <RoomThumb points={room.points} size={88} pad={4} strokeWidth={2} />
                   ) : (
                     <>
-                      <IonIcon icon={createOutline} />
-                      {t('pd.draw')}
+                      <svg className="room-tile__ghost" width="90" height="64" viewBox="0 0 90 64" aria-hidden="true">
+                        <path d="M10 6h46v20h24v32H10z" />
+                      </svg>
+                      {t('pd.empty')}
                     </>
                   )}
                 </div>
@@ -231,7 +245,16 @@ const ProjectDetail: React.FC = () => {
                     <button
                       className="room-tile__menu"
                       aria-label={t('pd.roomMenu')}
-                      onClick={e => { e.stopPropagation(); setRoomMenuId(room.id); }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        menu({
+                          title: room.name,
+                          items: [
+                            { icon: sparklesOutline, label: t('viz.menuItem'), onClick: () => router.push(`/project/${id}/room/${room.id}/visualize`, 'forward', 'push') },
+                            { icon: trashOutline, label: t('common.delete'), danger: true, onClick: () => handleDeleteRoom(room.id, room.name) },
+                          ],
+                        });
+                      }}
                     >
                       <IonIcon icon={ellipsisVerticalOutline} />
                     </button>
@@ -287,6 +310,7 @@ const ProjectDetail: React.FC = () => {
                 ref={inputRef}
                 className="new-room-modal__input"
                 type="text"
+                enterKeyHint="done"
                 placeholder={t('pd.roomName')}
                 value={newRoomName}
                 onChange={e => { setNewRoomName(e.target.value); setNewRoomError(''); }}
@@ -309,27 +333,7 @@ const ProjectDetail: React.FC = () => {
         </IonModal>
       </IonContent>
 
-      <IonActionSheet
-        isOpen={!!menuRoom}
-        onDidDismiss={() => setRoomMenuId(null)}
-        header={menuRoom?.name}
-        buttons={[
-          { text: t('viz.menuItem'), handler: () => { if (menuRoom) router.push(`/project/${id}/room/${menuRoom.id}/visualize`, 'forward', 'push'); } },
-          { text: t('common.delete'), role: 'destructive', handler: () => { if (menuRoom) handleDeleteRoom(menuRoom.id); } },
-          { text: t('common.cancel'), role: 'cancel' },
-        ]}
-      />
 
-      <IonAlert
-        isOpen={showDeleteConfirm}
-        onDidDismiss={() => setShowDeleteConfirm(false)}
-        header={t('pd.deleteTitle')}
-        message={t('pd.deleteMsg')}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          { text: t('common.delete'), role: 'destructive', handler: handleDeleteProject },
-        ]}
-      />
 
       <IonModal
         isOpen={showEditModal}

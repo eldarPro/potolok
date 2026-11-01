@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   IonPage, IonHeader, IonToolbar,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonAlert,
+  IonButtons, IonBackButton, IonButton, IonIcon,
   useIonToast, useIonViewWillEnter, useIonViewWillLeave, useIonRouter,
 } from '@ionic/react';
 import {
@@ -14,7 +14,6 @@ import { uuid } from '../lib/uuid';
 import { Project, Room, CatalogItem, RoomProfileSegment, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, WallPoint, Accessory, AdditionalService } from '../types';
 import CeilingCanvas, { CanvasSelection, selectionKey } from '../components/CeilingCanvas';
 import ElementCard from '../components/ElementCard';
-import WallSplitScreen from '../components/WallSplitScreen';
 import RoomSheet from '../components/RoomSheet';
 import SectionPanel, { PanelSection } from '../components/SectionPanel';
 import BluetoothMeasureModal from '../components/BluetoothMeasureModal';
@@ -23,8 +22,8 @@ import { edgeLengthM, dist, pxToMeters, Point } from '../lib/geometry';
 import { isStraightWall } from '../lib/nicheGeometry';
 import { newWallNiche, newCrossNiche } from '../lib/nicheEdit';
 import { roomDiagonals, diagonalKey } from '../lib/diagonals';
-import { splitEdge } from '../lib/roomEdit';
 import { useT } from '../lib/i18n';
+import { useConfirm, usePrompt } from '../components/Dialogs';
 import './RoomEditor.css';
 
 const RoomEditor: React.FC = () => {
@@ -46,12 +45,18 @@ const RoomEditor: React.FC = () => {
   const [focus, setFocus] = useState<CanvasSelection | null>(null);
   const [preview, setPreview] = useState<Point[] | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
-  useEffect(() => { setFocus(null); setPreview(null); }, [section]);
+  // a not-yet-applied change beyond the outline (a wall split: new corner + profiles)
+  const [previewRoom, setPreviewRoom] = useState<Partial<Room> | null>(null);
+  // the wall being split — a sub-page of the profiles section
+  const [splitWall, setSplitWall] = useState<number | null>(null);
+  useEffect(() => {
+    setFocus(null); setPreview(null); setPreviewRoom(null);
+    if (section !== 'profile') setSplitWall(null);
+  }, [section]);
 
   // The element picked on the drawing — its card replaces the room panel
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [cardHeight, setCardHeight] = useState(0);
-  const [splitEdgeIdx, setSplitEdgeIdx] = useState<number | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const [undoStack, setUndoStack] = useState<Room[]>([]);
@@ -71,8 +76,8 @@ const RoomEditor: React.FC = () => {
   useEffect(() => { if (!placingNiche) setCrossStart(null); }, [placingNiche]);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const prompt = usePrompt();
+  const confirm = useConfirm();
   const [bluetoothOpen, setBluetoothOpen] = useState(false);
   const [manualMeasureOpen, setManualMeasureOpen] = useState(false);
 
@@ -102,6 +107,8 @@ const RoomEditor: React.FC = () => {
   // shape we had as an undo step so «Отменить» can return to it.
   const roomRef = useRef<Room | null>(null);
   roomRef.current = room;
+  // the section that sent us to the price list — reopened on the way back
+  const reopenSection = useRef<PanelSection | null>(null);
   useIonViewWillEnter(() => {
     const before = roomRef.current;
     const after = getProject(projectId)?.rooms.find(r => r.id === roomId);
@@ -111,6 +118,7 @@ const RoomEditor: React.FC = () => {
       setRedoStack([]);
     }
     load();
+    if (reopenSection.current) { setSection(reopenSection.current); reopenSection.current = null; }
   });
 
   // Set up ResizeObserver after room is loaded (ref is null until JSX renders)
@@ -254,7 +262,11 @@ const RoomEditor: React.FC = () => {
     upsertProject(proj);
   };
 
-  const clearDrawing = () => {
+  const clearDrawing = async () => {
+    const ok = await confirm({
+      title: t('re.clearTitle'), message: t('re.clearMsg'), confirmText: t('re.clearConfirm'), tone: 'warning', dark: true,
+    });
+    if (!ok) return;
     // Drawn niche lines are anchored to the old room shape and become invalid
     // once it's wiped — drop them, same as lighting. Manually-counted ('pcs')
     // niches carry no geometry, so they survive the redraw like accessories do.
@@ -267,6 +279,22 @@ const RoomEditor: React.FC = () => {
     setPlacingLighting(null);
     setPlacingNiche(null);
     setCanvasKey(k => k + 1);
+  };
+
+  const askRename = async () => {
+    const v = await prompt({
+      title: t('re.renameTitle'), confirmText: t('common.save'), dark: true,
+      fields: [{ name: 'name', placeholder: t('re.namePH'), value: room.name, required: true }],
+    });
+    const name = v?.name.trim();
+    if (name) updateRoom({ name });
+  };
+
+  const askDeleteRoom = async () => {
+    const ok = await confirm({
+      title: t('re.deleteRoomTitle'), message: t('re.deleteRoomMsg', { name: room.name }), confirmText: t('common.delete'), dark: true,
+    });
+    if (ok) deleteRoom();
   };
 
   const deleteRoom = () => {
@@ -447,7 +475,7 @@ const RoomEditor: React.FC = () => {
             {canvasSize.width > 0 && canvasSize.height > 0 && (
               <CeilingCanvas
                 key={canvasKey}
-                room={preview ? { ...room, points: preview } : room}
+                room={preview || previewRoom ? { ...room, ...previewRoom, ...(preview ? { points: preview } : {}) } : room}
                 onChange={updateRoom}
                 width={canvasSize.width}
                 height={canvasSize.height}
@@ -476,6 +504,7 @@ const RoomEditor: React.FC = () => {
                 })}
                 onOpenBluetooth={() => setBluetoothOpen(true)}
                 onOpenManualMeasure={() => setManualMeasureOpen(true)}
+                hideTools={!!section && !placingLighting && !placingNiche}
                 onToggleDiagonals={() => { setSelection(null); setSection(section === 'diagonals' ? null : 'diagonals'); }}
                 selection={section ? focus : liveSelection}
                 onSelect={handleCanvasSelect}
@@ -507,15 +536,21 @@ const RoomEditor: React.FC = () => {
                 onFocus={setFocus}
                 onPickElement={s => { setSection(null); setSelection(s); }}
                 onPreview={setPreview}
+                splitWall={splitWall}
+                onSplitWall={setSplitWall}
+                onPreviewRoom={setPreviewRoom}
+                onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
                 expanded={panelExpanded}
                 onExpand={setPanelExpanded}
                 onClose={() => setSection(null)}
+                onAddToPriceList={category => { reopenSection.current = section; router.push(`/price-list/${category}/new`); }}
               />
             </div>
           )}
           {!placingLighting && !placingNiche ? (
-            // nothing to fill in until the outline is drawn — the canvas guides that
-            room.areaSqm > 0 && <RoomSheet
+            // nothing to fill in until the outline is drawn — the canvas guides that;
+            // diagonals are the outline itself, not a tab here, so the bar steps aside for them
+            room.areaSqm > 0 && section !== 'diagonals' && <RoomSheet
               active={section}
               room={room}
               pricing={project.pricing}
@@ -633,7 +668,7 @@ const RoomEditor: React.FC = () => {
               niches={niches}
               onChange={updateRoom}
               onSelect={setSelection}
-              onSplitWall={setSplitEdgeIdx}
+              onSplitWall={i => { setSelection(null); setSection('profile'); setSplitWall(i); }}
               onOpenSection={s => { setSelection(null); setSection(s); }}
               onPlaceLighting={setPlacingLighting}
               onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
@@ -642,64 +677,20 @@ const RoomEditor: React.FC = () => {
           )}
         </div>
 
-      {splitEdgeIdx !== null && splitEdgeIdx < room.points.length && (
-        <WallSplitScreen
-          points={room.points}
-          edgeIndex={splitEdgeIdx}
-          profiles={profiles}
-          current={room.profileSegments?.find(s => s.edgeIndex === splitEdgeIdx)?.profile ?? null}
-          wallColors={room.points.map((_, i) => room.profileSegments?.find(s => s.edgeIndex === i)?.profile.color ?? null)}
-          onCancel={() => setSplitEdgeIdx(null)}
-          onSplit={(distCm, first, second) => {
-            const r = splitEdge(room, splitEdgeIdx, distCm, first, second);
-            if (r) updateRoom(r);
-            setSelection({ kind: 'wall', index: splitEdgeIdx });
-            setSplitEdgeIdx(null);
-          }}
-        />
-      )}
 
       {/* ── Room menu ── */}
       {menuOpen && (
         <RoomMenu
           onClose={() => setMenuOpen(false)}
           actions={[
-            { icon: createOutline, label: t('re.editName'), onClick: () => setRenameOpen(true) },
+            { icon: createOutline, label: t('re.editName'), onClick: askRename },
             { icon: refreshOutline, label: t('re.clearDraft'), onClick: clearDrawing },
-            { icon: trashOutline, label: t('re.deleteRoom'), danger: true, onClick: () => setDeleteConfirmOpen(true) },
+            { icon: trashOutline, label: t('re.deleteRoom'), danger: true, onClick: askDeleteRoom },
           ]}
         />
       )}
 
-      {/* ── Rename alert ── */}
-      <IonAlert
-        isOpen={renameOpen}
-        header={t('re.renameTitle')}
-        inputs={[{ name: 'name', type: 'text', value: room.name, placeholder: t('re.namePH') }]}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          {
-            text: t('common.save'),
-            handler: (data: { name: string }) => {
-              const name = data.name?.trim();
-              if (name) updateRoom({ name });
-            },
-          },
-        ]}
-        onDidDismiss={() => setRenameOpen(false)}
-      />
 
-      {/* ── Delete confirmation ── */}
-      <IonAlert
-        isOpen={deleteConfirmOpen}
-        header={t('re.deleteRoomTitle')}
-        message={t('re.deleteRoomMsg', { name: room.name })}
-        buttons={[
-          { text: t('common.cancel'), role: 'cancel' },
-          { text: t('common.delete'), role: 'destructive', handler: deleteRoom },
-        ]}
-        onDidDismiss={() => setDeleteConfirmOpen(false)}
-      />
 
       {bluetoothOpen && room && canvasSize.width > 0 && (
         <BluetoothMeasureModal

@@ -121,18 +121,21 @@ const ManualMeasureModal: React.FC<Props> = ({ canvasW, canvasH, onApply, onClos
             </div>
           ) : (
             <>
-              <button onClick={() => setStep('pick')} style={{
-                height: 32, padding: '0 10px 0 4px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                background: 'rgba(255,255,255,0.08)', color: '#64b5f6', fontSize: 13, fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: 2,
+              <button onClick={() => setStep('pick')} aria-label="Назад" style={{
+                width: 34, height: 34, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0,
+                background: 'rgba(255,255,255,0.07)', color: '#64b5f6',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <IonIcon icon={chevronBackOutline} style={{ fontSize: 18 }} />Формы
+                <IonIcon icon={chevronBackOutline} style={{ fontSize: 22 }} />
               </button>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 {tpl ? <ShapeThumb pts={tpl.build(defaults(tpl))!.pts} active size={[30, 22]} /> : <CustomThumb active size={[30, 22]} />}
-                <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {tpl ? tpl.name : 'Своя форма'}
-                </span>
+                <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)' }}>Форма помещения</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tpl ? tpl.name : 'Своя форма'}
+                  </span>
+                </div>
               </div>
             </>
           )}
