@@ -212,8 +212,16 @@ const matches = (q: string, title: string) => !q.trim() || title.toLowerCase().i
 // it. Only n − 3 diagonals are free — for a quad, the one typed last drives
 // and the other follows. While typing the drawing previews the shape; leaving
 // the field (or Enter) saves it as one undo step, like any other change here.
+/** «Готово» under the diagonals is shown only the first time — after that the panel's own close is known */
+const DIAG_DONE_SEEN_KEY = 'diag_done_seen';
+const diagDoneSeen = () => {
+  try { return localStorage.getItem(DIAG_DONE_SEEN_KEY) === '1'; } catch { return false; }
+};
+
 const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPreview, onClose }) => {
   const { t } = useT();
+  // read once on open, so the button stays put while this first panel is up
+  const [showDone] = useState(() => !diagDoneSeen());
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [driver, setDriver] = useState<string | null>(null);
   const shape = room.points.map(p => `${p.x},${p.y}`).join(';');
@@ -253,7 +261,14 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
     });
   };
 
-  if (list.length === 0) return <div className="spanel__body"><Empty text={t('diag.triangle')} /></div>;
+  const hasDiagonals = list.length > 0;
+  useEffect(() => {
+    if (showDone && hasDiagonals) {
+      try { localStorage.setItem(DIAG_DONE_SEEN_KEY, '1'); } catch { /* storage unavailable */ }
+    }
+  }, [showDone, hasDiagonals]);
+
+  if (!hasDiagonals) return <div className="spanel__body"><Empty text={t('diag.triangle')} /></div>;
 
   const activeKey = focus?.kind === 'diagonal' ? diagonalKey(focus.i, focus.j) : null;
   return (
@@ -283,11 +298,13 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
             </div>
           );
         })}
-        {/* the panel opens on its own after drawing — a plain way out for newcomers;
+        {/* the panel opens on its own after drawing — a plain way out for newcomers, shown once;
             a typed diagonal is already saved by the field's blur */}
-        <button className="spanel__split-go spanel__done" onClick={onClose}>
-          <IonIcon icon={checkmarkOutline} />{t('diag.done')}
-        </button>
+        {showDone && (
+          <button className="spanel__split-go spanel__done" onClick={onClose}>
+            <IonIcon icon={checkmarkOutline} />{t('diag.done')}
+          </button>
+        )}
       </div>
     </>
   );
@@ -324,9 +341,10 @@ const FabricBody: React.FC<Props> = ({ room, pricing, fabrics, onChange }) => {
 const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus, onFocus, onPreview, splitWall, onSplitWall, onPreviewRoom, onToast }) => {
   const { t } = useT();
   const [draft, setDraft] = useState<Record<number, string>>({});
-  // the wall (or 'all') whose profile is being picked — the list replaces the walls
-  const [picking, setPicking] = useState<number | 'all' | 'part1' | 'part2' | null>(null);
-  const [q, setQ] = useState('');
+  // the wall (or 'all', or a split part) whose profile is being picked — a popover at its button
+  type PickTarget = number | 'all' | 'part1' | 'part2';
+  const [picking, setPicking] = useState<{ target: PickTarget; rect: DOMRect } | null>(null);
+  const openPick = (target: PickTarget, el: HTMLElement) => setPicking({ target, rect: el.getBoundingClientRect() });
   // ⋮ of a wall row: what the row itself can't do (split, round) — anchored to the button
   const [menu, setMenu] = useState<{ i: number; rect: DOMRect } | null>(null);
   const shape = room.points.map(p => `${p.x},${p.y}`).join(';');
@@ -348,7 +366,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
 
   const price = (p: CatalogItem) => pricing?.overrides[p.id]?.price ?? p.price;
   const byId = (id: string | null) => profiles.find(p => p.id === id) ?? null;
-  const back = () => { setPicking(null); setQ(''); };
+  const back = () => setPicking(null);
 
   // ── Splitting a wall: where (from its first corner) and a profile per part ──
   const splitting = splitWall != null && splitWall < room.points.length ? splitWall : null;
@@ -376,26 +394,32 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
   })();
   const cancelSplit = () => { onSplitWall(null); back(); };
 
-  const isPart = picking === 'part1' || picking === 'part2';
   useSubPage(
-    splitNames && isPart ? {
-      crumb: `${t('mat.splitWall')} ${splitNames.wall}`,
-      title: t('prof.sheetTitle'),
-      tag: picking === 'part1' ? splitNames.part1 : splitNames.part2,
-      onBack: back,
-    }
-    : splitNames ? { crumb: t('sec.profile'), title: t('mat.splitWall'), tag: splitNames.wall, onBack: cancelSplit }
-    : picking == null ? null
-    : {
-      crumb: t('sec.profile'),
-      title: picking === 'all' ? t('mat.applyAll') : t('prof.sheetTitle'),
-      tag: picking === 'all' ? undefined : edgeLabel(room.points, picking as number).replace(/ /g, ''),
-      onBack: back,
-    },
-    `${splitting}:${picking}`,
+    splitNames ? { crumb: t('sec.profile'), title: t('mat.splitWall'), tag: splitNames.wall, onBack: cancelSplit } : null,
+    splitting,
   );
 
-  if (splitNames && !isPart) {
+  // ── The profile list: a popover under the tapped button, scrolling when long ──
+  const pickMenu = picking && (() => {
+    const tg = picking.target;
+    const current = tg === 'all' ? null
+      : tg === 'part1' ? split.first : tg === 'part2' ? split.second
+      : segOf(tg)?.profileId ?? null;
+    const choose = (p: CatalogItem | null) => {
+      if (tg === 'all') { if (p) onChange(setAllProfiles(room, p)); }
+      else if (tg === 'part1') setSplit(x => ({ ...x, first: p?.id ?? null }));
+      else if (tg === 'part2') setSplit(x => ({ ...x, second: p?.id ?? null }));
+      else onChange(setWallProfile(room, tg, p));
+    };
+    const title = tg === 'all' ? t('mat.applyAll')
+      : `${t('prof.sheetTitle')} ${tg === 'part1' ? splitNames?.part1 : tg === 'part2' ? splitNames?.part2 : edgeLabel(room.points, tg).replace(/ /g, '')}`;
+    return (
+      <ProfilePickMenu anchor={picking.rect} title={title} profiles={profiles} current={current}
+        allowNone={tg !== 'all'} price={price} onPick={choose} onClose={back} />
+    );
+  })();
+
+  if (splitNames) {
     const setFrom = (raw: string) => setSplit(x => ({ ...x, raw }));
     const toRaw = splitCm > 0 && splitCm < splitTotal ? String(splitTotal - splitCm) : '';
     const setTo = (raw: string) => {
@@ -407,7 +431,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
     const partRow = (part: 'part1' | 'part2', name: string, id: string | null) => {
       const p = byId(id);
       return (
-        <button className="spanel__row spanel__split-part" onClick={() => setPicking(part)}>
+        <button className="spanel__row spanel__split-part" onClick={e => openPick(part, e.currentTarget)}>
           <span className="spanel__split-name">{name}</span>
           <span className={`spanel__swatch spanel__swatch--line${p ? '' : ' spanel__swatch--none'}`} style={p ? { background: p.color } : undefined} />
           <span className="spanel__grow">{p ? p.title : t('mat.noProfileBtn')}</span>
@@ -445,39 +469,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
           onClick={() => { if (splitResult) { onChange(splitResult); onPreviewRoom(null); cancelSplit(); } }}>
           <IonIcon icon={cutOutline} />{t('mat.split')}
         </button>
-      </div>
-    );
-  }
-
-  if (picking != null) {
-    const current = picking === 'all' ? null
-      : picking === 'part1' ? split.first : picking === 'part2' ? split.second
-      : segOf(picking)?.profileId ?? null;
-    const choose = (p: CatalogItem | null) => {
-      if (picking === 'all') { if (p) onChange(setAllProfiles(room, p)); }
-      else if (picking === 'part1') setSplit(x => ({ ...x, first: p?.id ?? null }));
-      else if (picking === 'part2') setSplit(x => ({ ...x, second: p?.id ?? null }));
-      else onChange(setWallProfile(room, picking, p));
-      back();
-    };
-    return (
-      <div className="spanel__body">
-        {profiles.length === 0 && <Empty text={t('mat.noProfiles')} addTo="profiles" />}
-        {profiles.length > SEARCH_FROM && <Search value={q} onChange={setQ} />}
-        {profiles.filter(p => matches(q, p.title)).map(p => (
-          <button key={p.id} className={`spanel__row spanel__pick${p.id === current ? ' spanel__row--picked' : ''}`} onClick={() => choose(p)}>
-            <span className="spanel__swatch spanel__swatch--line" style={{ background: p.color }} />
-            <span className="spanel__grow">{p.title}<small>{rub(price(p))}/{t('unit.m')}</small></span>
-            {p.id === current && <IonIcon icon={checkmarkOutline} className="spanel__check" />}
-          </button>
-        ))}
-        {picking !== 'all' && (
-          <button className={`spanel__row spanel__pick${current == null ? ' spanel__row--picked' : ''}`} onClick={() => choose(null)}>
-            <span className="spanel__swatch spanel__swatch--none" />
-            <span className="spanel__grow">{t('mat.noProfileBtn')}</span>
-            {current == null && <IonIcon icon={checkmarkOutline} className="spanel__check" />}
-          </button>
-        )}
+        {pickMenu}
       </div>
     );
   }
@@ -488,7 +480,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
       <div className="spanel__body">
         <div className="spanel__bar">
           <span className="spanel__hint">{t('prof.tapSize')}</span>
-          {profiles.length > 0 && <button className="spanel__link" onClick={() => setPicking('all')}>{t('mat.applyAll')}</button>}
+          {profiles.length > 0 && <button className="spanel__link" onClick={e => openPick('all', e.currentTarget)}>{t('mat.applyAll')}</button>}
         </div>
         {room.points.map((p, i) => {
           const seg = segOf(i);
@@ -512,7 +504,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
                 <span>{t('re.cm')}</span>
               </label>
               <button className={`spanel__select${seg ? '' : ' spanel__select--none'}`}
-                onClick={e => { e.stopPropagation(); onFocus({ kind: 'wall', index: i }); setPicking(i); }}>
+                onClick={e => { e.stopPropagation(); onFocus({ kind: 'wall', index: i }); openPick(i, e.currentTarget); }}>
                 <span>{seg ? seg.profile.title : t('mat.noProfile')}</span>
                 <IonIcon icon={chevronDownOutline} />
               </button>
@@ -524,6 +516,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
           );
         })}
       </div>
+      {pickMenu}
       {menu && menu.i < room.points.length && (() => {
         const i = menu.i;
         const curved = !!room.points[i]?.bulge;
@@ -592,6 +585,60 @@ const LightAddMenu: React.FC<{
     document.body,
   );
 };
+
+/** A wall's profile choice — a popover at the tapped button; at most a fixed height, the list scrolls */
+const ProfilePickMenu: React.FC<{
+  anchor: DOMRect;
+  title: string;
+  profiles: CatalogItem[];
+  current: string | null;
+  allowNone: boolean;
+  price: (p: CatalogItem) => number;
+  onPick: (p: CatalogItem | null) => void;
+  onClose: () => void;
+}> = ({ anchor, title, profiles, current, allowNone, price, onPick, onClose }) => {
+  const { t } = useT();
+  const [q, setQ] = useState('');
+  const up = anchor.top > window.innerHeight / 2;
+  const width = Math.min(300, window.innerWidth - 16);
+  const pos: React.CSSProperties = {
+    width,
+    left: Math.min(Math.max(8, anchor.right - width), window.innerWidth - width - 8),
+    maxHeight: Math.min(PICK_MENU_MAX_H, (up ? anchor.top : window.innerHeight - anchor.bottom) - 16),
+    ...(up ? { bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6 }),
+  };
+  const pick = (p: CatalogItem | null) => { onClose(); onPick(p); };
+  return createPortal(
+    <div className="spanel-menu">
+      <div className="spanel-menu__backdrop spanel-menu__backdrop--dim" onClick={onClose} />
+      <div className="spanel-menu__panel spanel-menu__panel--list" style={pos}>
+        <div className="spanel-menu__title">{title}</div>
+        {profiles.length > SEARCH_FROM && <div className="spanel-menu__search"><Search value={q} onChange={setQ} /></div>}
+        <div className="spanel-menu__scroll">
+          {profiles.length === 0 && <Empty text={t('mat.noProfiles')} addTo="profiles" />}
+          {profiles.filter(p => matches(q, p.title)).map(p => (
+            <button key={p.id} className={`spanel-menu__item${p.id === current ? ' spanel-menu__item--on' : ''}`} onClick={() => pick(p)}>
+              <span className="spanel-menu__sym"><span className="spanel-menu__line" style={{ background: p.color }} /></span>
+              <span className="spanel-menu__label">{p.title}</span>
+              <small className="spanel-menu__price">{rub(price(p))}/{t('unit.m')}</small>
+              {p.id === current && <IonIcon icon={checkmarkOutline} className="spanel-menu__check" />}
+            </button>
+          ))}
+          {allowNone && (
+            <button className={`spanel-menu__item${current == null ? ' spanel-menu__item--on' : ''}`} onClick={() => pick(null)}>
+              <span className="spanel-menu__sym"><span className="spanel-menu__line spanel-menu__line--none" /></span>
+              <span className="spanel-menu__label">{t('mat.noProfileBtn')}</span>
+              {current == null && <IonIcon icon={checkmarkOutline} className="spanel-menu__check" />}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+/** About seven rows — a long price list scrolls inside instead of covering the screen */
+const PICK_MENU_MAX_H = 380;
 
 /** Popover next to a row's ⋮ — opens upwards when the row sits low on screen */
 const WallMenu: React.FC<{

@@ -659,7 +659,13 @@
 }
 
 .spanel-menu__search { padding: 0 10px 6px; }
-.spanel-menu__search .spanel__search { margin: 0; }
+.spanel-menu__search .spanel__search {
+  position: static;
+  margin: 0;
+  /* the panel's own colour — the in-panel sticky backing would show as a dark strip here */
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
 
 .spanel-menu__scroll {
   flex: 1;
@@ -693,6 +699,17 @@
   font-size: 19px;
   opacity: 0.75;
 }
+
+/* the profile list: a line of the profile's colour, the chosen one ticked */
+.spanel-menu__line {
+  width: 24px;
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.spanel-menu__line--none { border-style: dashed; background: none; }
+.spanel-menu__item--on { color: var(--accent); }
+.spanel-menu__item .spanel-menu__check { opacity: 1; color: var(--accent); flex-shrink: 0; }
 
 /* ── Wall split sub-page: the wall as a bar, its two parts, a profile per part ── */
 .spanel__split-bar {

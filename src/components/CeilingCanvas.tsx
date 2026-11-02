@@ -85,6 +85,9 @@ const flat = (ps: Point[]) => ps.flatMap(p => [p.x, p.y]);
 // Deep enough to pull apart corners a few cm apart — marks and text keep
 // their screen size at any zoom, so zooming in really does make room.
 const MAX_ZOOM = 20;
+// Zoom-out floor; a room too big to fit at it lowers the floor to half its
+// fit scale, so a pinch can always get back to (and past) the whole outline.
+const MIN_ZOOM = 0.2;
 const MIN_POINTS = 3;
 // A two-finger gesture is either a rotate or a zoom/pan, never both: it does
 // nothing until one movement clears its threshold, then stays locked to that
@@ -210,6 +213,7 @@ const CeilingCanvas: React.FC<Props> = ({
   const [placingTouch, setPlacingTouch] = useState(false);
   const [tool, setTool] = useState<Tool>(room.points.length >= MIN_POINTS ? 'move' : 'draw');
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
+  const minZoomRef = useRef(MIN_ZOOM);
   // Rotation of the drawing only — the grid lives outside the rotated group
   // and stays put. In stage (pre-viewport) coordinates a world point p is
   // drawn at R(angle)·p + (x, y), so it composes with pan/zoom untouched.
@@ -327,6 +331,7 @@ const CeilingCanvas: React.FC<Props> = ({
     // the toolbar over the drawing takes the top — keep the outline below it
     const padTop = hideTools ? padY : Math.max(padY, TOOLBAR_H);
     const scale = Math.min(MAX_ZOOM, (width - padX * 2) / bw, (height - padTop - padY) / bh);
+    minZoomRef.current = Math.min(MIN_ZOOM, scale / 2);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const to = { scale, x: width / 2 - cx * scale, y: (padTop + height - padY) / 2 - cy * scale };
@@ -355,6 +360,7 @@ const CeilingCanvas: React.FC<Props> = ({
     if (pts.length >= MIN_POINTS) {
       fitView(pts);
     } else {
+      minZoomRef.current = MIN_ZOOM;
       setViewport({ x: 0, y: 0, scale: 1 });
     }
   }, [room.id, shapeKey, room.perimeterM, fitView]);
@@ -551,7 +557,7 @@ const CeilingCanvas: React.FC<Props> = ({
     const ratio = e.evt.deltaY < 0 ? 1.1 : 1 / 1.1;
     setViewport(v => {
       // at a zoom limit, anchor what the clamp actually applied
-      const scale = Math.min(MAX_ZOOM, Math.max(0.2, v.scale * ratio)), r = scale / v.scale;
+      const scale = Math.min(MAX_ZOOM, Math.max(minZoomRef.current, v.scale * ratio)), r = scale / v.scale;
       return { scale, x: mx - (mx - v.x) * r, y: my - (my - v.y) * r };
     });
   };
@@ -701,7 +707,7 @@ const CeilingCanvas: React.FC<Props> = ({
         const pdx = mx - pinch.mx;
         const pdy = my - pinch.my;
         setViewport(v => {
-          const scale = Math.min(MAX_ZOOM, Math.max(0.2, v.scale * ratio)), r = scale / v.scale;
+          const scale = Math.min(MAX_ZOOM, Math.max(minZoomRef.current, v.scale * ratio)), r = scale / v.scale;
           return { scale, x: mx - (mx - v.x) * r + pdx, y: my - (my - v.y) * r + pdy };
         });
       }
