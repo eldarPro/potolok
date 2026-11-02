@@ -20,12 +20,49 @@ const LINE_EDGE = '#6b6f88';
 type Pt = { x: number; y: number };
 const flat = (ps: Pt[]) => ps.flatMap(p => [p.x, p.y]);
 
-/** Strokes are sized in screen px (times `px`) so a mark looks the same at any zoom */
+/*
+ * How big a plan mark is drawn. A mark is designed in screen px (`N` — the
+ * size of its body: a spot's ring, a chandelier's rays, a line's stroke), but
+ * a fixed screen size lies about the lamp: on a 50 m hall a 9 cm spot would
+ * look a couple of metres across, and zoomed in close it would shrink below
+ * the lamp itself. So the body is kept between
+ *  - the lamp's real size `R` (cm, an average one of its kind) — zoomed in, a
+ *    mark never gets smaller than the thing it stands for;
+ *  - `K`× the real size — zoomed out on a big drawing the mark shrinks with
+ *    it, down to `floor` screen px, below which it would stop being legible.
+ * In between (any ordinary room on a phone) it keeps its designed size.
+ */
+const MARK_K = 4;
+const MARK_BODY: Record<string, { N: number; R: number; floor: number }> = {
+  spot: { N: 13, R: 9, floor: 5 },
+  chandelier: { N: 40, R: CHANDELIER_ARMS.cm * 2, floor: 14 },
+  track_spot: { N: 12, R: 14, floor: 6 },
+  line: { N: 5.5, R: 5, floor: 2.2 },
+  track: { N: 7.5, R: 4, floor: 3 },
+  strip: { N: 2.2, R: 1, floor: 1.2 },
+};
+
+/**
+ * The unit a plan mark is drawn in, drawing px: `px` (drawing px per screen
+ * px) scaled so the mark's body stays within its real-size bounds. `cm` is
+ * drawing px per cm.
+ */
+export const markUnit = (type: LightingType, px: number, cm: number) => {
+  const b = MARK_BODY[type] ?? MARK_BODY.spot;
+  const real = b.R * cm / px; // the lamp's real size, screen px
+  const d = Math.max(real, Math.min(b.N, Math.max(b.floor, MARK_K * real)));
+  return px * d / b.N;
+};
+
+/** Strokes are sized in screen px (times `px`), within the lamp's real-size bounds (markUnit) */
 export const PointLightMark: React.FC<{
-  type: LightingType; color: string; x: number; y: number; px: number;
+  type: LightingType; color: string; x: number; y: number;
+  /** drawing px per screen px, and per cm */
+  px: number; cm: number;
   /** a track spot turns across the track it sits on (degrees of the track run) */
   angle?: number | null;
-}> = ({ type, color, x, y, px, angle }) => {
+}> = ({ type, color, x, y, px: screenPx, cm, angle }) => {
+  const px = markUnit(type, screenPx, cm);
   const c = lightColor(color);
   if (type === 'chandelier') {
     const rays = Array.from({ length: 8 }, (_, i) => {
@@ -68,7 +105,8 @@ export const PointLightMark: React.FC<{
   );
 };
 
-export const PathLightMark: React.FC<{ type: LightingType; color: string; points: Pt[]; px: number }> = ({ type, color, points, px }) => {
+export const PathLightMark: React.FC<{ type: LightingType; color: string; points: Pt[]; px: number; cm: number }> = ({ type, color, points, px: screenPx, cm }) => {
+  const px = markUnit(type, screenPx, cm);
   const pts = flat(points);
   if (type === 'line') {
     // a lit channel: square ends, a mark at each joint where runs meet

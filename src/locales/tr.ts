@@ -365,6 +365,8 @@ const s: Record<string, string> = {
   're.deleteRoomMsg': '«{name}» odası ve tüm verileri silinecek.',
   'sp.search': 'Ara',
   'sp.inRoom': 'Odada',
+  'sp.noLights': 'Henüz aydınlatma yok',
+  'sp.addLight': 'Aydınlatma ekle',
   'sp.removeTitle': 'Çizimden kaldırılsın mı?',
   'sp.close': 'Kapat',
   'sp.addToPriceList': 'Fiyat listesine ekle',

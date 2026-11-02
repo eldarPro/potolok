@@ -17,7 +17,7 @@ import { layoutLabels, calloutJoin, LABEL } from '../lib/canvasLabels';
 // edgeWouldCrossRoom check below can't be fooled by a reflex arc looping
 // around a shared corner without technically crossing a wall segment.
 const MAX_WALL_BULGE = 1;
-import { Room, LightingCatalogItem, LightingType, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNicheWall, RoomNicheCross, WallPoint } from '../types';
+import { Room, LightingCatalogItem, RoomLightingPoint, RoomLightingPath, NicheItem, RoomNicheWall, RoomNicheCross, WallPoint } from '../types';
 import {
   nicheShape, nicheSpan, chainCmAt, pointAlongChain, inwardNormal, isStraightWall, chainLengthCm,
   crossLine, crossBand, wallPointXY, wallLengthCm, snapWallCm, squareCmOn,
@@ -27,9 +27,9 @@ import { hasCornice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
 import { pointLightGuides, pathLabelAnchor } from '../lib/lightGuides';
 import { GLOW, BARE_TRACK, trackSpotAim, bareTracks, CHANDELIER_ARMS } from '../lib/lightGlow';
-import { LIGHTING_META, lightColor } from '../lib/lighting';
-import { fabricFinish, hexRgb } from '../lib/fabric';
-import { PointLightMark, PathLightMark, LightIcon, GlowTint, PointGlow, PathGlow, GlowPointMark, GlowPathMark, ChandelierGlow, TrackBeam } from './LightMarks';
+import { lightColor } from '../lib/lighting';
+import { hexRgb } from '../lib/fabric';
+import { PointLightMark, PathLightMark, markUnit, GlowTint, PointGlow, PathGlow, GlowPointMark, GlowPathMark, ChandelierGlow, TrackBeam } from './LightMarks';
 import { useCeilingVisual } from './useCeilingVisual';
 import './CeilingCanvas.css';
 
@@ -1044,8 +1044,12 @@ const CeilingCanvas: React.FC<Props> = ({
 
   // Tracks a track spot can sit on, and the set-out of the selected point light
   const trackRuns = (room.lighting ?? []).flatMap(e => e.kind === 'path' && e.catalogItem.type === 'track' ? [e.points] : []);
+  // The glow view shows the room's lights: with none, there is nothing to look at
+  const hasLights = (room.lighting ?? []).length > 0;
+  // the last light removed turns the glow view off, so the next light added doesn't bring it back on
+  if (visual && !hasLights) setVisual(false);
   // Editing anything (placing, a selection, diagonals) shows the drawing again
-  const visualOn = visual && isClosed && room.areaSqm > 0 && !showDiagonals && !placingLighting && !placingNiche && !selection;
+  const visualOn = visual && hasLights && isClosed && room.areaSqm > 0 && !showDiagonals && !placingLighting && !placingNiche && !selection;
   const roomOutline = isClosed ? tessellateRoom(points, true) : [];
   // the drawing's part on screen, for a sharp close-up when zoomed in
   const visibleRect = (() => {
@@ -1085,7 +1089,7 @@ const CeilingCanvas: React.FC<Props> = ({
       at: { x: (g.from.x + g.to.x) / 2, y: (g.from.y + g.to.y) / 2 }, text: `${Math.round(g.cm)}`, color: SEL, bold: true,
     }));
     for (const e of room.lighting ?? []) {
-      // a run's length only while it is picked — the legend has the totals
+      // a run's length only while it is picked — the «Свет» panel has the totals
       if (e.kind !== 'path' || e.id !== selectedLighting) continue;
       const a = pathLabelAnchor(e.points);
       if (!a) continue;
@@ -1102,15 +1106,6 @@ const CeilingCanvas: React.FC<Props> = ({
     }
     return out;
   })();
-
-  // Legend under the drawing: one chip per kind of light, in catalog order
-  const legend = (Object.keys(LIGHTING_META) as LightingType[]).flatMap(type => {
-    const els = (room.lighting ?? []).filter(e => e.catalogItem.type === type);
-    if (!els.length) return [];
-    const unit = LIGHTING_META[type].placement === 'point' ? 'pcs' as const : 'm' as const;
-    const amount = unit === 'pcs' ? els.length : els.reduce((sum, e) => sum + (e.kind === 'path' ? e.lengthM : 0), 0);
-    return [{ type, unit, amount, color: els[0].catalogItem.color }];
-  });
 
   // Screen point the selection is about — kept clear of the element card
   const selectionAnchor = (): Point | null => {
@@ -1509,8 +1504,8 @@ const CeilingCanvas: React.FC<Props> = ({
             const pts = flat(el.points);
             return (
               <Group key={el.id}>
-                {isSel && <Line points={pts} stroke={SEL} strokeWidth={16 * px} opacity={0.35} lineCap="round" lineJoin="round" listening={false} />}
-                <PathLightMark type={el.catalogItem.type} color={el.catalogItem.color} points={el.points} px={px} />
+                {isSel && <Line points={pts} stroke={SEL} strokeWidth={16 * markUnit(el.catalogItem.type, px, cm2px(1))} opacity={0.35} lineCap="round" lineJoin="round" listening={false} />}
+                <PathLightMark type={el.catalogItem.type} color={el.catalogItem.color} points={el.points} px={px} cm={cm2px(1)} />
                 <Line
                   points={pts} stroke="transparent" strokeWidth={6 * px} hitStrokeWidth={20 * px}
                   listening={!placingLighting && !placingNiche}
@@ -1538,12 +1533,12 @@ const CeilingCanvas: React.FC<Props> = ({
               <Group key={el.id}>
                 {isSel && (
                   <Circle
-                    x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 26 : 15) * px}
+                    x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 26 : 15) * markUnit(el.catalogItem.type, px, cm2px(1))}
                     fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2 * px}
                     listening={false}
                   />
                 )}
-                <PointLightMark type={el.catalogItem.type} color={el.catalogItem.color} x={el.x} y={el.y} px={px} angle={angle} />
+                <PointLightMark type={el.catalogItem.type} color={el.catalogItem.color} x={el.x} y={el.y} px={px} cm={cm2px(1)} angle={angle} />
                 <Circle
                   x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 22 : 16) * px}
                   fill="transparent"
@@ -1805,10 +1800,12 @@ const CeilingCanvas: React.FC<Props> = ({
                       accent active={showDiagonals}
                     />
                   )}
-                  <ToolBtn
-                    icon={sunnyOutline} label={t('cv.glow')} accent active={visualOn}
-                    onClick={() => { if (!visualOn) { onSelect?.(null); setVisual(true); } else setVisual(false); }}
-                  />
+                  {hasLights && (
+                    <ToolBtn
+                      icon={sunnyOutline} label={t('cv.glow')} accent active={visualOn}
+                      onClick={() => { if (!visualOn) { onSelect?.(null); setVisual(true); } else setVisual(false); }}
+                    />
+                  )}
                 </>
               )}
             </>
@@ -1816,32 +1813,10 @@ const CeilingCanvas: React.FC<Props> = ({
         </div>
       )}
 
-      {/* «Визуал»: which fabric the ceiling is shown in */}
-      {visualOn && (
+      {/* «Визуал»: only when the ceiling picture couldn't be drawn */}
+      {visualOn && ceilingPic.failed && (
         <div className="cv-legend">
-          <div className="cv-legend__chip">
-            {ceilingPic.failed
-              ? <span>{t('cv.visualFail')}</span>
-              : <>
-                <span className="cv-legend__swatch" style={{ background: room.fabric?.color ?? 'transparent' }} />
-                {room.fabric
-                  ? <span>{room.fabric.title} · {t(`cf.finish.${fabricFinish(room.fabric)}`)}</span>
-                  : <span>{t('cv.noFabric')}</span>}
-              </>}
-          </div>
-        </div>
-      )}
-
-      {/* Legend: what each mark is and how much of it there is */}
-      {legend.length > 0 && !visualOn && !hideTools && !selection && !placingLighting && !placingNiche && !showDiagonals && (
-        <div className="cv-legend">
-          {legend.map(g => (
-            <div key={g.type} className="cv-legend__chip">
-              <LightIcon type={g.type} color={g.color} />
-              <span>{t(LIGHTING_META[g.type]?.label ?? g.type)}</span>
-              <b>{g.unit === 'pcs' ? `${g.amount} ${t('unit.pcs')}` : `${g.amount.toFixed(1)} ${t('unit.m')}`}</b>
-            </div>
-          ))}
+          <div className="cv-legend__chip"><span>{t('cv.visualFail')}</span></div>
         </div>
       )}
 

@@ -365,6 +365,8 @@ const s: Record<string, string> = {
   're.deleteRoomMsg': 'Pomieszczenie „{name}" i wszystkie jego dane zostaną usunięte.',
   'sp.search': 'Szukaj',
   'sp.inRoom': 'W pokoju',
+  'sp.noLights': 'Brak oświetlenia',
+  'sp.addLight': 'Dodaj światło',
   'sp.removeTitle': 'Usunąć z rysunku?',
   'sp.close': 'Zamknij',
   'sp.addToPriceList': 'Dodaj do cennika',

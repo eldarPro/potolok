@@ -365,6 +365,8 @@ const s: Record<string, string> = {
   're.deleteRoomMsg': 'La habitación «{name}» y todos sus datos serán eliminados.',
   'sp.search': 'Buscar',
   'sp.inRoom': 'En la habitación',
+  'sp.noLights': 'Aún no hay luces',
+  'sp.addLight': 'Añadir luz',
   'sp.removeTitle': '¿Quitar del dibujo?',
   'sp.close': 'Cerrar',
   'sp.addToPriceList': 'Añadir a la lista de precios',

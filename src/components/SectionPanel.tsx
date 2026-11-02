@@ -16,7 +16,6 @@ import { reshapedRoom, resizedPoints, wallCm, setWallProfile, setAllProfiles, ro
 import { roomItems, lineTotal, nicheCost, ItemKind } from '../lib/pricing';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
-import { lightColor } from '../lib/lighting';
 import { LightIcon } from './LightMarks';
 import { useConfirm } from './Dialogs';
 import { wallArcIcon, wallLineIcon } from '../lib/icons';
@@ -103,6 +102,12 @@ const SectionPanel: React.FC<Props> = props => {
   const meta = META[section];
   const touchY = useRef<number | null>(null);
   const [sub, setSub] = useState<SubPage | null>(null);
+  /** the lighting catalog, opened from «+ Add» — anchored to the button pressed */
+  const [addAt, setAddAt] = useState<DOMRect | null>(null);
+  // lighting keeps the catalog behind a header button, so the body is only what's in the room
+  // (an empty room has its own big «Add light» button in the body instead)
+  const lightCatalog = section === 'lighting' && room.areaSqm > 0 && props.lightings.length > 0;
+  const lightAdd = lightCatalog && (room.lighting?.length ?? 0) > 0;
 
   const total = meta.kind
     ? roomItems(room, pricing).filter(i => i.kind === meta.kind).reduce((s, i) => s + lineTotal(i, 'client'), 0)
@@ -142,7 +147,11 @@ const SectionPanel: React.FC<Props> = props => {
               <IonIcon icon={meta.icon} />
             </span>
             <span className="spanel__name">{t(meta.title)}</span>
-            {total > 0 && <span className="spanel__total">{rub(total)}</span>}
+            {lightAdd ? (
+              <button className="spanel__add" onClick={e => setAddAt(e.currentTarget.getBoundingClientRect())}>
+                <IonIcon icon={addOutline} />{t('common.add')}
+              </button>
+            ) : total > 0 && <span className="spanel__total">{rub(total)}</span>}
             <button className="spanel__close" onClick={onClose} aria-label={t('sp.close')}>
               <IonIcon icon={closeOutline} />
             </button>
@@ -156,11 +165,15 @@ const SectionPanel: React.FC<Props> = props => {
         : section === 'diagonals' ? <DiagonalsBody {...props} />
         : section === 'fabric' ? <FabricBody {...props} />
         : section === 'profile' ? <ProfileBody {...props} />
-        : section === 'lighting' ? <LightingBody {...props} />
+        : section === 'lighting' ? <LightingBody {...props} total={total} onAdd={setAddAt} />
         : section === 'niche' ? <NicheBody {...props} />
         : <CountBody {...props} />}
       </SubPageCtx.Provider>
       </AddToPriceCtx.Provider>
+      {lightCatalog && addAt && (
+        <LightAddMenu anchor={addAt} lightings={props.lightings} pricing={pricing}
+          onPick={props.onPlaceLighting} onClose={() => setAddAt(null)} />
+      )}
     </div>
   );
 };
@@ -537,6 +550,49 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
   );
 };
 
+/** The lighting catalog under «+ Add»: picking a type goes straight to placing it on the drawing */
+const LightAddMenu: React.FC<{
+  anchor: DOMRect;
+  lightings: LightingCatalogItem[];
+  pricing?: ProjectPricing;
+  onPick: (item: LightingCatalogItem) => void;
+  onClose: () => void;
+}> = ({ anchor, lightings, pricing, onPick, onClose }) => {
+  const { t } = useT();
+  const [q, setQ] = useState('');
+  const up = anchor.top > window.innerHeight / 2;
+  // right edge under the button, but never off either side of the screen
+  const width = Math.min(300, window.innerWidth - 16);
+  const pos: React.CSSProperties = {
+    width,
+    left: Math.min(Math.max(8, anchor.right - width), window.innerWidth - width - 8),
+    maxHeight: (up ? anchor.top : window.innerHeight - anchor.bottom) - 16,
+    ...(up ? { bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6 }),
+  };
+  const price = (l: LightingCatalogItem) => pricing?.overrides[l.id]?.price ?? l.price;
+  return createPortal(
+    <div className="spanel-menu">
+      <div className="spanel-menu__backdrop spanel-menu__backdrop--dim" onClick={onClose} />
+      <div className="spanel-menu__panel spanel-menu__panel--list" style={pos}>
+        <div className="spanel-menu__title">{t('re.pickLighting')}</div>
+        {lightings.length > SEARCH_FROM && <div className="spanel-menu__search"><Search value={q} onChange={setQ} /></div>}
+        <div className="spanel-menu__scroll">
+          {lightings.filter(l => matches(q, l.title)).map(l => (
+            <button key={l.id} className="spanel-menu__item" onClick={() => { onClose(); onPick(l); }}>
+              <span className="spanel-menu__sym"><LightIcon type={l.type} color={l.color} size={20} /></span>
+              <span className="spanel-menu__label">{l.title}</span>
+              <small className="spanel-menu__price">
+                {rub(price(l))}/{l.placement === 'path' ? t('unit.m') : t('unit.pcs')}
+              </small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
 /** Popover next to a row's ⋮ — opens upwards when the row sits low on screen */
 const WallMenu: React.FC<{
   anchor: DOMRect;
@@ -567,11 +623,12 @@ const WallMenu: React.FC<{
   );
 };
 
-// ═══ Lighting: pick a type to place it, then what's in the room ═══
-const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onPlaceLighting, onPickElement }) => {
+// ═══ Lighting: only what's in the room — the catalog opens from «+ Add» in the header ═══
+const LightingBody: React.FC<Props & { total: number; onAdd: (anchor: DOMRect) => void }> = ({
+  room, lightings, total, onChange, onAdd, onPickElement,
+}) => {
   const { t } = useT();
   const confirm = useConfirm();
-  const [q, setQ] = useState('');
   if (lightings.length === 0) return <div className="spanel__body"><Empty text={t('mat.noLightCatalog')} sub={t('mat.noLightCatalogSub')} addTo="lightings" /></div>;
   const els = room.lighting ?? [];
   const groups = lightings
@@ -585,20 +642,24 @@ const LightingBody: React.FC<Props> = ({ room, pricing, lightings, onChange, onP
   const amount = (g: { item: LightingCatalogItem; els: RoomLightingElement[] }) => g.item.placement === 'path'
     ? `${g.els.reduce((s, e) => s + (e.kind === 'path' ? e.lengthM : 0), 0).toFixed(2)} ${t('unit.m')}`
     : `${g.els.length} ${t('unit.pcs')}`;
-  const price = (l: LightingCatalogItem) => pricing?.overrides[l.id]?.price ?? l.price;
+
+  if (els.length === 0) return (
+    <div className="spanel__body">
+      <div className="spanel__empty">
+        <b>{t('sp.noLights')}</b><span>{t('qa.pickToPlace')}</span>
+        <button className="spanel__empty-btn spanel__empty-btn--accent" onClick={e => onAdd(e.currentTarget.getBoundingClientRect())}>
+          <IonIcon icon={addOutline} />{t('sp.addLight')}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="spanel__body">
-      <div className="spanel__hint">{t('qa.pickToPlace')}</div>
-      {lightings.length > SEARCH_FROM && <Search value={q} onChange={setQ} />}
-      <div className="spanel__tiles">
-        {lightings.filter(l => matches(q, l.title)).map(l => (
-          <Tile key={l.id} symbol={<LightIcon type={l.type} color={l.color} size={22} />} color={lightColor(l.color)} title={l.title}
-            sub={`${rub(price(l))}/${l.placement === 'path' ? t('unit.m') : t('unit.pcs')}`}
-            onClick={() => onPlaceLighting(l)} />
-        ))}
+      <div className="spanel__sub spanel__sub--bar">
+        <span>{t('sp.inRoom')}</span>
+        {total > 0 && <b>{rub(total)}</b>}
       </div>
-      {groups.length > 0 && <div className="spanel__sub">{t('sp.inRoom')}</div>}
       {groups.map(g => (
         <div key={g.item.id} className="spanel__row">
           <span className="spanel__sym"><LightIcon type={g.item.type} color={g.item.color} size={18} /></span>

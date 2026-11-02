@@ -430,11 +430,17 @@ const RoomEditor: React.FC = () => {
   const handleCancelPlacingNiche = () => { setPlacingNiche(null); setCrossStart(null); };
 
   // With a section open, a tap on the wall or diagonal it edits picks its row;
-  // anything else closes the section and opens that element's card
+  // a tap on empty space first drops what's highlighted, then closes the section;
+  // a tap on any other element closes the section and opens that element's card
   const handleCanvasSelect = (s: CanvasSelection | null) => {
     if (section) {
-      if (!s || (section === 'profile' && s.kind === 'wall') || (section === 'diagonals' && s.kind === 'diagonal')) {
+      if (s && ((section === 'profile' && s.kind === 'wall') || (section === 'diagonals' && s.kind === 'diagonal'))) {
         setFocus(s);
+        return;
+      }
+      // placing from the section: the drawing deselects on its own, and «Done» returns to the section
+      if (!s && (focus || placingLighting || placingNiche)) {
+        setFocus(null);
         return;
       }
       setSection(null);
