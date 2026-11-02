@@ -30,6 +30,16 @@ describe('refreshLooks', () => {
     expect(s.lighting[0].catalogItem.type).toBe('spot');
   });
 
+  it('takes a fabric\'s finish and a profile\'s kind and colour, keeping prices', () => {
+    const r = refreshLooks(room(), [fabric({ finish: 'gloss' })], []);
+    expect(r.fabric).toMatchObject({ finish: 'gloss', price: 500 });
+    const prof = fabric({ id: 'p1', title: 'Стандартный', color: '#ffffff', price: 150 });
+    const r0 = { ...room(), profileSegments: [{ edgeIndex: 0, profileId: 'p1', profile: prof, lengthM: 2 }] };
+    const r2 = refreshLooks(r0, [], [], [{ ...prof, title: 'Теневой', color: '#000000', profileKind: 'shadow', price: 999 }]);
+    expect(r2.profileSegments[0].profile).toMatchObject({ title: 'Теневой', color: '#000000', profileKind: 'shadow', price: 150 });
+    expect(refreshLooks(r0, [], [], [prof])).toBe(r0);
+  });
+
   it('leaves a room alone when nothing changed or the item is gone', () => {
     const r0 = room();
     expect(refreshLooks(r0, [fabric()], [light()])).toBe(r0);

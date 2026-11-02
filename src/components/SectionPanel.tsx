@@ -199,7 +199,7 @@ const matches = (q: string, title: string) => !q.trim() || title.toLowerCase().i
 // it. Only n − 3 diagonals are free — for a quad, the one typed last drives
 // and the other follows. While typing the drawing previews the shape; leaving
 // the field (or Enter) saves it as one undo step, like any other change here.
-const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPreview }) => {
+const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPreview, onClose }) => {
   const { t } = useT();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [driver, setDriver] = useState<string | null>(null);
@@ -270,6 +270,11 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
             </div>
           );
         })}
+        {/* the panel opens on its own after drawing — a plain way out for newcomers;
+            a typed diagonal is already saved by the field's blur */}
+        <button className="spanel__split-go spanel__done" onClick={onClose}>
+          <IonIcon icon={checkmarkOutline} />{t('diag.done')}
+        </button>
       </div>
     </>
   );

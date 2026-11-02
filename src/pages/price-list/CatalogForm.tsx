@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonInput, IonTextarea,
-  IonToggle, IonText, useIonRouter,
+  IonToggle, IonText, IonSelect, IonSelectOption, useIonRouter,
 } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { chevronBackOutline } from 'ionicons/icons';
-import { CatalogItem } from '../../types';
+import { CatalogItem, FabricFinish, ProfileKind } from '../../types';
+import { fabricFinish, profileKind } from '../../lib/fabric';
 import ActionButton from '../../components/ActionButton';
 import { loadFabrics, upsertFabric, loadProfiles, upsertProfile } from '../../lib/storage';
 import { uuid } from '../../lib/uuid';
@@ -17,6 +18,9 @@ interface Props {
 }
 
 type FormState = Omit<CatalogItem, 'id'>;
+
+const FINISHES: FabricFinish[] = ['matte', 'satin', 'gloss'];
+const PROFILE_KINDS: ProfileKind[] = ['standard', 'shadow', 'floating', 'gapless'];
 
 const empty = (): FormState => ({
   title: '', price: 0, priceCorner: 0, priceInstall: 0, priceInstallCorner: 0,
@@ -37,7 +41,11 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
       const found = all.find(i => i.id === id);
       if (found) {
         const { id: _id, ...rest } = found;
-        setForm({ ...empty(), ...rest });
+        // an item from before these fields shows what its title suggests
+        setForm({
+          ...empty(), ...rest,
+          ...(category === 'fabrics' ? { finish: fabricFinish(found) } : { profileKind: profileKind(found) }),
+        });
       }
     }
   }, [id, category]);
@@ -48,6 +56,9 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
   const handleSave = () => {
     if (!form.title.trim()) { setError(t('cf.errorTitle')); return; }
     const item: CatalogItem = { id: id ?? uuid(), ...form, title: form.title.trim() };
+    // a new item's look follows its title unless picked by hand
+    if (category === 'fabrics') item.finish = form.finish ?? fabricFinish(item);
+    else item.profileKind = form.profileKind ?? profileKind(item);
     if (category === 'fabrics') upsertFabric(item);
     else upsertProfile(item);
     router.goBack();
@@ -128,6 +139,27 @@ const CatalogForm: React.FC<Props> = ({ category }) => {
               onIonChange={e => set('isDefault', e.detail.checked)}
             />
           </IonItem>
+          {category === 'fabrics' ? (
+            <IonItem>
+              <IonLabel position="stacked">{t('cf.finish')}</IonLabel>
+              <IonSelect
+                value={form.finish ?? fabricFinish(form)}
+                onIonChange={e => set('finish', e.detail.value as FabricFinish)}
+              >
+                {FINISHES.map(f => <IonSelectOption key={f} value={f}>{t(`cf.finish.${f}`)}</IonSelectOption>)}
+              </IonSelect>
+            </IonItem>
+          ) : (
+            <IonItem>
+              <IonLabel position="stacked">{t('cf.profileKind')}</IonLabel>
+              <IonSelect
+                value={form.profileKind ?? profileKind(form)}
+                onIonChange={e => set('profileKind', e.detail.value as ProfileKind)}
+              >
+                {PROFILE_KINDS.map(k => <IonSelectOption key={k} value={k}>{t(`cf.pk.${k}`)}</IonSelectOption>)}
+              </IonSelect>
+            </IonItem>
+          )}
           <IonItem>
             <IonLabel>{t('cf.color')}</IonLabel>
             <div slot="end" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

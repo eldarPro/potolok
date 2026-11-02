@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { Group, Circle, Line, Rect, Wedge } from 'react-konva';
 import { LightingType } from '../types';
 import { lightColor } from '../lib/lighting';
@@ -115,58 +115,83 @@ const armEnds = (len: number) => Array.from({ length: CHANDELIER_ARMS.count }, (
   return { x: Math.cos(a) * len, y: Math.sin(a) * len, deg: a * 180 / Math.PI };
 });
 
+/**
+ * Real sizes of the lights, cm: what they measure on a ceiling. Drawn to the
+ * drawing's scale, but never smaller on screen than a few px, so on a whole
+ * room view they stay visible; zoomed in they grow as the room does.
+ */
+export const LIGHT_SIZE_CM = {
+  spotLens: 5.5, spotBezel: 9,
+  chandelierHub: 10, chandelierLamp: 9, chandelierArm: 1.2,
+  trackSpotWidth: 6, trackSpotLength: 14,
+  trackWidth: 3.5, lineWidth: 5, stripWidth: 1,
+};
+const S = LIGHT_SIZE_CM;
+
 export const GlowPointMark: React.FC<{
-  type: LightingType; x: number; y: number; px: number;
+  type: LightingType; x: number; y: number;
+  /** drawing px per screen px, and per cm */
+  px: number; cm: number;
   /** a chandelier's arm length, drawing px */
   armR?: number;
   /** a track spot's turn, as for PointLightMark */
   angle?: number | null;
-}> = ({ type, x, y, px, armR = 0, angle }) => {
+}> = ({ type, x, y, px, cm, armR = 0, angle }) => {
+  /** `c` cm to scale, at least `min` screen px */
+  const sz = (c: number, min: number) => Math.max(c * cm, min * px);
   if (type === 'chandelier') {
     // the body with its arms, a lamp at the end of each — seen from below
-    const arm = Math.max(armR, 12 * px);
+    const arm = Math.max(armR, 10 * px);
     const ends = armEnds(arm);
+    const armW = sz(S.chandelierArm, 1);
     return (
       <Group x={x} y={y} listening={false}>
-        {ends.map((e, i) => <Line key={`a${i}`} points={[0, 0, e.x, e.y]} stroke="#8a8270" strokeWidth={1.2 * px} />)}
-        <Circle radius={5 * px} fill="#2a2d40" stroke="#c9b991" strokeWidth={1.2 * px} />
-        {ends.map((e, i) => <Circle key={`l${i}`} x={e.x} y={e.y} radius={3.2 * px} fill={HOT} />)}
+        {ends.map((e, i) => <Line key={`a${i}`} points={[0, 0, e.x, e.y]} stroke="#8a8270" strokeWidth={armW} />)}
+        <Circle radius={sz(S.chandelierHub / 2, 3.5)} fill="#2a2d40" stroke="#c9b991" strokeWidth={armW} />
+        {ends.map((e, i) => <Circle key={`l${i}`} x={e.x} y={e.y} radius={sz(S.chandelierLamp / 2, 2.2)} fill={HOT} />)}
       </Group>
     );
   }
   if (type === 'track_spot') {
-    // the spot's body seen from below — a short cylinder across the rail, its lens towards the beam
+    // the spot's body seen from below — a cylinder across the rail, its lens towards the beam
+    const w = sz(S.trackSpotWidth, 5), L = sz(S.trackSpotLength, 9);
+    const lens = Math.max(w * 0.22, 1.6 * px);
     return (
       <Group x={x} y={y} rotation={angle ?? 0} listening={false}>
-        <Rect x={-3.5 * px} y={-11 * px} width={7 * px} height={12 * px} cornerRadius={1.5 * px} fill="#3a3d50" stroke="#9aa0b8" strokeWidth={1 * px} />
-        <Rect x={-3 * px} y={-12.5 * px} width={6 * px} height={2.6 * px} cornerRadius={1 * px} fill={HOT} />
-        <Circle radius={2 * px} fill="#9aa0b8" />
+        <Rect x={-w / 2} y={-L * 0.92} width={w} height={L} cornerRadius={w * 0.2} fill="#3a3d50" stroke="#9aa0b8" strokeWidth={1 * px} />
+        <Rect x={-w * 0.43} y={-L * 0.92 - lens * 0.5} width={w * 0.86} height={lens} cornerRadius={lens / 2} fill={HOT} />
+        <Circle radius={w * 0.28} fill="#9aa0b8" />
       </Group>
     );
   }
+  const lens = sz(S.spotLens / 2, 2), bezel = sz(S.spotBezel / 2, 3.5);
   return (
     <Group x={x} y={y} listening={false}>
-      <Circle radius={4 * px} fill={HOT} />
-      <Circle radius={7 * px} stroke={HOT} strokeWidth={1 * px} opacity={0.35} />
+      <Circle radius={bezel} fill="#cfcfd4" opacity={0.55} />
+      <Circle radius={lens} fill={HOT} />
     </Group>
   );
 };
 
 export const GlowPathMark: React.FC<{
-  type: LightingType; points: Pt[]; px: number;
+  type: LightingType; points: Pt[]; px: number; cm: number;
   /** a track with no track spots on it — lit along its length */
   lit?: boolean;
-}> = ({ type, points, px, lit }) => {
+}> = ({ type, points, px, cm, lit }) => {
   const pts = flat(points);
-  if (type === 'track') return (
-    <Group listening={false}>
-      <Line points={pts} stroke="#7b809a" strokeWidth={5 * px} lineCap="butt" lineJoin="miter" />
-      <Line points={pts} stroke="#30323f" strokeWidth={3 * px} lineCap="butt" lineJoin="miter" />
-      {lit && <Line points={pts} stroke={HOT} strokeWidth={1.6 * px} lineCap="butt" lineJoin="miter" />}
-    </Group>
-  );
-  if (type === 'line') return <Line points={pts} stroke="#fff" strokeWidth={3 * px} lineCap="square" lineJoin="miter" listening={false} />;
-  return <Line points={pts} stroke="#ffe3a8" strokeWidth={1.6 * px} lineCap="round" lineJoin="round" listening={false} />;
+  const sz = (c: number, min: number) => Math.max(c * cm, min * px);
+  if (type === 'track') {
+    const w = sz(S.trackWidth, 3.5);
+    return (
+      <Group listening={false}>
+        <Line points={pts} stroke="#7b809a" strokeWidth={w} lineCap="butt" lineJoin="miter" />
+        <Line points={pts} stroke="#30323f" strokeWidth={w * 0.65} lineCap="butt" lineJoin="miter" />
+        {lit && <Line points={pts} stroke={HOT} strokeWidth={w * 0.35} lineCap="butt" lineJoin="miter" />}
+      </Group>
+    );
+  }
+  if (type === 'line') return <Line points={pts} stroke="#fff" strokeWidth={sz(S.lineWidth, 2.5)} lineCap="square" lineJoin="miter" listening={false} />;
+  return <Line points={pts} stroke="#ffe3a8" strokeWidth={sz(S.stripWidth, 1.4)} lineCap="round" lineJoin="round" listening={false} />;
 };
 
 /** The drawing's mark as a small SVG — for the legend and lists */
@@ -237,10 +262,27 @@ const PALETTE: Record<string, [string, string]> = {
 };
 const paletteOf = (type: LightingType) => PALETTE[type === 'line' ? 'cool' : type === 'chandelier' ? 'bright' : 'warm'];
 
+/**
+ * The fabric's colour (rgb 0–255) the glow lands on: light that bounces off
+ * a coloured fabric takes its colour, a black one swallows it. Only the light
+ * is tinted — the fabric's own picture under it stays as it is.
+ */
+export const GlowTint = createContext<[number, number, number]>([255, 255, 255]);
+const tinted = (hex: string, [r, g, b]: [number, number, number]) => {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v: number, k: number) => Math.round(v * k / 255).toString(16).padStart(2, '0');
+  return `#${c(n >> 16, r)}${c((n >> 8) & 255, g)}${c(n & 255, b)}`;
+};
+const usePalette = (type: LightingType): [string, string] => {
+  const tint = useContext(GlowTint);
+  const [core, edge] = paletteOf(type);
+  return [tinted(core, tint), tinted(edge, tint)];
+};
+
 /** The glow view: a soft pool of light around a point source (radius in drawing px) */
 export const PointGlow: React.FC<{ x: number; y: number; r: number; type: LightingType; power: number; scaleY?: number; rotation?: number }> =
   ({ x, y, r, type, power, scaleY = 1, rotation = 0 }) => {
-    const [core, edge] = paletteOf(type);
+    const [core, edge] = usePalette(type);
     return (
       <Circle
         x={x} y={y} radius={2.2 * r} scaleY={scaleY} rotation={rotation}
@@ -262,7 +304,7 @@ export const PointGlow: React.FC<{ x: number; y: number; r: number; type: Lighti
 const AWAY = 10000;
 export const PathGlow: React.FC<{ points: Pt[]; r: number; type: LightingType; power: number; angle: number }> = ({ points, r, type, power, angle }) => {
   const pts = flat(points);
-  const [core, edge] = paletteOf(type);
+  const [core, edge] = usePalette(type);
   const a = angle * Math.PI / 180;
   const back = { x: -AWAY * Math.cos(a), y: -AWAY * Math.sin(a) };
   // canvas blur b spreads as a Gaussian of sigma b/2; exp(-(d/r)²) has sigma r/√2
@@ -325,7 +367,7 @@ export const TrackBeam: React.FC<{
 }> = ({ x, y, angle, len, drawAngle, power }) => {
   const SPREAD = 38;
   const a = drawAngle * Math.PI / 180;
-  const [core] = paletteOf('track_spot');
+  const [core] = usePalette('track_spot');
   return (
     <Group listening={false}>
       <Wedge

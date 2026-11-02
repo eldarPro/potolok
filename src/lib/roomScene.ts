@@ -37,7 +37,7 @@ function distToOutline(p: Point, outline: Point[]): number {
 }
 
 /** The interior point farthest from every wall — a "centre" that stays inside L/U-shaped rooms too. */
-function roomCentre(outline: Point[]): Point {
+export function roomCentre(outline: Point[]): Point {
   const xs = outline.map(p => p.x), ys = outline.map(p => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const steps = 40;

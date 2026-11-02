@@ -5,6 +5,14 @@ export interface RoomProfileSegment {
   lengthM: number;
 }
 
+/** How a fabric's surface looks — matte, satin (soft sheen) or gloss (mirror-like) */
+export type FabricFinish = 'matte' | 'satin' | 'gloss';
+
+/** How a wall profile shows at the canvas edge: an insert strip (standard), a
+ *  dark gap (shadow), a lit gap (floating) or nothing at all (gapless) */
+export type ProfileKind = 'standard' | 'shadow' | 'floating' | 'gapless';
+
+/** A fabric or a wall profile in the price list (they share the shape) */
 export interface CatalogItem {
   id: string;
   title: string;
@@ -15,6 +23,10 @@ export interface CatalogItem {
   isDefault: boolean;
   color: string;
   description: string;
+  /** fabrics only; unset — guessed from the title (see fabricFinish) */
+  finish?: FabricFinish;
+  /** profiles only; unset — guessed from the title (see profileKind) */
+  profileKind?: ProfileKind;
 }
 
 export interface AdditionalService {

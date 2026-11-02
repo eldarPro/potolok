@@ -36,10 +36,10 @@ export function loadProjects(): Project[] {
     const raw = localStorage.getItem(KEY);
     const projects = raw ? JSON.parse(raw) : [];
     // rooms show the price list's current look of what they use (their prices stay their own)
-    const fabrics = loadFabrics(), lightings = loadLightings();
+    const fabrics = loadFabrics(), lightings = loadLightings(), profiles = loadProfiles();
     return projects.map((p: any) => ({
       ...p,
-      rooms: (p.rooms ?? []).map((r: any) => refreshLooks(migrateRoomScale(r), fabrics, lightings)),
+      rooms: (p.rooms ?? []).map((r: any) => refreshLooks(migrateRoomScale(r), fabrics, lightings, profiles)),
     }));
   } catch {
     return [];
@@ -163,15 +163,17 @@ export const deleteNiche  = (id: string) => deleteListItem(NICHES_KEY, id);
 export function seedCatalog(): void {
   if (loadFabrics().length < 3) {
     saveList<CatalogItem>(FABRICS_KEY, [
-      { id: uuid(), title: 'Матовое белое',   price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true,  color: '#f5f5f5', description: '' },
-      { id: uuid(), title: 'Глянцевое белое', price: 650, priceCorner: 150, priceInstall: 220, priceInstallCorner: 50, isDefault: false, color: '#ddeeff', description: '' },
-      { id: uuid(), title: 'Сатин',           price: 600, priceCorner: 150, priceInstall: 210, priceInstallCorner: 50, isDefault: false, color: '#e8e8e8', description: '' },
+      { id: uuid(), title: 'Матовое белое',   price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true,  color: '#f5f5f5', description: '', finish: 'matte' },
+      { id: uuid(), title: 'Глянцевое белое', price: 650, priceCorner: 150, priceInstall: 220, priceInstallCorner: 50, isDefault: false, color: '#ddeeff', description: '', finish: 'gloss' },
+      { id: uuid(), title: 'Сатин',           price: 600, priceCorner: 150, priceInstall: 210, priceInstallCorner: 50, isDefault: false, color: '#e8e8e8', description: '', finish: 'satin' },
     ]);
   }
   if (loadProfiles().length < 2) {
     saveList<CatalogItem>(PROFILES_KEY, [
-      { id: uuid(), title: 'Стандартный ПВХ', price: 150, priceCorner:  80, priceInstall:  60, priceInstallCorner: 30, isDefault: true,  color: '#ffffff', description: '' },
-      { id: uuid(), title: 'Алюминиевый',     price: 250, priceCorner: 120, priceInstall:  80, priceInstallCorner: 40, isDefault: false, color: '#c0c0c0', description: '' },
+      { id: uuid(), title: 'Стандартный ПВХ', price: 150, priceCorner:  80, priceInstall:  60, priceInstallCorner: 30, isDefault: true,  color: '#ffffff', description: '', profileKind: 'standard' },
+      { id: uuid(), title: 'Алюминиевый',     price: 250, priceCorner: 120, priceInstall:  80, priceInstallCorner: 40, isDefault: false, color: '#c0c0c0', description: '', profileKind: 'standard' },
+      { id: uuid(), title: 'Теневой',         price: 900, priceCorner: 300, priceInstall: 400, priceInstallCorner: 150, isDefault: false, color: '#1c1c1e', description: '', profileKind: 'shadow' },
+      { id: uuid(), title: 'Парящий с подсветкой', price: 1400, priceCorner: 400, priceInstall: 600, priceInstallCorner: 200, isDefault: false, color: '#ffffff', description: '', profileKind: 'floating' },
     ]);
   }
   if (loadLightings().length < 4) {
