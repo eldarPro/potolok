@@ -5,6 +5,7 @@ import {
   pointOnArc, splitBulge, vertexLabels, nextVertexLabel, edgeWouldCrossRoom, GRID_SIZE, CM_PER_GRID,
 } from './geometry';
 import { shapeDiagonals, makePointMapper, diagonalKey } from './diagonals';
+import { pickFrame, frameCoords, framePoint } from './lightScales';
 
 // Edits of a room's outline shared by the drawing (element card) and the
 // materials pages. Each returns the fields of the room that change.
@@ -293,6 +294,31 @@ export function cornerPointsAtAngle(pts: Point[], i: number, deg: number): Point
 }
 
 /** Shift corner i by (dx, dy) cm in drawing axes. */
+/**
+ * Move a point light 1 cm (or `stepCm`) the way of an arrow (dx, dy on the
+ * drawing). A light on the set-out scales steps along the scale nearest that
+ * way, so one of its two numbers changes by exactly the step and the other
+ * stays; a track spot simply moves.
+ */
+export function nudgeLight(room: Room, id: string, dx: number, dy: number, stepCm = 1): Partial<Room> {
+  const lights = room.lighting ?? [];
+  const el = lights.find(e => e.id === id);
+  if (el?.kind !== 'point') return {};
+  const onScales = (e: typeof el) => e.kind === 'point' && e.catalogItem.type !== 'track_spot';
+  const f = onScales(el) && room.points.length >= 3
+    ? pickFrame(room.points, lights.flatMap(e => e.kind === 'point' && onScales(e) ? [{ x: e.x, y: e.y }] : []))
+    : null;
+  let at = { x: el.x + cmToPx(dx * stepCm), y: el.y + cmToPx(dy * stepCm) };
+  if (f) {
+    const c = frameCoords(f, el);
+    const du = dx * f.eu.x + dy * f.eu.y, dv = dx * f.ev.x + dy * f.ev.y;
+    at = Math.abs(du) >= Math.abs(dv)
+      ? framePoint(f, Math.max(0, Math.round(c.u) + Math.sign(du) * stepCm), c.v)
+      : framePoint(f, c.u, Math.max(0, Math.round(c.v) + Math.sign(dv) * stepCm));
+  }
+  return { lighting: lights.map(e => e.id === id ? { ...e, x: at.x, y: at.y } : e) };
+}
+
 export function nudgeVertex(room: Room, i: number, dxCm: number, dyCm: number): Partial<Room> {
   const newPts = room.points.map((p, k) => k === i ? { ...p, x: p.x + cmToPx(dxCm), y: p.y + cmToPx(dyCm) } : p);
   return reshapedRoom(room, newPts);

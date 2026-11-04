@@ -3,7 +3,7 @@ import { IonIcon } from '@ionic/react';
 import {
   closeOutline, checkmarkOutline, chevronBackOutline, chevronForwardOutline, removeOutline, gitCommitOutline, resizeOutline, bulbOutline,
   analyticsOutline, albumsOutline, layersOutline, cutOutline,
-  addCircleOutline, trashOutline, listOutline,
+  trashOutline, listOutline,
   arrowBackOutline, arrowForwardOutline, arrowUpOutline, arrowDownOutline, sunnyOutline,
 } from 'ionicons/icons';
 import {
@@ -13,13 +13,14 @@ import {
 import { CanvasSelection } from './CeilingCanvas';
 import { SheetSection } from './RoomSheet';
 import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, nicheFreeEnds } from '../lib/geometry';
+import { pickFrame, frameCoords } from '../lib/lightScales';
 import { hasCornice, nicheCapId, nicheCost, NicheCostPart } from '../lib/pricing';
 import { nicheMetrics, nicheShape, nicheSpan, crossLine, crossCorners, crossWidthCm, wallLengthCm } from '../lib/nicheGeometry';
 import { setNicheSizes, changeNicheWalls, setCrossEnd, DEPTH_OPTIONS, clampDepth } from '../lib/nicheEdit';
 import { diagonalCm, diagonalKey, shapeDiagonals, reshapeByDiagonals, diagonalRangeCm } from '../lib/diagonals';
 import {
   reshapedRoom, resizedPoints, wallCm, roundEdge, bendEdge, setWallProfile,
-  deleteVertex, cornerAngle, squareCorner, cornerPointsAtAngle, nudgeVertex,
+  deleteVertex, cornerAngle, squareCorner, cornerPointsAtAngle, nudgeVertex, nudgeLight,
 } from '../lib/roomEdit';
 import { uuid } from '../lib/uuid';
 import { useT } from '../lib/i18n';
@@ -39,7 +40,6 @@ interface Props {
   onSelect: (s: CanvasSelection | null) => void;
   onSplitWall: (edgeIndex: number) => void;
   onOpenSection: (section: SheetSection) => void;
-  onPlaceLighting: (item: LightingCatalogItem) => void;
   onToast: (message: string) => void;
   onHeight: (px: number) => void;
 }
@@ -121,13 +121,36 @@ const ElementCard: React.FC<Props> = props => {
     </div>
   );
 
-  /** Size field: − [value] + ✓ — typing doesn't touch the drawing until ✓ / Enter */
-  const sizeField = (current: number, apply: (cm: number) => void, error: boolean, step = true, unit = t('re.cm'), decimals = 0) => {
+  /** Delete at the right end of a row of buttons (the arrows) */
+  const deleteBtn = (onClick: () => void, disabled = false) => (
+    <button className="ecard__btn ecard__btn--delete" disabled={disabled} onClick={onClick}>
+      <IonIcon icon={trashOutline} />
+      <span>{t('common.delete')}</span>
+    </button>
+  );
+
+  /** Size field: − [value] + ✓ — typing doesn't touch the drawing until ✓ / Enter.
+   *  Instant: no ✓ — − / + and every valid number typed go straight onto the
+   *  drawing; `valid` says which numbers can be applied */
+  const sizeField = (
+    current: number, apply: (cm: number) => void, error: boolean, step = true, unit = t('re.cm'), decimals = 0,
+    instant?: { valid: (v: number) => boolean },
+  ) => {
     const k = 10 ** decimals;
     const typed = draft == null ? current : Math.round(parseFloat(draft) * k) / k;
     const dirty = draft != null && typed > 0 && typed !== current;
     const commit = () => { if (dirty && !error) { apply(typed); setDraft(null); inputRef.current?.blur(); } };
-    const bump = (d: number) => setDraft(String(Math.max(1, Math.round(((typed > 0 ? typed : current) + d) * k) / k)));
+    const bump = (d: number) => {
+      const v = Math.max(1, Math.round(((typed > 0 ? typed : current) + d) * k) / k);
+      if (!instant) { setDraft(String(v)); return; }
+      setDraft(null);
+      if (instant.valid(v)) apply(v);
+    };
+    const type = (text: string) => {
+      setDraft(text);
+      const v = Math.round(parseFloat(text) * k) / k;
+      if (instant && v > 0 && v !== current && instant.valid(v)) apply(v);
+    };
     return (
       <div className="ecard__row">
         {step && <button className="ecard__btn" onClick={() => bump(-1)}>−</button>}
@@ -136,16 +159,22 @@ const ElementCard: React.FC<Props> = props => {
             ref={inputRef}
             type="number" inputMode={decimals ? 'decimal' : 'numeric'} min="1" step={decimals ? 1 / k : 1}
             value={draft ?? String(current)}
-            onChange={e => setDraft(e.target.value)}
+            onChange={e => type(e.target.value)}
             onFocus={e => e.target.select()}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setDraft(null); }}
+            onBlur={() => { if (instant) setDraft(null); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { if (instant) { setDraft(null); inputRef.current?.blur(); } else commit(); }
+              if (e.key === 'Escape') setDraft(null);
+            }}
           />
           <span className="ecard__unit">{unit}</span>
         </label>
         {step && <button className="ecard__btn" onClick={() => bump(1)}>+</button>}
-        <button className="ecard__btn ecard__btn--primary" disabled={!dirty || error} onClick={commit}>
-          <IonIcon icon={checkmarkOutline} />
-        </button>
+        {!instant && (
+          <button className="ecard__btn ecard__btn--primary" disabled={!dirty || error} onClick={commit}>
+            <IonIcon icon={checkmarkOutline} />
+          </button>
+        )}
       </div>
     );
   };
@@ -235,7 +264,10 @@ const ElementCard: React.FC<Props> = props => {
       {head(gitCommitOutline, '#4C9AFF', `${t('ec.corner')} ${labels[i]}`,
         `${prevWall} ${wallCm(pts, (i - 1 + n) % n)} ${t('re.cm')} · ${nextWall} ${wallCm(pts, i)} ${t('re.cm')}`)}
       <div className="ecard__label">{t('ec.angle')}</div>
-      {sizeField(shown, () => { if (moved && moved !== pts) onChange(reshapedRoom(room, moved)); }, moved == null, true, '°', 1)}
+      {sizeField(shown, deg => {
+        const m = cornerPointsAtAngle(pts, i, deg);
+        if (m && m !== pts) onChange(reshapedRoom(room, m));
+      }, moved == null, true, '°', 1, { valid: deg => deg >= MIN_ANGLE && deg <= 360 - MIN_ANGLE && cornerPointsAtAngle(pts, i, deg) != null })}
       <div className={`ecard__hint${moved == null ? ' ecard__hint--error' : ''}`}>
         {!inRange ? t('ec.angleRange', { min: MIN_ANGLE, max: 360 - MIN_ANGLE })
           : moved == null ? t('ec.angleError')
@@ -255,13 +287,8 @@ const ElementCard: React.FC<Props> = props => {
         <button className="ecard__btn" onClick={() => nudge(0, -1)}><IonIcon icon={arrowUpOutline} /></button>
         <button className="ecard__btn" onClick={() => nudge(0, 1)}><IonIcon icon={arrowDownOutline} /></button>
         <button className="ecard__btn" onClick={() => nudge(1, 0)}><IonIcon icon={arrowForwardOutline} /></button>
+        {deleteBtn(() => { const r = deleteVertex(room, i); if (r) { onChange(r); close(); } }, n <= 3)}
       </div>
-      {actions([
-        {
-          icon: trashOutline, label: t('common.delete'), danger: true, disabled: n <= 3,
-          onClick: () => { const r = deleteVertex(room, i); if (r) { onChange(r); close(); } },
-        },
-      ])}
     </>;
   }
 
@@ -317,8 +344,30 @@ const ElementCard: React.FC<Props> = props => {
         <span>{isPath ? `${qty.toFixed(2)} ${t('unit.m')} × ${priceOf(item)} ₽` : `1 ${t('mc.pcs')} × ${priceOf(item)} ₽`}</span>
         <b>{rub(priceOf(item) * qty)}</b>
       </div>
-      {actions([
-        { icon: addCircleOutline, label: t('ec.addMore'), onClick: () => props.onPlaceLighting(item) },
+      {!isPath && <>
+        {(() => {
+          // its two set-out numbers — the same as on the scales, which the card may cover
+          if (item.type === 'track_spot' || pts.length < 3) return null;
+          const f = pickFrame(pts, (room.lighting ?? []).flatMap(e => e.kind === 'point' && e.catalogItem.type !== 'track_spot' ? [{ x: e.x, y: e.y }] : []));
+          if (!f) return null;
+          const n = pts.length, c = frameCoords(f, el);
+          const wallV = edgeLabel(pts, (f.corner - 1 + n) % n).replace(/ /g, ''), wallU = edgeLabel(pts, f.corner).replace(/ /g, '');
+          return <>
+            <div className="ecard__label">{t('ec.toWalls')}</div>
+            <div className="ecard__hint">{`${wallV} ${Math.round(c.u)} · ${wallU} ${Math.round(c.v)} ${t('re.cm')}`}</div>
+          </>;
+        })()}
+        <div className="ecard__label">{t('ec.nudge')}</div>
+        <div className="ecard__row">
+          <button className="ecard__btn" onClick={() => onChange(nudgeLight(room, el.id, -1, 0))}><IonIcon icon={arrowBackOutline} /></button>
+          <button className="ecard__btn" onClick={() => onChange(nudgeLight(room, el.id, 0, -1))}><IonIcon icon={arrowUpOutline} /></button>
+          <button className="ecard__btn" onClick={() => onChange(nudgeLight(room, el.id, 0, 1))}><IonIcon icon={arrowDownOutline} /></button>
+          <button className="ecard__btn" onClick={() => onChange(nudgeLight(room, el.id, 1, 0))}><IonIcon icon={arrowForwardOutline} /></button>
+          {deleteBtn(() => { onChange({ lighting: (room.lighting ?? []).filter(e => e.id !== el.id) }); close(); })}
+        </div>
+      </>}
+      {/* a run has no arrows — its delete stays a full button */}
+      {isPath && actions([
         {
           icon: trashOutline, label: t('common.delete'), danger: true,
           onClick: () => { onChange({ lighting: (room.lighting ?? []).filter(e => e.id !== el.id) }); close(); },

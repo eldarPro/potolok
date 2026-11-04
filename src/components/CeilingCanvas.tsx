@@ -26,6 +26,7 @@ import { snapNicheEnd } from '../lib/nicheEdit';
 import { hasCornice } from '../lib/pricing';
 import { useT } from '../lib/i18n';
 import { pointLightGuides, pathLabelAnchor } from '../lib/lightGuides';
+import { pickFrame, lightScales, snapLight, frameCentre, ScaleFrame, SnapKind } from '../lib/lightScales';
 import { GLOW, BARE_TRACK, trackSpotAim, bareTracks, CHANDELIER_ARMS } from '../lib/lightGlow';
 import { lightColor } from '../lib/lighting';
 import { hexRgb } from '../lib/fabric';
@@ -39,6 +40,8 @@ export type CanvasSelection =
   | { kind: 'wall'; index: number }
   | { kind: 'diagonal'; i: number; j: number }
   | { kind: 'light'; id: string }
+  /** all the lights of one price-list item — picked in the lighting section */
+  | { kind: 'lightGroup'; id: string }
   | { kind: 'niche'; id: string }
   | { kind: 'fabric' };
 
@@ -55,6 +58,11 @@ const NICHE_WALL_REACH = 44;
 // How close (screen px) a dragged niche end must come to a magnet to stick
 const NICHE_SNAP_PX = 14;
 const NICHE = '#00ACC1';
+// How close (screen px) a new light must come to another's row to line up with it
+const SNAP_PX = 14;
+// Set-out scales: their numbers and the light they were just lined up for
+const SCALE = '#ffcf5a';
+const SCALE_SNAP = '#5ee0c2';
 const NICHE_DARK = '#00838F';
 
 // Diagonal hatch for a niche band — made once, on first use
@@ -154,6 +162,23 @@ interface Props {
 
 type Tool = 'draw' | 'move';
 
+/** Colours of a set-out number: on the scale, of the light in hand, lined up */
+const TONE = { plain: SCALE, active: SEL, snap: SCALE_SNAP } as const;
+
+/** A number on the drawing — set-out scales, a light's distances, a run's length */
+const ValuePill: React.FC<{
+  at: Point; angle: number; px: number; text: string; w: number;
+  tone: keyof typeof TONE; color?: string;
+}> = ({ at, angle, px, text, w, tone, color }) => {
+  const h = 18, lit = tone !== 'plain';
+  return (
+    <Group x={at.x} y={at.y} rotation={angle} scaleX={px} scaleY={px} listening={false}>
+      <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={5} fill={lit ? TONE[tone] : 'rgba(14,15,26,0.9)'} />
+      <Text x={-w / 2} y={-h / 2} width={w} height={h} align="center" verticalAlign="middle" text={text} fontSize={11.5} fontStyle="bold" fill={lit ? '#16182a' : color ?? SCALE} />
+    </Group>
+  );
+};
+
 /** Height of the toolbar over the drawing, plus a gap */
 const TOOLBAR_H = 88;
 
@@ -230,6 +255,8 @@ const CeilingCanvas: React.FC<Props> = ({
   const selectedPoint = selection?.kind === 'corner' ? selection.index : null;
   const selectedWall = selection?.kind === 'wall' ? selection.index : null;
   const selectedLighting = selection?.kind === 'light' ? selection.id : null;
+  // a group of lights picked in the lighting section: lit, with its set-out numbers
+  const selectedGroup = selection?.kind === 'lightGroup' ? selection.id : null;
   const selectedNicheEl = selection?.kind === 'niche' ? selection.id : null;
   // Wall a niche being placed would go on (hover), and the niche end being dragged
   const [nicheHoverEdge, setNicheHoverEdge] = useState<number | null>(null);
@@ -277,6 +304,18 @@ const CeilingCanvas: React.FC<Props> = ({
   const TOUCH_PLACE_DELAY = 60;
 
   const isClosed = closed || points.length >= MIN_POINTS;
+
+  // Point lights that get set-out numbers (a track spot goes by its track),
+  // and the corner they are counted from
+  const scaleEls = useMemo(() => (room.lighting ?? []).filter((e): e is RoomLightingPoint =>
+    e.kind === 'point' && e.catalogItem.type !== 'track_spot'), [room.lighting]);
+  const scaleLights = useMemo(() => scaleEls.map(e => ({ x: e.x, y: e.y })), [scaleEls]);
+  const scaleFrame: ScaleFrame | null = useMemo(
+    () => isClosed ? pickFrame(points, scaleLights) : null, [isClosed, points, scaleLights]);
+  const scaleCentre = useMemo(() => scaleFrame ? frameCentre(scaleFrame, points) : undefined, [scaleFrame, points]);
+  // A point light under the finger: a new one being placed (id null) or a
+  // placed one being moved — where it would land, and what it lined up with
+  const [lightDrag, setLightDrag] = useState<{ id: string | null; at: Point; u: SnapKind; v: SnapKind } | null>(null);
 
   // Current viewport for the fit animation, which starts from wherever the user left it
   const viewportRef = useRef(viewport);
@@ -447,6 +486,32 @@ const CeilingCanvas: React.FC<Props> = ({
     return { wp, at: wallPointXY(points, wp), square: snap.square };
   };
 
+  // Where a point light dropped at `raw` lands: lined up with the other
+  // lights or the middle of the room, else on a round 5 cm; null outside the room
+  const landLight = (raw: Point, type: string, selfId: string | null) => {
+    const outline = tessellateRoom(points, true);
+    if (!pointInPolygon(raw, outline)) return null;
+    if (type !== 'track_spot' && scaleFrame) {
+      const others = scaleEls.filter(e => e.id !== selfId).map(e => ({ x: e.x, y: e.y }));
+      const s = snapLight(scaleFrame, raw, others, pxToCm(SNAP_PX / viewport.scale), scaleCentre);
+      if (pointInPolygon(s.at, outline)) return s;
+    }
+    return { at: raw, u: null, v: null };
+  };
+  // A new point light follows the finger and lands where it is let go
+  const placingPointLight = !!placingLighting && placingLighting.placement === 'point' && isClosed;
+  const moveGhost = (raw: Point) => {
+    const l = landLight(raw, placingLighting!.type, null);
+    setLightDrag(l ? { id: null, ...l } : { id: null, at: raw, u: null, v: null });
+  };
+  const dropGhost = () => {
+    const g = lightDrag;
+    setLightDrag(null);
+    if (!g || g.id !== null) return;
+    if (landLight(g.at, placingLighting?.type ?? '', null)) onLightingTap?.(g.at);
+    else onOutOfBounds?.();
+  };
+
   const handleTap = (pt: Point) => {
     if (placingNiche && isClosed && nicheCross) {
       const c = crossPointAt(pt);
@@ -494,11 +559,18 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isTouching.current) return;
+    if (placingPointLight) {
+      const pos = getPointerPos(e);
+      if (pos) moveGhost(pos);
+      return;
+    }
     if (placingNiche || placingLighting) {
       const pos = getPointerPos(e);
       if (pos) handleTap(pos);
       return;
     }
+    // pressing a light moves the light, not the drawing
+    if (e.target.name() === 'light') return;
     if (tool === 'move') {
       lastMouse.current = { x: e.evt.clientX, y: e.evt.clientY };
       return;
@@ -528,6 +600,11 @@ const CeilingCanvas: React.FC<Props> = ({
     const pos = getPointerPos(e);
     if (!pos) return;
 
+    if (placingPointLight) {
+      if (lightDrag && !isTouching.current) moveGhost(pos);
+      return;
+    }
+
     if (placingNiche) {
       setNicheHoverEdge(nicheWallAt(pos));
       if (nicheCross) { const c = crossPointAt(pos); setCrossHover(c && { at: c.at, square: c.square }); }
@@ -545,6 +622,7 @@ const CeilingCanvas: React.FC<Props> = ({
 
   const handleStageMouseUp = () => {
     lastMouse.current = null;
+    if (placingPointLight && lightDrag && !isTouching.current) dropGhost();
   };
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -610,6 +688,14 @@ const CeilingCanvas: React.FC<Props> = ({
       // The pending point's preview (dashed line to the first finger) must
       // not linger through the pinch — this is a zoom gesture, not a placement.
       setCursor(null);
+      if (lightDrag?.id === null) setLightDrag(null);
+      return;
+    }
+
+    if (placingPointLight) {
+      e.evt.preventDefault();
+      const pos = stageRef.current?.getPointerPosition();
+      if (pos) moveGhost(screenToWorld(pos.x, pos.y));
       return;
     }
 
@@ -725,6 +811,11 @@ const CeilingCanvas: React.FC<Props> = ({
       return;
     }
 
+    if (placingPointLight && touches.length === 1 && pos) {
+      if (lightDrag?.id === null) moveGhost(screenToWorld(pos.x, pos.y));
+      return;
+    }
+
     if (placingNiche && touches.length === 1 && pos) {
       const raw = screenToWorld(pos.x, pos.y);
       setNicheHoverEdge(nicheWallAt(raw));
@@ -745,7 +836,9 @@ const CeilingCanvas: React.FC<Props> = ({
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: Konva.KonvaEventObject<TouchEvent>) => {
+    // the last finger off: a new light lands where it was let go
+    if (placingPointLight && lightDrag?.id === null && e.evt.touches.length === 0) dropGhost();
     if (placingTouchTimer.current !== null) {
       // Finger lifted before the grace window elapsed and no second finger
       // ever showed up — a genuine quick tap, so commit it right away.
@@ -1084,7 +1177,8 @@ const CeilingCanvas: React.FC<Props> = ({
   const lightGuides = (() => {
     if (!isClosed || showDiagonals || placingLighting || placingNiche) return [];
     const el = (room.lighting ?? []).find(e => e.id === selectedLighting);
-    if (el?.kind !== 'point') return [];
+    // a light on the scales shows its numbers there; a track spot goes by the nearest walls
+    if (el?.kind !== 'point' || el.catalogItem.type !== 'track_spot' || lightDrag) return [];
     const others = (room.lighting ?? []).flatMap(e => e.kind === 'point' && e.id !== el.id ? [{ x: e.x, y: e.y }] : []);
     return pointLightGuides(points, el, others);
   })();
@@ -1096,7 +1190,7 @@ const CeilingCanvas: React.FC<Props> = ({
     }));
     for (const e of room.lighting ?? []) {
       // a run's length only while it is picked — the «Свет» panel has the totals
-      if (e.kind !== 'path' || e.id !== selectedLighting) continue;
+      if (e.kind !== 'path' || (e.id !== selectedLighting && e.catalogItemId !== selectedGroup)) continue;
       const a = pathLabelAnchor(e.points);
       if (!a) continue;
       // beside the run, on the room's side — the other side is often the wall and its length
@@ -1112,6 +1206,72 @@ const CeilingCanvas: React.FC<Props> = ({
     }
     return out;
   })();
+
+  // Set-out scales: each distinct distance of the point lights from one wall
+  // stands as a number just inside the other wall, a dashed line running to
+  // it from the row. The light in hand — being placed, moved or picked —
+  // has its own numbers lit: orange, or green when lined up with another
+  // light or the middle of the room.
+  type ScaleTone = 'plain' | 'active' | 'snap';
+  const scaleView = (() => {
+    const none = { marks: [] as { line: Point[]; at: Point; angle: number; text: string; w: number; tone: ScaleTone }[], origin: null as Point | null };
+    const picked = scaleEls.find(e => e.id === selectedLighting);
+    if (!scaleFrame || showDiagonals || visualOn || !isClosed) return none;
+    const group = selectedGroup && !placingLighting && !lightDrag ? selectedGroup : null;
+    if (!(placingLighting || lightDrag || picked || group)) return none;
+    const f = scaleFrame;
+    // a picked group shows only its own numbers
+    const els = group ? scaleEls.filter(e => e.catalogItemId === group) : scaleEls;
+    if (group && !els.length) return none;
+    const lights = els.map(e => lightDrag?.id === e.id ? lightDrag.at : { x: e.x, y: e.y });
+    let active = -1;
+    if (lightDrag?.id === null) { lights.push(lightDrag.at); active = lights.length - 1; }
+    else if (lightDrag) active = els.findIndex(e => e.id === lightDrag.id);
+    else if (picked) active = els.indexOf(picked);
+    else if (placingLighting) {
+      // while placing, the last one put down keeps its numbers lit
+      const last = (room.lighting ?? []).at(-1);
+      active = last ? els.findIndex(e => e.id === last.id) : -1;
+    }
+    if (!lights.length) return { ...none, origin: worldToScreen(f.o) };
+    const INSET = 14, H = 18;
+    const out: typeof none.marks = [];
+    for (const wall of ['u', 'v'] as const) {
+      const along = wall === 'u' ? f.eu : f.ev, into = wall === 'u' ? f.ev : f.eu;
+      // screen directions of the wall and of «into the room» off it
+      const s0 = worldToScreen(f.o), s1 = worldToScreen({ x: f.o.x + along.x, y: f.o.y + along.y });
+      const dir = { x: s1.x - s0.x, y: s1.y - s0.y }, dl = Math.hypot(dir.x, dir.y) || 1;
+      const ux = dir.x / dl, uy = dir.y / dl;
+      const si = worldToScreen({ x: f.o.x + into.x, y: f.o.y + into.y });
+      const side = Math.sign((si.x - s0.x) * -uy + (si.y - s0.y) * ux) || 1;
+      const nx = -uy * side, ny = ux * side;
+      let angle = Math.atan2(uy, ux) * 180 / Math.PI;
+      if (angle > 90) angle -= 180; else if (angle <= -90) angle += 180;
+      const marks = lightScales(f, lights).filter(m => m.wall === wall)
+        .map(m => { const at = worldToScreen(m.at); return { m, at, t: (at.x - s0.x) * ux + (at.y - s0.y) * uy }; })
+        .sort((a, b) => a.t - b.t);
+      // a number that would run into the one before steps along the wall —
+      // stepping into the room would put it over the lights
+      let prevEnd = -Infinity;
+      for (const { m, at, t: pos } of marks) {
+        const mine = m.lights.includes(active);
+        const centre = scaleCentre != null && Math.abs(m.cm - scaleCentre[wall]) < 0.5;
+        const text = mine && centre ? `${m.cm} · ${t('scale.centre')}` : `${m.cm}`;
+        const w = text.length * 7 + 12;
+        const shift = Math.max(0, prevEnd + 3 - (pos - w / 2));
+        prevEnd = pos + shift + w / 2;
+        const off = INSET + H / 2;
+        const pill = { x: at.x + nx * off + ux * shift, y: at.y + ny * off + uy * shift };
+        const end = { x: at.x + nx * (off + H / 2), y: at.y + ny * (off + H / 2) };
+        const tone: ScaleTone = !mine ? 'plain' : m.lights.length > 1 || centre ? 'snap' : 'active';
+        out.push({ line: [worldToScreen(mine ? lights[active] : m.from), end], at: pill, angle, text, w, tone });
+      }
+    }
+    // the light in hand on top
+    out.sort((a, b) => (a.tone === 'plain' ? 0 : 1) - (b.tone === 'plain' ? 0 : 1));
+    return { marks: out, origin: worldToScreen(f.o) };
+  })();
+  const scaleMarks = scaleView.marks;
 
   // Screen point the selection is about — kept clear of the element card
   const selectionAnchor = (): Point | null => {
@@ -1506,7 +1666,7 @@ const CeilingCanvas: React.FC<Props> = ({
               spots sit on top of their track. */}
           {!showDiagonals && !visualOn && (room.lighting ?? []).filter(e => e.kind === 'path').map(e => {
             const el = e as RoomLightingPath;
-            const isSel = selectedLighting === el.id;
+            const isSel = selectedLighting === el.id || selectedGroup === el.catalogItemId;
             const pts = flat(el.points);
             return (
               <Group key={el.id}>
@@ -1532,9 +1692,12 @@ const CeilingCanvas: React.FC<Props> = ({
           ))}
 
           {!showDiagonals && !visualOn && (room.lighting ?? []).filter(e => e.kind === 'point').map(e => {
-            const el = e as RoomLightingPoint;
-            const isSel = selectedLighting === el.id;
+            const placed = e as RoomLightingPoint;
+            // a light being moved is drawn where it would land
+            const el = lightDrag?.id === placed.id ? { ...placed, ...lightDrag.at } : placed;
+            const isSel = selectedLighting === el.id || lightDrag?.id === el.id || selectedGroup === el.catalogItemId;
             const angle = el.catalogItem.type === 'track_spot' ? trackSpotAim(el, trackRuns, cm2px, roomOutline).angle : null;
+            const canMove = !placingLighting && !placingNiche;
             return (
               <Group key={el.id}>
                 {isSel && (
@@ -1548,13 +1711,45 @@ const CeilingCanvas: React.FC<Props> = ({
                 <Circle
                   x={el.x} y={el.y} radius={(el.catalogItem.type === 'chandelier' ? 22 : 16) * px}
                   fill="transparent"
-                  listening={!placingLighting && !placingNiche}
+                  name="light"
+                  listening={canMove}
+                  draggable={canMove}
+                  onTouchStart={e => { e.cancelBubble = true; isDraggingPoint.current = true; lastTouch.current = null; }}
+                  onDragStart={e => {
+                    if (pinchRef.current) { e.target.stopDrag(); return; }
+                    onVertexDragStart?.();
+                    lastMouse.current = null; lastTouch.current = null; isDraggingPoint.current = true;
+                    setLightDrag({ id: placed.id, at: { x: placed.x, y: placed.y }, u: null, v: null });
+                  }}
+                  onDragMove={e => {
+                    if (pinchRef.current) return;
+                    const l = landLight(e.target.position(), placed.catalogItem.type, placed.id);
+                    // outside the room it stays where it last was inside
+                    const next = l ?? (lightDrag ? { at: lightDrag.at, u: lightDrag.u, v: lightDrag.v } : { at: { x: placed.x, y: placed.y }, u: null, v: null });
+                    e.target.position(next.at);
+                    setLightDrag({ id: placed.id, ...next });
+                  }}
+                  onDragEnd={() => {
+                    isDraggingPoint.current = false;
+                    const d = lightDrag;
+                    setLightDrag(null);
+                    if (d?.id === placed.id) onChange({ lighting: (room.lighting ?? []).map(x => x.id === placed.id ? { ...x, x: d.at.x, y: d.at.y } : x) });
+                    onVertexDragEnd?.();
+                  }}
                   onClick={e => pick(e, { kind: 'light', id: el.id })}
                   onTap={e => pick(e, { kind: 'light', id: el.id })}
                 />
               </Group>
             );
           })}
+
+          {/* A new point light under the finger, landing where it is let go */}
+          {lightDrag?.id === null && placingLighting && (
+            <Group listening={false}>
+              <Circle x={lightDrag.at.x} y={lightDrag.at.y} radius={15 * markUnit(placingLighting.type, px, cm2px(1))} fill="rgba(249,168,37,0.22)" stroke={SEL} strokeWidth={2 * px} />
+              <PointLightMark type={placingLighting.type} color={placingLighting.color} x={lightDrag.at.x} y={lightDrag.at.y} px={px} cm={cm2px(1)} angle={null} />
+            </Group>
+          )}
 
           {/* ── In-progress lighting path ── */}
           {placingLighting?.placement === 'path' && inProgressLightingPath.length > 0 && (
@@ -1756,15 +1951,20 @@ const CeilingCanvas: React.FC<Props> = ({
                 </Group>
               );
             })}
-            {!visualOn && lightPills.map((p, i) => {
-              const at = toStage(worldToScreen(p.at)), w = p.text.length * 6.6 + 14, h = 18;
-              return (
-                <Group key={`lp${i}`} x={at.x} y={at.y} scaleX={px} scaleY={px} listening={false}>
-                  <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={h / 2} fill={p.bg ?? 'rgba(14,15,26,0.9)'} stroke={p.bold ? SEL : 'rgba(255,255,255,0.14)'} strokeWidth={1} />
-                  <Text x={-w / 2} y={-h / 2} width={w} height={h} align="center" verticalAlign="middle" text={p.text} fontSize={10.5} fontStyle="bold" fill={p.color} />
-                </Group>
-              );
+            {!visualOn && lightPills.map((p, i) => (
+              <ValuePill key={`lp${i}`} at={toStage(worldToScreen(p.at))} angle={0} px={px} text={p.text} w={p.text.length * 7 + 12} tone={p.bold ? 'active' : 'plain'} color={p.color} />
+            ))}
+            {scaleView.origin && (() => {
+              const o = toStage(scaleView.origin);
+              return <Circle x={o.x} y={o.y} radius={11 * px} stroke={SCALE} strokeWidth={1.5 * px} dash={[3 * px, 2 * px]} listening={false} />;
+            })()}
+            {scaleMarks.map((m, i) => {
+              const a = toStage(m.line[0]), b = toStage(m.line[1]);
+              return <Line key={`sl${i}`} points={[a.x, a.y, b.x, b.y]} stroke={TONE[m.tone]} opacity={m.tone === 'plain' ? 0.4 : 0.95} strokeWidth={(m.tone === 'plain' ? 1 : 1.5) * px} dash={[3 * px, 4 * px]} listening={false} />;
             })}
+            {scaleMarks.map((m, i) => (
+              <ValuePill key={`sp${i}`} at={toStage(m.at)} angle={m.angle} px={px} text={m.text} w={m.w} tone={m.tone} />
+            ))}
             {!visualOn && labelLayout.letters.map((l, i) => {
               const at = toStage(l);
               return (

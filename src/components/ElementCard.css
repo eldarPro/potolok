@@ -162,6 +162,21 @@
   cursor: default;
 }
 
+.ecard__btn--delete {
+  width: auto;
+  margin-left: auto;
+  padding: 0 12px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff6b66;
+  background: rgba(229, 57, 53, 0.12);
+}
+
+.ecard__btn--delete ion-icon {
+  font-size: 18px;
+}
+
 .ecard__btn--block {
   width: 100%;
   margin-top: 10px;

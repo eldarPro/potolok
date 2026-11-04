@@ -676,7 +676,6 @@ const RoomEditor: React.FC = () => {
               onSelect={setSelection}
               onSplitWall={i => { setSelection(null); setSection('profile'); setSplitWall(i); }}
               onOpenSection={s => { setSelection(null); setSection(s); }}
-              onPlaceLighting={setPlacingLighting}
               onToast={message => presentToast({ message, duration: 1800, position: 'top' })}
               onHeight={setCardHeight}
             />

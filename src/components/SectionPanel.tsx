@@ -672,8 +672,9 @@ const WallMenu: React.FC<{
 
 // ═══ Lighting: only what's in the room — the catalog opens from «+ Add» in the header ═══
 const LightingBody: React.FC<Props & { total: number; onAdd: (anchor: DOMRect) => void }> = ({
-  room, lightings, total, onChange, onAdd, onPickElement,
+  room, lightings, total, onChange, onAdd, focus, onFocus,
 }) => {
+  const activeGroup = focus?.kind === 'lightGroup' ? focus.id : null;
   const { t } = useT();
   const confirm = useConfirm();
   if (lightings.length === 0) return <div className="spanel__body"><Empty text={t('mat.noLightCatalog')} sub={t('mat.noLightCatalogSub')} addTo="lightings" /></div>;
@@ -708,9 +709,10 @@ const LightingBody: React.FC<Props & { total: number; onAdd: (anchor: DOMRect) =
         {total > 0 && <b>{rub(total)}</b>}
       </div>
       {groups.map(g => (
-        <div key={g.item.id} className="spanel__row">
+        <div key={g.item.id} className={`spanel__row${activeGroup === g.item.id ? ' spanel__row--on' : ''}`}>
           <span className="spanel__sym"><LightIcon type={g.item.type} color={g.item.color} size={18} /></span>
-          <button className="spanel__grow spanel__plain" onClick={() => onPickElement({ kind: 'light', id: g.els[0].id })}>
+          {/* the group lit on the drawing, with its set-out numbers; again — off */}
+          <button className="spanel__grow spanel__plain" onClick={() => onFocus(activeGroup === g.item.id ? null : { kind: 'lightGroup', id: g.item.id })}>
             {g.item.title}<small>{amount(g)}</small>
           </button>
           <button className="spanel__iconbtn spanel__iconbtn--danger" aria-label={t('common.delete')}
