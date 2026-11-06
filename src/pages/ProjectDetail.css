@@ -23,6 +23,20 @@
   margin-top: 0;
 }
 
+.project-detail-hero__status {
+  height: 30px;
+  padding: 0 10px 0 12px;
+  border-radius: 15px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.project-detail-hero__status i {
+  width: 8px;
+  height: 8px;
+}
+
 .project-detail-hero__info {
   display: flex;
   flex-wrap: wrap;

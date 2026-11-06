@@ -29,6 +29,10 @@ export interface MenuItem {
   danger?: boolean;
   /** shows a check mark (e.g. the current language) */
   selected?: boolean;
+  /** a colored dot instead of an icon (e.g. a project status); also tints the check mark */
+  dot?: string;
+  /** smaller second line under the label */
+  hint?: string;
   onClick: () => void;
 }
 
@@ -192,9 +196,14 @@ const MenuSheet: React.FC<{ opts: MenuOptions; onPick: (item: MenuItem) => void;
       <div className="dlg__items">
         {opts.items.map((it, i) => (
           <button key={i} className={`dlg__item${it.danger ? ' dlg__item--danger' : ''}${it.selected ? ' dlg__item--selected' : ''}`}
+            style={it.dot ? { '--dlg-dot': it.dot } as React.CSSProperties : undefined}
             onClick={() => onPick(it)}>
             {it.icon && <span className="dlg__item-icon"><IonIcon icon={it.icon} /></span>}
-            <span className="dlg__item-label">{it.label}</span>
+            {it.dot && <span className="dlg__item-icon dlg__item-dot"><i /></span>}
+            <span className="dlg__item-label">
+              {it.label}
+              {it.hint && <small className="dlg__item-hint">{it.hint}</small>}
+            </span>
             {it.selected && <IonIcon className="dlg__item-check" icon={checkmarkOutline} />}
           </button>
         ))}

@@ -368,6 +368,26 @@
   flex: 1;
 }
 
+.dlg__item-hint {
+  display: block;
+  margin-top: 1px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary, #6B7280);
+}
+
+.dlg__item-dot {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dlg-dot) 15%, transparent);
+}
+
+.dlg__item-dot i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dlg-dot);
+}
+
 .dlg__item--danger {
   color: #EF4444;
 }
@@ -389,7 +409,7 @@
 
 .dlg__item-check {
   font-size: 22px;
-  color: var(--color-primary, #1E88E5);
+  color: var(--dlg-dot, var(--color-primary, #1E88E5));
 }
 
 .dlg__sheet-cancel {

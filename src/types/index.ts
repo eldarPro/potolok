@@ -268,6 +268,9 @@ export interface ProjectPricing {
   workerLines: EstimateAdjustment[];
 }
 
+/** approval — set on creation; the rest the master sets by hand */
+export type ProjectStatus = 'approval' | 'inWork' | 'done' | 'cancelled';
+
 export interface Project {
   id: string;
   clientName: string;
@@ -278,6 +281,8 @@ export interface Project {
   updatedAt: string;
   rooms: Room[];
   pricing?: ProjectPricing;
+  /** missing on projects saved before statuses existed = approval */
+  status?: ProjectStatus;
 }
 
 export interface MasterProfile {

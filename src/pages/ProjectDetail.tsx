@@ -19,6 +19,8 @@ import { Project } from '../types';
 import { calcRoomClientPrice, projectEstimate, projectPricing } from '../lib/pricing';
 import ActionButton from '../components/ActionButton';
 import RoomThumb from '../components/RoomThumb';
+import { StatusPill, useStatusMenu } from '../components/ProjectStatus';
+import { statusOf } from '../lib/projectStatus';
 import { useT } from '../lib/i18n';
 import './ProjectDetail.css';
 
@@ -44,6 +46,7 @@ const ProjectDetail: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const menu = useMenu();
+  const statusMenu = useStatusMenu();
   const confirm = useConfirm();
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
@@ -150,6 +153,11 @@ const ProjectDetail: React.FC = () => {
       <IonContent className="project-detail-content">
         {/* ── Client ── */}
         <div className="blue-hero project-detail-hero">
+          <StatusPill
+            status={statusOf(project)}
+            onClick={() => statusMenu(project, setProject)}
+            className="project-detail-hero__status"
+          />
           {(project.phone || project.address) && (
             <div className="project-detail-hero__info">
               {project.phone && <span><IonIcon icon={callOutline} />{project.phone}</span>}

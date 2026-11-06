@@ -122,19 +122,84 @@
   min-width: 0;
 }
 
-.project-card__body > .project-card__tags {
-  margin-top: auto;
-  padding-top: 8px;
-}
-
 .project-card__tags .chip {
   font-size: 12px;
   white-space: nowrap;
 }
 
-.project-card__chip-new {
-  background: #FFF4E5;
-  color: #B45309;
+/* Cancelled: greyed out, the sum no longer counts */
+.project-card--cancelled .project-card__name,
+.project-card--cancelled .project-card__sum {
+  color: var(--color-text-muted);
+}
+
+.project-card--cancelled .project-card__sum {
+  text-decoration: line-through;
+}
+
+.project-card--cancelled .client-avatar {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+.project-swipe-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.project-swipe-option ion-icon {
+  font-size: 22px;
+}
+
+/* ── Status tabs in the hero ── */
+.project-list-hero {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.status-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.status-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.status-tab {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 13px;
+  border: none;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.status-tab b {
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.status-tab--on {
+  background: #fff;
+  color: var(--color-primary-dark);
 }
 
 .project-card__sum {

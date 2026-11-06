@@ -7,13 +7,15 @@ import {
   IonInfiniteScroll, IonInfiniteScrollContent,
   useIonViewWillEnter,
 } from '@ionic/react';
-import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, optionsOutline, personOutline, callOutline, locationOutline } from 'ionicons/icons';
+import { add, trashOutline, folderOpenOutline, searchOutline, closeOutline, optionsOutline, personOutline, callOutline, locationOutline, flagOutline } from 'ionicons/icons';
 import { loadProjects, deleteProject } from '../lib/storage';
 import { useConfirm } from '../components/Dialogs';
 import { projectEstimate } from '../lib/pricing';
 import { Project } from '../types';
 import ActionButton from '../components/ActionButton';
 import ProjectFilterSheet from '../components/ProjectFilterSheet';
+import { StatusPill, useStatusMenu } from '../components/ProjectStatus';
+import { STATUSES, StatusTab, byStatusTab, countByStatus, statusOf } from '../lib/projectStatus';
 import { DEFAULT_FILTERS, ProjectFilters, activeFilterCount, filterProjects, projectDate } from '../lib/projectFilter';
 import { useT } from '../lib/i18n';
 import './ProjectList.css';
@@ -75,6 +77,8 @@ const ProjectList: React.FC = () => {
   const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
+  const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  const statusMenu = useStatusMenu();
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -128,11 +132,19 @@ const ProjectList: React.FC = () => {
     return filterProjects(searched, filters, p => prices.get(p.id) ?? 0);
   }, [projects, prices, q, filters]);
 
-  const filterCount = activeFilterCount(filters);
-  const page = filtered.slice(0, shown);
+  const counts = useMemo(() => countByStatus(filtered), [filtered]);
+  const visible = useMemo(() => byStatusTab(filtered, statusTab), [filtered, statusTab]);
 
-  // a new search or filter starts again from the first page
-  useEffect(() => { setShown(PAGE_SIZE); }, [q, filters]);
+  const filterCount = activeFilterCount(filters);
+  const page = visible.slice(0, shown);
+
+  // a new search, filter or tab starts again from the first page
+  useEffect(() => { setShown(PAGE_SIZE); }, [q, filters, statusTab]);
+
+  const changeStatus = (p: Project, slider: HTMLIonItemSlidingElement | null) => {
+    slider?.close();
+    statusMenu(p, updated => setProjects(list => list.map(x => (x.id === updated.id ? updated : x))));
+  };
 
   const loadMore = (e: CustomEvent<void>) => {
     setShown(n => n + PAGE_SIZE);
@@ -196,10 +208,23 @@ const ProjectList: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="blue-hero" />
+            <div className="blue-hero project-list-hero">
+              <div className="status-tabs">
+                {(['all', ...STATUSES] as StatusTab[]).map(tab => (
+                  <button
+                    key={tab}
+                    className={`status-tab${tab === statusTab ? ' status-tab--on' : ''}`}
+                    onClick={() => setStatusTab(tab)}
+                  >
+                    {t(tab === 'all' ? 'ps.all' : `ps.${tab}`)}
+                    <b>{counts[tab]}</b>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="card-list project-list-cards blue-hero-overlap">
-              {filtered.length === 0 ? (
+              {visible.length === 0 ? (
                 <div className="project-list-no-results card">
                   <IonIcon icon={filterCount > 0 ? optionsOutline : searchOutline} />
                   <p>{t('proj.noResults')}</p>
@@ -212,6 +237,7 @@ const ProjectList: React.FC = () => {
               ) : page.map(p => {
                 const sqm = projectArea(p);
                 const price = priceOf(p);
+                const status = statusOf(p);
                 return (
                   <IonItemSliding key={p.id}>
                     <IonItem
@@ -221,7 +247,7 @@ const ProjectList: React.FC = () => {
                       lines="none"
                       className="project-list-item"
                     >
-                      <div className="project-card card">
+                      <div className={`project-card card${status === 'cancelled' ? ' project-card--cancelled' : ''}`}>
                         <ClientAvatar name={p.clientName} />
 
                         <div className="project-card__body">
@@ -240,26 +266,31 @@ const ProjectList: React.FC = () => {
                             <span>{p.address || t('proj.noAddress')}</span>
                           </div>
 
-                          {p.rooms.length > 0 ? (
-                            <div className="project-card__bottom">
-                              <div className="project-card__tags">
-                                <span className="chip">{t('proj.roomsShort', { n: p.rooms.length })}</span>
-                                {sqm > 0 && <span className="chip">{sqm.toFixed(1)} м²</span>}
-                              </div>
-                              {price > 0 && <div className="project-card__sum">{formatRub(price)}</div>}
-                            </div>
-                          ) : (
+                          <div className="project-card__bottom">
                             <div className="project-card__tags">
-                              <span className="chip project-card__chip-new">{t('proj.newEmpty')}</span>
+                              <StatusPill status={status} />
+                              {p.rooms.length === 0
+                                ? <span className="chip">{t('proj.noRooms')}</span>
+                                : sqm > 0 && <span className="chip">{sqm.toFixed(1)} м²</span>}
                             </div>
-                          )}
+                            {price > 0 && <div className="project-card__sum">{formatRub(price)}</div>}
+                          </div>
                         </div>
                       </div>
                     </IonItem>
 
                     <IonItemOptions side="end">
+                      <IonItemOption color="primary" onClick={e => changeStatus(p, (e.currentTarget as HTMLElement).closest('ion-item-sliding'))}>
+                        <div className="project-swipe-option">
+                          <IonIcon icon={flagOutline} />
+                          {t('proj.status')}
+                        </div>
+                      </IonItemOption>
                       <IonItemOption color="danger" onClick={e => handleDelete(p.id, p.clientName, (e.currentTarget as HTMLElement).closest('ion-item-sliding'))}>
-                        <IonIcon slot="icon-only" icon={trashOutline} />
+                        <div className="project-swipe-option">
+                          <IonIcon icon={trashOutline} />
+                          {t('common.delete')}
+                        </div>
                       </IonItemOption>
                     </IonItemOptions>
                   </IonItemSliding>

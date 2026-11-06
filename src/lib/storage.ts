@@ -73,13 +73,14 @@ export function deleteProject(id: string): void {
   saveProjects(loadProjects().filter(p => p.id !== id));
 }
 
-export function createProject(partial: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'rooms'>): Project {
+export function createProject(partial: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'rooms' | 'status'>): Project {
   const now = new Date().toISOString();
   return {
     id: uuid(),
     createdAt: now,
     updatedAt: now,
     rooms: [],
+    status: 'approval',
     ...partial,
   };
 }
