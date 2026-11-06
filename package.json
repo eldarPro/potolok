@@ -11,7 +11,7 @@
     "test.unit": "vitest",
     "lint": "eslint",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "cp dist/index.html dist/404.html && gh-pages -d dist"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.2.0",
