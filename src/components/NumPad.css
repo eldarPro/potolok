@@ -98,9 +98,28 @@
   background: #1565c0;
 }
 
-/* the app shrinks above the pad once, while it's open */
-html.numpad-open ion-app {
-  bottom: var(--numpad-h, 0px);
+/* slides in over the app (nothing behind it is resized) */
+.npad--slide {
+  animation: npad-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes npad-in {
+  from { transform: translateY(100%); }
+}
+
+/* «Построить» etc. on the last field */
+.npad__key--enter {
+  background: #43a047;
+}
+
+.npad__key--enter:active:not(:disabled) {
+  background: #2e7d32;
+}
+
+/* a window with pinned fields keeps the pad's height free below itself */
+html.numpad-open .numpad-reserve {
+  margin-bottom: var(--numpad-h, 0px);
+  max-height: calc(92vh - var(--numpad-h, 0px)) !important;
 }
 
 /* fields typed with the pad: no caret, no text selection handles */

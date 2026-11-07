@@ -1310,7 +1310,11 @@ const CeilingCanvas: React.FC<Props> = ({
     const bottom = height - obscuredBottom - 70;
     const top = 80;
     const shift = sp.y > bottom ? bottom - sp.y : sp.y < top ? top - sp.y : 0;
-    if (shift !== 0 && bottom > top) setViewport(v => ({ ...v, y: v.y + shift }));
+    // glide: the card riding up on the number pad must not make the drawing jump
+    if (Math.abs(shift) >= 2 && bottom > top) {
+      const v = viewportRef.current;
+      animateTo({ ...v, y: v.y + shift });
+    }
   }, [selKey, obscuredBottom]);
 
   const trackGestureStart = (e: React.PointerEvent<HTMLDivElement>) => {

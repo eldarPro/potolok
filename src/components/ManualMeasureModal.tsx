@@ -98,7 +98,7 @@ const ManualMeasureModal: React.FC<Props> = ({ canvasW, canvasH, onApply, onClos
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9100, display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
-      <div style={{
+      <div className="numpad-reserve" style={{
         position: 'relative', zIndex: 1, width: '100%',
         background: '#16182a',
         borderRadius: '20px 20px 0 0',
@@ -573,10 +573,11 @@ const TemplateForm: React.FC<{ tpl: ShapeTemplate; onApply: (pts: Pt[]) => void 
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 12 }}>
-        {fields.map(p => (
+        {fields.map((p, fi) => (
           <label key={p.key} style={fieldStyle(p.key)}>
             <WallBadge name={p.name} done={isSet(p.key)} />
             <NumInput
+              pinned autoFocus={fi === 0} enterLabel="Построить" enterDisabled={!filled || !shape}
               decimal label={`Стена ${p.name}${p.hint ? ` · ${p.hint}` : ''}, см`}
               value={values[p.key] ?? ''} placeholder={String(blankDef[p.key])}
               onChange={v => setValues(vs => ({ ...vs, [p.key]: v }))}
@@ -702,7 +703,7 @@ const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
       background: 'rgba(255,255,255,0.06)', border: `2px solid ${ACCENT}`,
     }}>
       <NumInput
-        decimal autoFocus={autoFocus} label={label} actions={actions}
+        pinned decimal autoFocus={autoFocus} label={label} actions={actions}
         value={value} placeholder="0"
         onChange={onChange}
         onEnter={onEnter}
@@ -755,7 +756,7 @@ const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
       ) : (
         <>
           <Label style={{ margin: '14px 0 7px' }}>Стена {wallName(n)} — длина</Label>
-          {lenField(input, setInput, () => commit(turnRight), n === 0, `Стена ${wallName(n)} — длина и куда дальше`, turnActions)}
+          {lenField(input, setInput, () => commit(turnRight), true, `Стена ${wallName(n)} — длина и куда дальше`, turnActions)}
 
           {/* with the pad open the turns and undo are on it */}
           {!padOpen && <>

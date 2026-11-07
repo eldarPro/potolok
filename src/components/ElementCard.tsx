@@ -11,7 +11,7 @@ import {
   RoomNichePath, RoomNicheElement, RoomNicheWall, RoomNicheCross,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
-import { NumInput } from './NumPad';
+import { NumInput, useNumPadActive, useNumPadHeight } from './NumPad';
 import { SheetSection } from './RoomSheet';
 import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, nicheFreeEnds } from '../lib/geometry';
 import { pickFrame, frameCoords } from '../lib/lightScales';
@@ -78,14 +78,24 @@ const ElementCard: React.FC<Props> = props => {
   const [draft, setDraft] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Typing a size: the card rides up on the number pad (it lies over the screen, nothing
+  // is resized) and shows just the sizes; the canvas keeps the element clear of both
+  const padEl = useNumPadActive();
+  const padH = useNumPadHeight();
+  const typing = !!padEl && !!rootRef.current?.contains(padEl);
+  const lift = typing ? padH : 0;
+  const liftRef = useRef(lift);
+  liftRef.current = lift;
+
   useLayoutEffect(() => {
     const el = rootRef.current;
     if (!el) return;
-    const obs = new ResizeObserver(() => onHeight(el.offsetHeight));
+    const obs = new ResizeObserver(() => onHeight(el.offsetHeight + liftRef.current));
     obs.observe(el);
     onHeight(el.offsetHeight);
     return () => { obs.disconnect(); onHeight(0); };
   }, []);
+  useLayoutEffect(() => { if (rootRef.current) onHeight(rootRef.current.offsetHeight + lift); }, [lift]);
 
   const pts = room.points;
   const labels = vertexLabels(pts);
@@ -157,7 +167,7 @@ const ElementCard: React.FC<Props> = props => {
         {step && <button className="ecard__btn" onClick={() => bump(-1)}>−</button>}
         <label className={`ecard__field${error ? ' ecard__field--error' : dirty ? ' ecard__field--active' : ''}`}>
           <NumInput
-            inputRef={inputRef}
+            inputRef={inputRef} sticky group="ecard"
             decimal={decimals > 0}
             label={unit === '°' ? t('ec.angle') : `${t('ec.length')}, ${unit}`}
             value={draft ?? String(current)}
@@ -581,7 +591,7 @@ const ElementCard: React.FC<Props> = props => {
   }
 
   return (
-    <div className="ecard" ref={rootRef}>
+    <div className={`ecard${typing ? ' ecard--typing' : ''}`} ref={rootRef}>
       <div className="ecard__handle" />
       {body}
       {pickerOpen && pick && <PickerSheet spec={pick} onClose={() => setPickerOpen(false)} />}
@@ -609,6 +619,7 @@ const NumField: React.FC<{
       {label && <div className="ecard__num-label">{label}</div>}
       <label className={`ecard__field${accent ? ' ecard__field--accent' : ''}${draft != null ? ' ecard__field--active' : ''}`}>
         <NumInput
+          sticky group="ecard"
           label={`${label ?? placeholder ?? ''}, ${t('re.cm')}`.replace(/^, /, '')}
           value={draft ?? (placeholder ? '' : String(shown))}
           placeholder={placeholder}

@@ -624,3 +624,23 @@
 .ecard__field:focus-within {
   border-color: #1e88e5;
 }
+
+/* ── Typing a size: the card rides up on the number pad (NumPad.tsx) and keeps just the sizes ── */
+.ecard {
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.ecard--typing {
+  transform: translateY(calc(-1 * var(--numpad-h, 0px)));
+  max-height: calc(100% - var(--numpad-h, 0px) - 80px);
+}
+
+.ecard--typing .ecard__actions,
+.ecard--typing .ecard__select,
+.ecard--typing .ecard__label:has(+ .ecard__select),
+.ecard--typing .ecard__label:has(+ .ecard__toggle),
+.ecard--typing .ecard__toggle,
+.ecard--typing .ecard__price,
+.ecard--typing .ecard__hint:not(.ecard__hint--error) {
+  display: none;
+}

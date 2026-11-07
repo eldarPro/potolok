@@ -5,9 +5,13 @@ import { backspaceOutline, chevronDownOutline } from 'ionicons/icons';
 import './NumPad.css';
 
 // In-app number keypad for sizes. A NumInput never opens the system keyboard: focusing it
-// docks this pad at the bottom and shrinks the app above it once (html.numpad-open, see
-// NumPad.css). Moving between fields keeps the pad open, so the layout doesn't jump on
-// every field the way the system keyboard did.
+// shows this pad at the bottom, OVER the app — nothing is resized, so the drawing never
+// re-fits. Whoever holds the fields makes room for it:
+//  • pinned fields (manual measure window): the window reserves the pad's height
+//    (.numpad-reserve) and the pad can't be hidden — it lives as long as the fields;
+//  • the element card rides up on the pad (see ElementCard), the canvas pans if needed;
+//  • scrolling lists get bottom padding (html.numpad-open) and the field is scrolled clear.
+// The pad publishes its height as --numpad-h and html.numpad-open while shown.
 
 export interface PadAction {
   label: React.ReactNode;
@@ -36,6 +40,16 @@ export interface NumInputProps {
   /** replace «Назад»/«Далее» with own keys (up to 3: two in the right column + bottom-right) */
   actions?: PadAction[];
   autoFocus?: boolean;
+  /** the pad stays while this field is mounted: no «hide» key, a tap elsewhere doesn't close it */
+  pinned?: boolean;
+  /** a tap elsewhere doesn't close the pad (it still has the «hide» key) */
+  sticky?: boolean;
+  /** a field of this group mounting right after the active one unmounted takes the pad over
+   *  (the element card is re-created for every picked element) */
+  group?: string;
+  /** label of «Готово» on the last field, e.g. «Построить» */
+  enterLabel?: string;
+  enterDisabled?: boolean;
   className?: string;
   style?: React.CSSProperties;
   inputRef?: React.Ref<HTMLInputElement>;
@@ -53,10 +67,39 @@ let version = 0;
 const emit = () => { version++; listeners.forEach(l => l()); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const getVersion = () => version;
+let padHeight = 0;
+let handoff: { group: string; until: number } | null = null;
 
 /** true while the pad is shown */
 export const useNumPadOpen = () => useSyncExternalStore(subscribe, isOpen);
 const isOpen = () => active != null;
+
+/** the field the pad types into */
+export const useNumPadActive = () => useSyncExternalStore(subscribe, getActiveEl);
+const getActiveEl = () => active?.el ?? null;
+
+/** the pad's height in px (0 while hidden) */
+export const useNumPadHeight = () => useSyncExternalStore(subscribe, getPadHeight);
+const getPadHeight = () => (active ? padHeight : 0);
+
+const scrollParent = (el: HTMLElement): HTMLElement | null => {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+};
+
+/** scroll the field clear of the pad (it lies over the app, nothing shrinks) */
+const ensureVisible = (el: HTMLElement) => {
+  const r = el.getBoundingClientRect();
+  const sc = scrollParent(el);
+  if (!sc) return;
+  const limit = window.innerHeight - padHeight - 12;
+  const top = sc.getBoundingClientRect().top + 8;
+  if (r.bottom > limit) sc.scrollBy({ top: r.bottom - limit, behavior: 'smooth' });
+  else if (r.top < top) sc.scrollBy({ top: r.top - top, behavior: 'smooth' });
+};
 
 const visibleFields = () =>
   [...fields.keys()]
@@ -74,8 +117,8 @@ const activate = (el: HTMLInputElement) => {
   prev?.props.current.onBlur?.();
   props.current.onFocus?.();
   emit();
-  // after the app has shrunk above the pad
-  setTimeout(() => { if (active?.el === el) el.scrollIntoView({ block: 'nearest' }); }, 30);
+  // once the pad (and a card riding on it) has slid in
+  setTimeout(() => { if (active?.el === el) ensureVisible(el); }, props.current.pinned ? 30 : 260);
 };
 
 /** data-numpad="active" on the field being typed into, "fresh" while the first key will replace its value */
@@ -106,9 +149,10 @@ const done = () => {
   const list = visibleFields();
   const next = list[list.indexOf(active.el) + 1];
   if (next) { next.focus(); return; }
-  const onEnter = active.props.current.onEnter;
-  close();
-  onEnter?.();
+  const p = active.props.current;
+  if (p.enterDisabled) return;
+  if (!p.pinned) close();
+  p.onEnter?.();
 };
 
 const MAX_LEN = 7;
@@ -123,9 +167,9 @@ const press = (key: string) => {
   else if (key === '.') {
     if (!p.decimal || /[.,]/.test(cur)) return;
     next = (cur || '0') + '.';
-  } else if (/^\d$/.test(key)) {
-    if (cur.replace(/[.,]/, '').length >= MAX_LEN) return;
-    next = cur === '0' ? key : cur + key;
+  } else if (/^\d+$/.test(key)) {
+    if (cur.replace(/[.,]/, '').length + key.length > MAX_LEN) return;
+    next = cur === '0' || (cur === '' && key === '00') ? key.slice(0, 1) : cur + key;
   }
   if (active.fresh) { active.fresh = false; mark(el, true, false); }
   if (next !== p.value) p.onChange(next);
@@ -142,10 +186,24 @@ export const NumInput: React.FC<NumInputProps> = props => {
   useLayoutEffect(() => {
     const el = ref.current!;
     fields.set(el, propsRef);
+    const g = propsRef.current.group;
+    if (g && handoff?.group === g && handoff.until > performance.now()) {
+      handoff = null;
+      el.focus({ preventScroll: true });
+      activate(el);
+    }
     return () => {
       fields.delete(el);
-      if (active?.el === el) { active = null; emit(); }
       mark(el, false);
+      if (active?.el !== el) return;
+      active = null;
+      const group = propsRef.current.group;
+      if (group) {
+        // a field of the same group may mount in this commit — let it take the pad over
+        // before the pad is hidden
+        handoff = { group, until: performance.now() + 150 };
+        setTimeout(() => { if (!active) emit(); }, 0);
+      } else emit();
     };
   }, []);
 
@@ -183,6 +241,7 @@ export const NumInput: React.FC<NumInputProps> = props => {
       onBlur={e => {
         const to = e.relatedTarget as HTMLInputElement | null;
         if (to && fields.has(to)) return; // the next field's focus takes over
+        if (props.pinned || props.sticky) return;
         // focus went nowhere (tap on empty space) or to a non-pad control
         setTimeout(() => {
           const now = document.activeElement as HTMLInputElement | null;
@@ -240,12 +299,16 @@ export const NumPad: React.FC = () => {
   const padRef = useRef<HTMLDivElement>(null);
   const open = active != null;
 
-  // publish the pad height and shrink the app above it
+  // publish the pad height
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (!open) { root.classList.remove('numpad-open'); root.style.removeProperty('--numpad-h'); return; }
     const pad = padRef.current!;
-    const set = () => root.style.setProperty('--numpad-h', `${Math.round(pad.getBoundingClientRect().height)}px`);
+    const set = () => {
+      const h = Math.round(pad.getBoundingClientRect().height);
+      root.style.setProperty('--numpad-h', `${h}px`);
+      if (h !== padHeight) { padHeight = h; emit(); }
+    };
     set();
     root.classList.add('numpad-open');
     const ro = new ResizeObserver(set);
@@ -253,13 +316,14 @@ export const NumPad: React.FC = () => {
     return () => ro.disconnect();
   }, [open]);
 
-  // hardware «back» hides the pad first
+  // hardware «back» hides the pad first (a pinned one goes with its window)
+  const pinned = !!active?.props.current.pinned;
   useEffect(() => {
-    if (!open) return;
+    if (!open || pinned) return;
     const onBack = (e: Event) => (e as CustomEvent).detail.register(300, () => close());
     document.addEventListener('ionBackButton', onBack);
     return () => document.removeEventListener('ionBackButton', onBack);
-  }, [open]);
+  }, [open, pinned]);
 
   if (!active) return null;
   const p = active.props.current;
@@ -269,7 +333,7 @@ export const NumPad: React.FC = () => {
   const actions = p.actions;
 
   return createPortal(
-    <div className="npad" ref={padRef} onPointerDown={e => e.preventDefault()}>
+    <div className={`npad${p.pinned ? '' : ' npad--slide'}`} ref={padRef} onPointerDown={e => e.preventDefault()}>
       <div className="npad__head">
         <span className="npad__label">{p.label}</span>
         {list.length > 1 && idx >= 0 && <span className="npad__prog">{idx + 1} из {list.length}</span>}
@@ -287,9 +351,13 @@ export const NumPad: React.FC = () => {
         {actions ? (
           <ActionKey a={actions[1]} />
         ) : (
-          <Key className="npad__key--go" onPress={done}>{isLast ? 'Готово' : 'Далее ›'}</Key>
+          <Key className={`npad__key--go${isLast && p.enterLabel ? ' npad__key--enter' : ''}`} onPress={done} disabled={isLast && p.enterDisabled}>
+            {isLast ? p.enterLabel ?? 'Готово' : 'Далее ›'}
+          </Key>
         )}
-        <Key className="npad__key--fn" onPress={() => close()}><IonIcon icon={chevronDownOutline} /></Key>
+        {p.pinned
+          ? <Key onPress={() => press('00')}>00</Key>
+          : <Key className="npad__key--fn" onPress={() => close()}><IonIcon icon={chevronDownOutline} /></Key>}
         <Key onPress={() => press('0')}>0</Key>
         <Key className="npad__key--fn" onPress={() => press('.')} disabled={!p.decimal}>,</Key>
         {actions && <ActionKey a={actions[2]} />}

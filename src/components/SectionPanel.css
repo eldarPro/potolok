@@ -856,3 +856,8 @@
   border-color: #1e88e5;
   background: rgba(30, 136, 229, 0.12);
 }
+
+/* the number pad lies over the panel — leave room to scroll the last rows clear of it */
+html.numpad-open .spanel__body {
+  padding-bottom: calc(12px + var(--numpad-h, 0px));
+}
