@@ -4,6 +4,7 @@ import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { LanguageProvider } from './lib/i18n';
 import { DialogProvider } from './components/Dialogs';
+import NumPad from './components/NumPad';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -78,6 +79,7 @@ const App: React.FC = () => (
         <Route exact path="/price-list/niches/:id/edit" component={NicheForm} />
       </IonRouterOutlet>
     </IonReactRouter>
+    <NumPad />
   </IonApp>
   </DialogProvider>
   </LanguageProvider>

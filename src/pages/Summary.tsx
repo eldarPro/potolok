@@ -13,6 +13,7 @@ import {
 } from '../lib/pricing';
 import { fmtRub, itemTitle, lineCalc, sectionedItems } from '../lib/estimateFormat';
 import { buildEstimatePdf, loadPdfFonts } from '../lib/estimatePdf';
+import { savePdf, sharePdf } from '../lib/sharePdf';
 import PriceEditSheet from '../components/PriceEditSheet';
 import { useT } from '../lib/i18n';
 import './Summary.css';
@@ -66,16 +67,9 @@ const Summary: React.FC = () => {
   };
 
   const pdfFileName = `${worker ? 'naryad' : 'smeta'}_${project.clientName.replace(/\s+/g, '_')}.pdf`;
-  const handlePDF = async () => (await buildEstimatePdf(project, est, side, t)).save(pdfFileName);
-  const handleShare = async () => {
-    const doc = await buildEstimatePdf(project, est, side, t);
-    const file = new File([doc.output('blob')], pdfFileName, { type: 'application/pdf' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: t(worker ? 'pdf.workerTitle' : 'pd.estimate') });
-    } else {
-      doc.save(pdfFileName);
-    }
-  };
+  const pdfTitle = t(worker ? 'pdf.workerTitle' : 'pd.estimate');
+  const handlePDF = async () => savePdf(await buildEstimatePdf(project, est, side, t), pdfFileName, pdfTitle);
+  const handleShare = async () => sharePdf(await buildEstimatePdf(project, est, side, t), pdfFileName, pdfTitle);
 
   const openPrices = () => router.push(`/project/${id}/prices`, 'forward', 'push');
   const date = new Date().toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' });

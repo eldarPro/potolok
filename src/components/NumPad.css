@@ -1,0 +1,131 @@
+/* ── In-app number pad (NumPad.tsx) ── */
+.npad {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100000;
+  background: #0f1120;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+  padding: 6px 8px max(10px, env(safe-area-inset-bottom, 10px));
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.npad__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.npad__label {
+  flex: 1;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npad__prog {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.npad__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 50px;
+  gap: 6px;
+}
+
+.npad__key {
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  font: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.npad__key:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.npad__key:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.npad__key ion-icon {
+  font-size: 24px;
+}
+
+.npad__key--fn {
+  background: rgba(255, 255, 255, 0.04);
+  color: #9ec9ff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.npad__key--go,
+.npad__key--act {
+  background: #1e88e5;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.npad__key--go {
+  grid-row: span 2;
+}
+
+.npad__key--go:active:not(:disabled),
+.npad__key--act:active:not(:disabled) {
+  background: #1565c0;
+}
+
+/* the app shrinks above the pad once, while it's open */
+html.numpad-open ion-app {
+  bottom: var(--numpad-h, 0px);
+}
+
+/* fields typed with the pad: no caret, no text selection handles */
+input.numin {
+  caret-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+/* the first key will replace the value — show it «selected» */
+input.numin[data-numpad='fresh'] {
+  color: #64b5f6 !important;
+}
+
+/* own keys (e.g. turns in «Своя форма»): icon over a short label */
+.npad__key--stack {
+  flex-direction: column;
+  gap: 0;
+  font-size: 13px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.npad__key-icon {
+  font-size: 20px;
+  line-height: 1;
+}

@@ -7,6 +7,7 @@ import {
   wallPathCm, SHAPE_TEMPLATES, ShapeTemplate, rotatePts, mirrorPts,
 } from '../lib/walls';
 import { Room } from '../types';
+import { NumInput, PadAction, useNumPadOpen } from './NumPad';
 
 type Pt = { x: number; y: number };
 type Step = 'pick' | 'custom' | string; // shape picker, wall-by-wall, or template id
@@ -575,13 +576,13 @@ const TemplateForm: React.FC<{ tpl: ShapeTemplate; onApply: (pts: Pt[]) => void 
         {fields.map(p => (
           <label key={p.key} style={fieldStyle(p.key)}>
             <WallBadge name={p.name} done={isSet(p.key)} />
-            <input
-              type="number" inputMode="decimal" min="0" step="1"
+            <NumInput
+              decimal label={`Стена ${p.name}${p.hint ? ` · ${p.hint}` : ''}, см`}
               value={values[p.key] ?? ''} placeholder={String(blankDef[p.key])}
-              onChange={e => setValues(v => ({ ...v, [p.key]: e.target.value }))}
+              onChange={v => setValues(vs => ({ ...vs, [p.key]: v }))}
               onFocus={() => setFocus(p.key)}
               onBlur={() => setFocus(f => (f === p.key ? null : f))}
-              onKeyDown={e => { if (e.key === 'Enter' && filled && shape) onApply(pts); }}
+              onEnter={() => { if (filled && shape) onApply(pts); }}
               style={{
                 flex: 1, width: 0, minWidth: 0, background: 'none', border: 'none', outline: 'none',
                 color: '#fff', fontSize: 19, fontWeight: 800, padding: 0,
@@ -681,16 +682,30 @@ const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
     border: dashed ? `1.5px dashed ${ACCENT}` : `1.5px solid ${active ? ACCENT : 'transparent'}`,
   });
 
-  const lenField = (value: string, onChange: (v: string) => void, onEnter: () => void, autoFocus = false) => (
+  const padOpen = useNumPadOpen();
+  // on the pad: the two turns (= commit the wall) and undo, instead of «Назад»/«Далее»
+  const turns = [turnLeft, turnRight]
+    .map(turn => ({ turn, dir: turn(curDir) }))
+    .sort((a, b) => SCREEN_ORDER.indexOf(a.dir) - SCREEN_ORDER.indexOf(b.dir));
+  const arrow = { E: '→', S: '↓', W: '←', N: '↑' };
+  const turnActions = [
+    ...turns.map(({ turn, dir }) => ({ icon: arrow[dir], label: SCREEN_DIR[dir], onClick: () => commit(turn), disabled: !typed, primary: true })),
+    { icon: '↩', label: 'Отменить', onClick: undo, disabled: n === 0 },
+  ];
+
+  const lenField = (
+    value: string, onChange: (v: string) => void, onEnter: () => void, autoFocus = false,
+    label?: string, actions?: PadAction[],
+  ) => (
     <div style={{
       display: 'flex', alignItems: 'center', height: 54, padding: '0 14px', borderRadius: 14,
       background: 'rgba(255,255,255,0.06)', border: `2px solid ${ACCENT}`,
     }}>
-      <input
-        type="number" inputMode="decimal" min="0" step="1" autoFocus={autoFocus}
+      <NumInput
+        decimal autoFocus={autoFocus} label={label} actions={actions}
         value={value} placeholder="0"
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') onEnter(); }}
+        onChange={onChange}
+        onEnter={onEnter}
         style={{ flex: 1, width: 0, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 24, fontWeight: 800, padding: 0 }}
       />
       <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>см</span>
@@ -731,7 +746,7 @@ const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
       {editIdx != null ? (
         <>
           <Label style={{ margin: '14px 0 7px' }}>Стена {wallName(editIdx)} — исправить длину</Label>
-          {lenField(editVal, setEditVal, saveEdit, true)}
+          {lenField(editVal, setEditVal, saveEdit, true, `Стена ${wallName(editIdx)} — исправить, см`)}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <GhostButton onClick={() => setEditIdx(null)}>Отмена</GhostButton>
             <BigButton onClick={saveEdit} disabled={!(parseNum(editVal) > 0)}>Сохранить</BigButton>
@@ -740,20 +755,20 @@ const StepForm: React.FC<{ onApply: (ring: Pt[]) => void }> = ({ onApply }) => {
       ) : (
         <>
           <Label style={{ margin: '14px 0 7px' }}>Стена {wallName(n)} — длина</Label>
-          {lenField(input, setInput, () => commit(turnRight))}
+          {lenField(input, setInput, () => commit(turnRight), n === 0, `Стена ${wallName(n)} — длина и куда дальше`, turnActions)}
 
-          <Label style={{ margin: '12px 0 7px' }}>Следующая стена на схеме идёт</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-            {[turnLeft, turnRight]
-              .map(turn => ({ turn, dir: turn(curDir) }))
-              .sort((a, b) => SCREEN_ORDER.indexOf(a.dir) - SCREEN_ORDER.indexOf(b.dir))
-              .map(({ turn, dir }) => (
+          {/* with the pad open the turns and undo are on it */}
+          {!padOpen && <>
+            <Label style={{ margin: '12px 0 7px' }}>Следующая стена на схеме идёт</Label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {turns.map(({ turn, dir }) => (
                 <TurnButton key={dir} onClick={() => commit(turn)} disabled={!typed} icon={<DirArrow dir={dir} />} title={SCREEN_DIR[dir]} />
               ))}
-          </div>
+            </div>
+          </>}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <GhostButton onClick={undo} disabled={n === 0}>↩ Отменить</GhostButton>
+            {!padOpen && <GhostButton onClick={undo} disabled={n === 0}>↩ Отменить</GhostButton>}
             <BigButton onClick={() => onApply(ring)} color={GREEN} disabled={!canClose}>
               Замкнуть
               <Sub>{canClose ? (meets ? 'контур сошёлся' : `последняя стена ${closeLen} — до точки a`)

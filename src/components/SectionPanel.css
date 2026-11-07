@@ -800,7 +800,7 @@
 }
 
 .spanel__split-field .spanel__num input { font-size: 18px; font-weight: 800; }
-.spanel__split-field .spanel__num:focus-within { border-color: #F9A825; }
+.spanel__split-field .spanel__num:focus-within { border-color: #F9A825; background: rgba(255, 255, 255, 0.04); }
 
 .spanel__split-part {
   width: 100%;
@@ -849,4 +849,10 @@
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.3);
   cursor: default;
+}
+
+/* typing into it with the number pad */
+.spanel__num:focus-within {
+  border-color: #1e88e5;
+  background: rgba(30, 136, 229, 0.12);
 }

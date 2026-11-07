@@ -21,6 +21,7 @@ import { useConfirm } from './Dialogs';
 import { wallArcIcon, wallLineIcon } from '../lib/icons';
 import { createPortal } from 'react-dom';
 import './SectionPanel.css';
+import { NumInput } from './NumPad';
 
 export type PanelSection = 'diagonals' | 'fabric' | 'profile' | 'lighting' | 'niche' | 'accessories' | 'services';
 
@@ -285,13 +286,12 @@ const DiagonalsBody: React.FC<Props> = ({ room, onChange, focus, onFocus, onPrev
                 {bad && range && <small className="spanel__bad">{t('diag.range', { min: range[0], max: range[1] })}</small>}
               </span>
               <label className={`spanel__num${bad ? ' spanel__num--bad' : ''}`}>
-                <input
-                  type="number" inputMode="numeric" min="0" step="1"
+                <NumInput
+                  label={`${t('ec.diagonal')} ${d.label}, ${t('re.cm')}`}
                   value={draft[d.key] ?? String(diagonalCm(pts ?? room.points, d.i, d.j))}
-                  onChange={e => edit(d.key, e.target.value)}
-                  onFocus={e => { onFocus({ kind: 'diagonal', i: d.i, j: d.j }); e.target.select(); }}
+                  onChange={v => edit(d.key, v)}
+                  onFocus={() => onFocus({ kind: 'diagonal', i: d.i, j: d.j })}
                   onBlur={commit}
-                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 />
                 <span>{t('re.cm')}</span>
               </label>
@@ -454,8 +454,7 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
             <label key={f.label} className="spanel__split-field">
               <small>{f.label}</small>
               <span className={`spanel__num${splitValid ? '' : ' spanel__num--bad'}`}>
-                <input type="number" inputMode="numeric" min="1" step="1" value={f.value}
-                  onChange={e => f.set(e.target.value)} onFocus={e => e.target.select()} />
+                <NumInput label={`${f.label}, ${t('re.cm')}`} value={f.value} onChange={f.set} />
                 <span>{t('re.cm')}</span>
               </span>
             </label>
@@ -493,13 +492,12 @@ const ProfileBody: React.FC<Props> = ({ room, pricing, profiles, onChange, focus
                 {edgeLabel(room.points, i).replace(/ /g, '')}
               </span>
               <label className={`spanel__num spanel__num--wall${edited ? ' spanel__num--edited' : ''}`}>
-                <input
-                  type="number" inputMode="numeric" min="1" step="1"
+                <NumInput
+                  label={`${t('mat.wall')} ${edgeLabel(room.points, i).replace(/ /g, '')}, ${t('re.cm')}`}
                   value={draft[i] ?? String(wallCm(pts, i))}
-                  onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [i]: v })); }}
-                  onFocus={e => { onFocus({ kind: 'wall', index: i }); e.target.select(); }}
+                  onChange={v => setDraft(d => ({ ...d, [i]: v }))}
+                  onFocus={() => onFocus({ kind: 'wall', index: i })}
                   onBlur={commit}
-                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 />
                 <span>{t('re.cm')}</span>
               </label>

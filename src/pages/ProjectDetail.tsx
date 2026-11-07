@@ -19,6 +19,9 @@ import { Project } from '../types';
 import { calcRoomClientPrice, projectEstimate, projectPricing } from '../lib/pricing';
 import ActionButton from '../components/ActionButton';
 import RoomThumb from '../components/RoomThumb';
+import WorkshopSheet from '../components/WorkshopSheet';
+import { workshopIcon } from '../lib/icons';
+import { isDrawn } from '../lib/shrink';
 import { StatusPill, useStatusMenu } from '../components/ProjectStatus';
 import { statusOf } from '../lib/projectStatus';
 import { useT } from '../lib/i18n';
@@ -54,6 +57,7 @@ const ProjectDetail: React.FC = () => {
   const [editAddress, setEditAddress] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editError, setEditError] = useState('');
+  const [workshop, setWorkshop] = useState<'all' | string | null>(null);
 
   const load = () => setProject(getProject(id));
   useEffect(() => { load(); }, [id]);
@@ -215,6 +219,16 @@ const ProjectDetail: React.FC = () => {
           </button>
         </div>
 
+        <button
+          className="project-detail-workshop"
+          disabled={!project.rooms.some(isDrawn)}
+          onClick={() => setWorkshop('all')}
+        >
+          <IonIcon icon={workshopIcon} />
+          {t('ws.title')}
+          <small>· {t('ws.btnHint')}</small>
+        </button>
+
         {/* ── Rooms ── */}
         <div className="project-detail-section-header">
           <div className="project-detail-section-title">{t('pd.rooms')}</div>
@@ -259,6 +273,7 @@ const ProjectDetail: React.FC = () => {
                           title: room.name,
                           items: [
                             { icon: sparklesOutline, label: t('viz.menuItem'), onClick: () => router.push(`/project/${id}/room/${room.id}/visualize`, 'forward', 'push') },
+                            ...(drawn ? [{ icon: workshopIcon, label: t('ws.title'), onClick: () => setWorkshop(room.id) }] : []),
                             { icon: trashOutline, label: t('common.delete'), danger: true, onClick: () => handleDeleteRoom(room.id, room.name) },
                           ],
                         });
@@ -342,6 +357,8 @@ const ProjectDetail: React.FC = () => {
       </IonContent>
 
 
+
+      <WorkshopSheet project={project} target={workshop} onClose={() => setWorkshop(null)} />
 
       <IonModal
         isOpen={showEditModal}

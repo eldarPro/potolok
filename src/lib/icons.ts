@@ -14,3 +14,9 @@ export const wallLineIcon = svg(
   `<path d='M80 256 H432' ${stroke}/>` +
   `<circle cx='80' cy='256' r='36' fill='currentColor'/><circle cx='432' cy='256' r='36' fill='currentColor'/>`,
 );
+
+/** The workshop the order goes to: a factory with a saw-tooth roof */
+export const workshopIcon = svg(
+  `<path d='M64 448V208l128 80v-80l128 80V128l128-64v384z' fill='none' stroke='currentColor' stroke-linejoin='round' stroke-width='32'/>` +
+  `<path d='M48 448h416' ${stroke}/>`,
+);

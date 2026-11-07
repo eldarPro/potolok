@@ -11,6 +11,7 @@ import {
   RoomNichePath, RoomNicheElement, RoomNicheWall, RoomNicheCross,
 } from '../types';
 import { CanvasSelection } from './CeilingCanvas';
+import { NumInput } from './NumPad';
 import { SheetSection } from './RoomSheet';
 import { edgeLabel, edgeLengthM, vertexLabels, countRealCorners, nicheFreeEnds } from '../lib/geometry';
 import { pickFrame, frameCoords } from '../lib/lightScales';
@@ -155,17 +156,15 @@ const ElementCard: React.FC<Props> = props => {
       <div className="ecard__row">
         {step && <button className="ecard__btn" onClick={() => bump(-1)}>−</button>}
         <label className={`ecard__field${error ? ' ecard__field--error' : dirty ? ' ecard__field--active' : ''}`}>
-          <input
-            ref={inputRef}
-            type="number" inputMode={decimals ? 'decimal' : 'numeric'} min="1" step={decimals ? 1 / k : 1}
+          <NumInput
+            inputRef={inputRef}
+            decimal={decimals > 0}
+            label={unit === '°' ? t('ec.angle') : `${t('ec.length')}, ${unit}`}
             value={draft ?? String(current)}
-            onChange={e => type(e.target.value)}
-            onFocus={e => e.target.select()}
+            onChange={type}
             onBlur={() => { if (instant) setDraft(null); }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { if (instant) { setDraft(null); inputRef.current?.blur(); } else commit(); }
-              if (e.key === 'Escape') setDraft(null);
-            }}
+            onEnter={() => { if (instant) setDraft(null); else commit(); }}
+            onEscape={() => setDraft(null)}
           />
           <span className="ecard__unit">{unit}</span>
         </label>
@@ -609,14 +608,13 @@ const NumField: React.FC<{
     <div className="ecard__num">
       {label && <div className="ecard__num-label">{label}</div>}
       <label className={`ecard__field${accent ? ' ecard__field--accent' : ''}${draft != null ? ' ecard__field--active' : ''}`}>
-        <input
-          type="number" inputMode="numeric" min="0"
+        <NumInput
+          label={`${label ?? placeholder ?? ''}, ${t('re.cm')}`.replace(/^, /, '')}
           value={draft ?? (placeholder ? '' : String(shown))}
           placeholder={placeholder}
-          onChange={e => setDraft(e.target.value)}
-          onFocus={e => e.target.select()}
+          onChange={setDraft}
           onBlur={commit}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDraft(null); }}
+          onEscape={() => setDraft(null)}
         />
         <span className="ecard__unit">{t('re.cm')}</span>
       </label>
