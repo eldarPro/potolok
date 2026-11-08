@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Project } from '../types';
+import { advanceOf, fmtAdvanceDate, remainingAfter } from './advance';
 import { EstimateSide, ProjectEstimate, lineTotal, roomCorners } from './pricing';
 import { fmtRub, itemTitle, lineCalc, sectionedItems } from './estimateFormat';
 import regularUrl from '../assets/fonts/NotoSans-Regular.ttf?url';
@@ -98,24 +99,52 @@ export async function buildEstimatePdf(project: Project, est: ProjectEstimate, s
     y += 2;
   });
 
+  // own lines: works without a room, a block of their own after the rooms
+  const lines = side === 'client' ? est.pricing.clientLines : est.pricing.workerLines;
+  const linesSum = lines.reduce((sum, l) => sum + l.amount, 0);
+  const amount = (v: number) => (v < 0 ? `${MINUS}${fmtRub(-v)}` : fmtRub(v));
+  if (lines.length > 0) {
+    ensure(14);
+    font(12, true);
+    doc.text(t('sum.extra'), MARGIN, y);
+    right(amount(linesSum), y);
+    y += 7;
+    for (const l of lines) {
+      ensure(7);
+      font(10.5);
+      const title = doc.splitTextToSize(l.title, 120) as string[];
+      doc.text(title, MARGIN + 4, y);
+      right(amount(l.amount), y);
+      y += 4.6 * title.length + 2;
+    }
+    y += 2;
+  }
+
   rule(); y += 7;
   if (side === 'client') {
     const p = est.pricing;
-    if (est.discount > 0 || p.clientLines.length > 0) {
-      row(t('sum.subtotal'), fmtRub(est.clientSubtotal));
-      if (est.discount > 0) row(t('sum.discount', { pct: p.discountPct }), `${MINUS}${fmtRub(est.discount)}`);
-      for (const l of p.clientLines) row(l.title, signed(l.amount));
+    if (est.discount > 0 || lines.length > 0) {
+      row(t('sum.rooms'), fmtRub(est.clientSubtotal));
+      if (est.discount > 0) row(t('sum.discountRooms', { pct: p.discountPct }), `${MINUS}${fmtRub(est.discount)}`);
+      if (lines.length > 0) row(t('sum.extra'), signed(linesSum));
       y += 2;
     }
-    row(t('sum.totalLabel'), fmtRub(est.clientTotal), 15, true);
+    const adv = advanceOf(project);
+    if (adv) {
+      row(t(est.discount > 0 || lines.length > 0 ? 'sum.total' : 'adv.cost'), fmtRub(est.clientTotal));
+      row(t('adv.pdfRow', { date: fmtAdvanceDate(adv.date, true) }), `${MINUS}${fmtRub(adv.amount)}`);
+      y += 2;
+      row(t('adv.left'), fmtRub(remainingAfter(est.clientTotal, adv)), 15, true);
+    } else {
+      row(t('sum.totalLabel'), fmtRub(est.clientTotal), 15, true);
+    }
     font(10, false, GREY);
     const sqm = est.rooms.reduce((s, r) => s + r.room.areaSqm, 0);
     doc.text(`(${sqm.toFixed(2)} м² ${t('pdf.totalArea')})`, MARGIN, y);
   } else {
-    const lines = est.pricing.workerLines;
     if (lines.length > 0) {
-      row(t('sum.subtotal'), fmtRub(est.workerSubtotal));
-      for (const l of lines) row(l.title, signed(l.amount));
+      row(t('sum.rooms'), fmtRub(est.workerSubtotal));
+      row(t('sum.extra'), signed(linesSum));
       y += 2;
     }
     row(t('pdf.workerPay'), fmtRub(est.workerTotal), 15, true);

@@ -23,6 +23,13 @@
   margin-top: 0;
 }
 
+.project-detail-hero__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .project-detail-hero__status {
   height: 30px;
   padding: 0 10px 0 12px;
@@ -466,4 +473,9 @@
 .new-room-modal__action-btn {
   flex: 1;
   padding: 14px;
+}
+
+.project-detail-totals__stat small.project-detail-totals__left {
+  color: var(--color-success);
+  font-weight: 600;
 }

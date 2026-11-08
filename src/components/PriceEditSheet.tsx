@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { IonModal } from '@ionic/react';
-import { EstimateItem, ItemPrices, hasCorners } from '../lib/pricing';
+import { EstimateItem, EstimateSide, ItemPrices, changedFor, hasCorners, resetSide } from '../lib/pricing';
 import { KIND_CATALOG_KEY, fmtRub, itemTitle, unitLabel } from '../lib/estimateFormat';
 import { useT } from '../lib/i18n';
 import ActionButton from './ActionButton';
@@ -10,10 +10,10 @@ interface Props {
   /** the item to edit; null keeps the sheet closed */
   item: EstimateItem | null;
   roomsCount: number;
+  /** client: only what the client pays; worker: only the crew rate — the other side is kept */
+  side: EstimateSide;
   onClose: () => void;
   onSave: (prices: ItemPrices) => void;
-  /** back to the prices copied from the price list */
-  onReset: () => void;
 }
 
 type Draft = Record<keyof ItemPrices, string>;
@@ -29,7 +29,7 @@ const num = (s: string) => {
 };
 
 /** Bottom sheet that sets one item's price for the whole project */
-const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, onReset }) => {
+const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, side, onClose, onSave }) => {
   const { t } = useT();
   const [draft, setDraft] = useState<Draft | null>(null);
 
@@ -64,10 +64,10 @@ const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, on
 
   const save = () => {
     if (!draft) return;
-    onSave({
-      price: num(draft.price), priceCorner: num(draft.priceCorner),
-      priceInstall: num(draft.priceInstall), priceInstallCorner: num(draft.priceInstallCorner),
-    });
+    if (!item) return;
+    onSave(side === 'client'
+      ? { ...item.prices, price: num(draft.price), priceCorner: num(draft.priceCorner) }
+      : { ...item.prices, priceInstall: num(draft.priceInstall), priceInstallCorner: num(draft.priceInstallCorner) });
   };
 
   return (
@@ -76,7 +76,7 @@ const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, on
       onDidDismiss={onClose}
       breakpoints={[0, 1]}
       initialBreakpoint={1}
-      className="price-sheet"
+      className={`price-sheet${side === 'worker' ? ' price-sheet--worker' : ''}`}
     >
       {item && draft && (
         <div className="price-sheet__content">
@@ -85,18 +85,24 @@ const PriceEditSheet: React.FC<Props> = ({ item, roomsCount, onClose, onSave, on
             {t(KIND_CATALOG_KEY[item.kind])} · {t('pe.rooms', { n: roomsCount })}
           </div>
 
-          <div className="price-sheet__group">{t('pe.client')}</div>
-          {field('price', t('pe.price', { u }))}
-          {corners && field('priceCorner', t('pe.priceCorner'))}
-
-          <div className="price-sheet__group price-sheet__group--worker">{t('pe.worker')}</div>
-          {field('priceInstall', t('pe.install', { u }))}
-          {corners && field('priceInstallCorner', t('pe.installCorner'))}
+          {side === 'client' ? (
+            <>
+              <div className="price-sheet__group">{t('pe.client')}</div>
+              {field('price', t('pe.price', { u }))}
+              {corners && field('priceCorner', t('pe.priceCorner'))}
+            </>
+          ) : (
+            <>
+              <div className="price-sheet__group price-sheet__group--worker">{t('pe.worker')}</div>
+              {field('priceInstall', t('pe.install', { u }))}
+              {corners && field('priceInstallCorner', t('pe.installCorner'))}
+            </>
+          )}
 
           <div className="price-sheet__note">{t('pe.scope')}</div>
 
           <div className="price-sheet__footer">
-            <button className="price-sheet__btn" onClick={onReset} disabled={!item.overridden}>
+            <button className="price-sheet__btn" onClick={() => onSave(resetSide(item, side))} disabled={!changedFor(item, side)}>
               {t('pe.reset')}
             </button>
             <ActionButton expand={false} solid onClick={save} className="price-sheet__save">

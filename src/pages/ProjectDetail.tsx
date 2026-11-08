@@ -24,6 +24,8 @@ import { workshopIcon } from '../lib/icons';
 import { isDrawn } from '../lib/shrink';
 import { StatusPill, useStatusMenu } from '../components/ProjectStatus';
 import { statusOf } from '../lib/projectStatus';
+import AdvanceSheet, { AdvanceChip } from '../components/AdvanceSheet';
+import { advanceOf, remainingAfter } from '../lib/advance';
 import { useT } from '../lib/i18n';
 import './ProjectDetail.css';
 
@@ -58,6 +60,7 @@ const ProjectDetail: React.FC = () => {
   const [editNotes, setEditNotes] = useState('');
   const [editError, setEditError] = useState('');
   const [workshop, setWorkshop] = useState<'all' | string | null>(null);
+  const [showAdvance, setShowAdvance] = useState(false);
 
   const load = () => setProject(getProject(id));
   useEffect(() => { load(); }, [id]);
@@ -132,6 +135,7 @@ const ProjectDetail: React.FC = () => {
   const totalPerimeterM = project.rooms.reduce((s, r) => s + r.perimeterM, 0);
   const pricing = projectPricing(project);
   const totalPrice = projectEstimate(project).clientTotal;
+  const advance = advanceOf(project);
   const drawnCount = project.rooms.filter(r => r.areaSqm > 0).length;
   const tel = (project.phone ?? '').replace(/[^\d+]/g, '');
 
@@ -157,11 +161,14 @@ const ProjectDetail: React.FC = () => {
       <IonContent className="project-detail-content">
         {/* ── Client ── */}
         <div className="blue-hero project-detail-hero">
-          <StatusPill
-            status={statusOf(project)}
-            onClick={() => statusMenu(project, setProject)}
-            className="project-detail-hero__status"
-          />
+          <div className="project-detail-hero__chips">
+            <StatusPill
+              status={statusOf(project)}
+              onClick={() => statusMenu(project, setProject)}
+              className="project-detail-hero__status"
+            />
+            <AdvanceChip project={project} onClick={() => setShowAdvance(true)} />
+          </div>
           {(project.phone || project.address) && (
             <div className="project-detail-hero__info">
               {project.phone && <span><IonIcon icon={callOutline} />{project.phone}</span>}
@@ -199,7 +206,9 @@ const ProjectDetail: React.FC = () => {
         <div className="project-detail-totals card">
           <div className="project-detail-totals__stat project-detail-totals__stat--price">
             <b className={totalPrice > 0 ? '' : 'project-detail-totals__none'}>{totalPrice > 0 ? formatRub(totalPrice) : '— ₽'}</b>
-            <small>{t('pd.approxShort')}</small>
+            {advance && totalPrice > 0
+              ? <small className="project-detail-totals__left">{t('adv.leftShort', { v: Math.round(remainingAfter(totalPrice, advance)).toLocaleString('ru') })}</small>
+              : <small>{t('pd.approxShort')}</small>}
           </div>
           <div className="project-detail-totals__stat">
             <b className={totalSqm > 0 ? '' : 'project-detail-totals__none'}>{totalSqm.toFixed(1)}</b>
@@ -218,6 +227,14 @@ const ProjectDetail: React.FC = () => {
             {t('pd.estimate')}
           </button>
         </div>
+
+        <AdvanceSheet
+          project={project}
+          total={totalPrice}
+          isOpen={showAdvance}
+          onClose={() => setShowAdvance(false)}
+          onSaved={setProject}
+        />
 
         <button
           className="project-detail-workshop"
@@ -358,7 +375,7 @@ const ProjectDetail: React.FC = () => {
 
 
 
-      <WorkshopSheet project={project} target={workshop} onClose={() => setWorkshop(null)} />
+      <WorkshopSheet project={project} target={workshop} onClose={() => setWorkshop(null)} onChange={p => { upsertProject(p); setProject(p); }} />
 
       <IonModal
         isOpen={showEditModal}

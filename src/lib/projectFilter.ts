@@ -1,41 +1,52 @@
 import { Project } from '../types';
+import { advanceOf } from './advance';
 
-export type PeriodFilter = 'all' | 'today' | 'week' | 'month' | 'quarter';
+export type PeriodFilter = 'all' | 'today' | 'week' | 'month' | 'quarter' | 'custom';
 export type DrawingFilter = 'all' | 'with' | 'without';
+export type AdvanceFilter = 'all' | 'with' | 'without';
 export type ProjectSort = 'new' | 'old' | 'sumDesc' | 'sumAsc' | 'name';
 
 export interface ProjectFilters {
   period: PeriodFilter;
+  /** period «custom»: YYYY-MM-DD, both ends included; null = open end */
+  dateFrom: string | null;
+  dateTo: string | null;
   drawing: DrawingFilter;
+  advance: AdvanceFilter;
   /** null = no bound */
   sumMin: number | null;
   sumMax: number | null;
-  /** no phone or no address yet */
-  incomplete: boolean;
   sort: ProjectSort;
 }
 
 export const DEFAULT_FILTERS: ProjectFilters = {
-  period: 'all', drawing: 'all', sumMin: null, sumMax: null, incomplete: false, sort: 'new',
+  period: 'all', dateFrom: null, dateTo: null, drawing: 'all', advance: 'all', sumMin: null, sumMax: null, sort: 'new',
 };
 
-/** How many filters differ from the defaults; sort doesn't count */
+/** How many filters differ from the defaults; sort doesn't count (nor the status — the tabs show it) */
 export const activeFilterCount = (f: ProjectFilters) =>
-  (f.period !== 'all' ? 1 : 0) +
+  (f.period !== 'all' && (f.period !== 'custom' || f.dateFrom || f.dateTo) ? 1 : 0) +
   (f.drawing !== 'all' ? 1 : 0) +
-  (f.sumMin !== null || f.sumMax !== null ? 1 : 0) +
-  (f.incomplete ? 1 : 0);
+  (f.advance !== 'all' ? 1 : 0) +
+  (f.sumMin !== null || f.sumMax !== null ? 1 : 0);
 
 /** A room counts as drawn once it has a closed contour */
 export const hasDrawing = (p: Project) => p.rooms.some(r => r.points.length >= 3);
 
 export const projectDate = (p: Project) => p.updatedAt || p.createdAt;
 
-const PERIOD_DAYS: Record<Exclude<PeriodFilter, 'all'>, number> = { today: 0, week: 7, month: 30, quarter: 90 };
+const PERIOD_DAYS: Record<Exclude<PeriodFilter, 'all' | 'custom'>, number> = { today: 0, week: 7, month: 30, quarter: 90 };
 
 /** Midnight `days` days before `now`; projects dated on or after it are in the period */
-const periodStart = (period: Exclude<PeriodFilter, 'all'>, now: Date) =>
+const periodStart = (period: Exclude<PeriodFilter, 'all' | 'custom'>, now: Date) =>
   new Date(now.getFullYear(), now.getMonth(), now.getDate() - PERIOD_DAYS[period]).getTime();
+
+/** Local midnight of a YYYY-MM-DD day (+ `plus` days); null for no day */
+const dayStart = (day: string | null, plus = 0) => {
+  if (!day) return null;
+  const [y, m, d] = day.split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d + plus).getTime() : null;
+};
 
 const time = (iso: string) => {
   const v = new Date(iso).getTime();
@@ -48,13 +59,18 @@ export function filterProjects(
   price: (p: Project) => number,
   now = new Date(),
 ): Project[] {
-  const from = f.period === 'all' ? null : periodStart(f.period, now);
+  const custom = f.period === 'custom';
+  const from = f.period === 'all' ? null : f.period === 'custom' ? dayStart(f.dateFrom) : periodStart(f.period, now);
+  // the «to» day is included: anything before the next midnight
+  const to = custom && f.dateTo ? dayStart(f.dateTo, 1) : null;
   const list = projects.filter(p => {
-    if (from !== null && time(projectDate(p)) < from) return false;
+    const d = time(projectDate(p));
+    if (from !== null && d < from) return false;
+    if (to !== null && d >= to) return false;
+    if (f.advance !== 'all' && !!advanceOf(p) !== (f.advance === 'with')) return false;
     if (f.drawing !== 'all' && hasDrawing(p) !== (f.drawing === 'with')) return false;
     if (f.sumMin !== null && price(p) < f.sumMin) return false;
     if (f.sumMax !== null && price(p) > f.sumMax) return false;
-    if (f.incomplete && p.phone.trim() && p.address.trim()) return false;
     return true;
   });
 

@@ -1,0 +1,162 @@
+/* ── Chip next to the status in the project hero ── */
+.adv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px 0 12px;
+  border: none;
+  border-radius: 15px;
+  background: #DCFCE7;
+  color: #15803D;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.adv-chip ion-icon {
+  font-size: 14px;
+  margin-right: -2px;
+}
+
+.adv-chip--empty {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.adv-chip:active {
+  opacity: 0.8;
+}
+
+/* ── Sheet ── */
+.adv-sheet {
+  --height: auto;
+  --border-radius: 20px 20px 0 0;
+  --box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  --background: var(--color-surface);
+}
+
+.adv-sheet__content {
+  padding: 20px 16px calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adv-sheet__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.adv-sheet__sub {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: -8px;
+}
+
+.adv-sheet__amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 2px solid var(--color-primary);
+  border-radius: 14px;
+}
+
+.adv-sheet__amount input {
+  max-width: 100%;
+  min-width: 2ch;
+  border: none;
+  outline: none;
+  background: none;
+  text-align: center;
+  font: inherit;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--color-text);
+}
+
+.adv-sheet__amount span {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.adv-sheet__seg button {
+  flex: 1;
+  height: 34px;
+  border: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.adv-sheet__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.adv-sheet__seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--color-bg);
+}
+
+.adv-sheet__seg button {
+  border-radius: 10px;
+  background: none;
+  color: var(--color-text-secondary);
+}
+
+.adv-sheet__seg button.on {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.adv-sheet__date {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 6px 0 14px;
+  border-radius: 12px;
+  background: var(--color-bg);
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.adv-sheet__date span {
+  flex: 1;
+}
+
+.adv-sheet__date input {
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: right;
+}
+
+.adv-sheet__remove {
+  height: 38px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-danger, #EF4444);
+}

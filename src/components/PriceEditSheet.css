@@ -108,3 +108,8 @@
   flex: 1.3;
   padding: 14px;
 }
+
+/* crew rates: green like the crew tab */
+.price-sheet--worker .price-sheet__save.action-btn--solid {
+  background: var(--color-worker);
+}

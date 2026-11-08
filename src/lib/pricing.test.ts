@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CatalogItem, NicheItem, Project, Room, RoomNichePath } from '../types';
-import { emptyPricing, lineTotal, projectEstimate, roomItems, withPrices } from './pricing';
+import { changedFor, emptyPricing, lineTotal, projectEstimate, resetSide, resetSideAll, roomItems, withPrices } from './pricing';
 
 const fabric: CatalogItem = { id: 'f1', title: 'Матовое белое', price: 500, priceCorner: 150, priceInstall: 200, priceInstallCorner: 50, isDefault: true, color: '', description: '' };
 const profile: CatalogItem = { id: 'p1', title: 'ПВХ', price: 150, priceCorner: 80, priceInstall: 60, priceInstallCorner: 30, isDefault: true, color: '', description: '' };
@@ -76,6 +76,23 @@ describe('projectEstimate', () => {
     expect(est.discount).toBe(est.clientSubtotal * 0.1);
     expect(est.clientTotal).toBe(est.clientSubtotal * 0.9 + 500);
     expect(est.workerTotal).toBe(est.workerSubtotal + 1000);
+  });
+});
+
+describe('client prices and crew rates apart', () => {
+  it('resets one side and keeps the other', () => {
+    const f = roomItems(rect('r', 5, 4, 0)).find(i => i.kind === 'fabric')!;
+    const both = withPrices(emptyPricing(), f, { ...f.base, price: 520, priceInstall: 250 });
+    const edited = projectEstimate(project([rect('r', 5, 4, 0)], both)).rooms[0].items.find(i => i.kind === 'fabric')!;
+    expect(changedFor(edited, 'client')).toBe(true);
+    expect(changedFor(edited, 'worker')).toBe(true);
+    expect(resetSide(edited, 'worker')).toEqual({ ...f.base, price: 520 });
+
+    const ratesBack = resetSideAll(both, [edited], 'worker');
+    const after = projectEstimate(project([rect('r', 5, 4, 0)], ratesBack)).rooms[0].items.find(i => i.kind === 'fabric')!;
+    expect(after.prices.price).toBe(520);
+    expect(after.prices.priceInstall).toBe(f.base.priceInstall);
+    expect(changedFor(after, 'worker')).toBe(false);
   });
 });
 

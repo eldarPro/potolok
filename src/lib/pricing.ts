@@ -82,11 +82,24 @@ export const withPrices = (pricing: ProjectPricing, item: EstimateItem, prices: 
   return { ...pricing, overrides };
 };
 
+/** The prices one side of the estimate is billed at */
+export const sideKeys = (side: EstimateSide): (keyof ItemPrices)[] =>
+  side === 'client' ? ['price', 'priceCorner'] : ['priceInstall', 'priceInstallCorner'];
+
 /** Whether the project changed the prices this side of the estimate is billed at */
-export const changedFor = (item: EstimateItem, side: EstimateSide) => {
-  const keys: (keyof ItemPrices)[] = side === 'client' ? ['price', 'priceCorner'] : ['priceInstall', 'priceInstallCorner'];
-  return keys.some(k => item.prices[k] !== item.base[k]);
+export const changedFor = (item: EstimateItem, side: EstimateSide) =>
+  sideKeys(side).some(k => item.prices[k] !== item.base[k]);
+
+/** The item's prices with one side back to the price list, the other side kept */
+export const resetSide = (item: EstimateItem, side: EstimateSide): ItemPrices => {
+  const next = { ...item.prices };
+  for (const k of sideKeys(side)) next[k] = item.base[k];
+  return next;
 };
+
+/** Every item of the project with one side back to the price list */
+export const resetSideAll = (pricing: ProjectPricing, items: EstimateItem[], side: EstimateSide): ProjectPricing =>
+  items.filter(i => changedFor(i, side)).reduce((p, i) => withPrices(p, i, resetSide(i, side)), pricing);
 
 export const lineTotal = (item: EstimateItem, side: EstimateSide) => side === 'client'
   ? item.prices.price * item.qty + item.prices.priceCorner * item.corners

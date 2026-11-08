@@ -151,3 +151,13 @@
   font-weight: 600;
   font-family: inherit;
 }
+
+/* «Ставки» — opened from the crew tab, green like it */
+.blue-header.prices-header--worker ion-toolbar {
+  --background: var(--color-worker);
+}
+
+.prices-content--worker .prices-add,
+.prices-content--worker .prices-group {
+  color: var(--color-worker);
+}

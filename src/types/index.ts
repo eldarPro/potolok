@@ -241,6 +241,20 @@ export interface Room {
   showDiagonals?: boolean;
   /** Diagonals hidden one by one (diagonalKey) */
   hiddenDiagonals?: string[];
+  /** This room's own film shrink for the workshop; unset — the order's */
+  shrink?: Shrink;
+}
+
+/**
+ * Film shrink for the workshop order, in %: one figure for the whole sheet,
+ * or — film shrinks differently along and across the roll — one along the
+ * drawing's length (left to right) and one along its width (top to bottom).
+ */
+export interface Shrink {
+  pct: number;
+  axes?: { x: number; y: number };
+  /** one percent in use while `axes` stays kept for switching back */
+  one?: boolean;
 }
 
 // --- Project pricing (layered over the price list) ---
@@ -268,6 +282,16 @@ export interface ProjectPricing {
   workerLines: EstimateAdjustment[];
 }
 
+export type AdvanceMethod = 'transfer' | 'cash' | 'card';
+
+/** Prepayment the client sent before the work; counted toward the estimate total */
+export interface ProjectAdvance {
+  amount: number;
+  /** YYYY-MM-DD */
+  date: string;
+  method: AdvanceMethod;
+}
+
 /** approval — set on creation; the rest the master sets by hand */
 export type ProjectStatus = 'approval' | 'inWork' | 'done' | 'cancelled';
 
@@ -283,6 +307,7 @@ export interface Project {
   pricing?: ProjectPricing;
   /** missing on projects saved before statuses existed = approval */
   status?: ProjectStatus;
+  advance?: ProjectAdvance;
 }
 
 export interface MasterProfile {

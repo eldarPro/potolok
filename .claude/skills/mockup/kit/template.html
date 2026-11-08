@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Мокап</title>
+<link rel="stylesheet" href="../../.claude/skills/mockup/kit/kit.css">
+<script src="../../.claude/skills/mockup/kit/kit.js"></script>
+<style>
+/* стили, специфичные для этого мокапа */
+</style>
+</head><body>
+
+<!-- Заголовок группы — когда на листе несколько вариантов одного экрана -->
+<div class="group">Экран проекта <small>было / вариант A / вариант B</small></div>
+
+<!-- ═══ Экран: список с итогом ═══ -->
+<div class="shot" data-name="1-object"><div class="phone">
+  <div class="hdr"><span class="bk">‹</span><div><h1>Квартира · Иванов С.</h1><p>ул. Ленина, 12 – 45</p></div>
+    <span class="chip st-approval r">Согласование</span></div>
+  <div class="body">
+    <div class="card pic"><svg id="plan" width="354" height="220"></svg></div>
+    <div class="card tight" id="rooms"></div>
+  </div>
+  <div class="foot"><div class="sum"><span>3 комнаты · 42,6 м²</span><b>71 716 ₽</b></div><div class="btn">Смета</div></div>
+</div><div class="cap"><span class="pick">A</span>Объект — план и список<small>Одна строка о том, что это даёт мастеру по сравнению с тем, как сейчас.</small></div></div>
+
+<!-- ═══ Экран: параметры + поля размеров + предупреждение ═══ -->
+<div class="shot" data-name="2-detail"><div class="phone">
+  <div class="hdr"><span class="bk">‹</span><div><h1>Зал</h1><p>5 стен · 18,4 м²</p></div><span class="act r">Готово</span></div>
+  <div class="body">
+    <div class="tabs"><div class="a">Замер</div><div>Материалы</div></div>
+    <div class="grid">
+      <div class="f"><label>Стена AB</label><div>420</div></div>
+      <div class="f on"><label>Стена BC</label><div>385</div></div>
+      <div class="f err"><label>Диагональ AC</label><div>612</div></div>
+    </div>
+    <div class="warn">⚠️ <b>Диагональ не сходится на 4 см.</b> Перемерь AC или стену BC.</div>
+    <div class="card tight">
+      <div class="opt">Полотно<div class="v">MSD Premium, мат<small>320 см, белое</small></div></div>
+      <div class="opt">Профиль<div class="v chg">Теневой EuroKraab<small>цена проекта</small></div></div>
+      <div class="opt">Усадка<div class="v ok">7 %</div></div>
+    </div>
+    <div class="seg"><div class="a">Мат</div><div>Сатин</div><div>Глянец</div></div>
+  </div>
+  <div class="foot"><div class="btn o f1">Отмена</div><div class="btn f2">Применить</div></div>
+</div><div class="cap"><span class="pick">B</span>Комната — замер и материалы<small>Поля размеров — только наша клавиатура NumPad.</small></div></div>
+
+<!-- ═══ Экран: шторка над NumPad ═══ -->
+<div class="shot" data-name="3-sheet"><div class="phone">
+  <div class="hdr blue"><span class="bk">‹</span><div><h1>Смета</h1><p>Квартира · Иванов С.</p></div></div>
+  <div class="body">
+    <div class="tabs"><div class="a">Клиенту</div><div>Бригаде</div></div>
+    <div class="card"><table class="est" id="est"></table></div>
+  </div>
+  <div class="backdrop"></div>
+  <div class="sheet np">
+    <div class="title">Аванс</div><div class="sub">Итого по смете 71 716 ₽</div>
+    <div class="grid g2"><div class="f on"><label>Сумма</label><div>20 000</div></div><div class="f"><label>Дата</label><div>08.11</div></div></div>
+    <div class="seg"><div class="a">Перевод</div><div>Наличные</div><div>Карта</div></div>
+  </div>
+  <div id="np"></div>
+</div><div class="cap">Шторка и NumPad<small>Шторка поверх экрана, клавиатура поверх всего, экран не сжимается.</small></div></div>
+
+<script>
+// ── план ──
+(() => {
+  const pts = [[40, 30], [314, 30], [314, 150], [200, 150], [200, 196], [40, 196]];
+  let s = poly(pts);
+  s += lab(177, 30, '420') + lab(314, 90, '185', { on: 1 }) + lab(120, 196, '250');
+  s += badge(60, 50, 1);
+  svg('plan', s);
+})();
+document.getElementById('rooms').innerHTML = list([
+  { n: 1, title: 'Зал', sub: 'MSD мат · 18,4 м²', right: rub(32400), rightSub: '✓ замерен' },
+  { n: 2, title: 'Спальня', sub: 'сатин · 14,1 м²', right: rub(24100), tag: 'двухуровн.' },
+  { n: 3, title: 'Кухня', sub: 'не замерена', right: '+ замер', numCls: 'o' },
+]);
+document.getElementById('est').innerHTML = estRows([
+  ['Полотно MSD мат', '18,4 м² × 650', 11960], ['Профиль теневой', '17,2 м × 900', 15480, 'chg'], ['Споты', '6 шт', 4800],
+]);
+document.getElementById('np').innerHTML = numpad('Сумма аванса, ₽', { enter: 'Готово' });
+</script>
+</body></html>

@@ -4,11 +4,11 @@ import {
   IonButtons, IonBackButton, IonIcon, useIonViewWillEnter,
 } from '@ionic/react';
 import { chevronBackOutline, addOutline, chevronForwardOutline } from 'ionicons/icons';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { getProject, saveProjectPricing } from '../lib/storage';
 import { uuid } from '../lib/uuid';
 import { EstimateAdjustment, Project, ProjectPricing } from '../types';
-import { EstimateItem, ItemPrices, projectEstimate, projectItems, roomsUsing, withPrices } from '../lib/pricing';
+import { EstimateItem, ItemPrices, changedFor, projectEstimate, projectItems, resetSideAll, roomsUsing, withPrices } from '../lib/pricing';
 import { KIND_CATALOG_KEY, fmtRub, itemTitle, unitLabel } from '../lib/estimateFormat';
 import PriceEditSheet from '../components/PriceEditSheet';
 import { useT } from '../lib/i18n';
@@ -21,6 +21,9 @@ type LinesKey = 'clientLines' | 'workerLines';
 const ProjectPrices: React.FC = () => {
   const { t } = useT();
   const { id } = useParams<{ id: string }>();
+  // «Цены» from the client tab, «Ставки» from the crew tab: each side sees only its own settings
+  const worker = new URLSearchParams(useLocation().search).get('side') === 'worker';
+  const side = worker ? 'worker' : 'client';
   const [project, setProject] = useState<Project | null>(null);
   const [editing, setEditing] = useState<EstimateItem | null>(null);
   const prompt = usePrompt();
@@ -73,7 +76,7 @@ const ProjectPrices: React.FC = () => {
   const openLine = async (key: LinesKey, line: EstimateAdjustment | null) => {
     const v = await prompt({
       title: t(key === 'clientLines' ? 'pp.clientLines' : 'pp.workerLines'),
-      message: t('pp.lineHint'),
+      message: t(key === 'clientLines' ? 'pp.lineHint' : 'pp.lineHintWorker'),
       confirmText: t('common.save'),
       fields: [
         { name: 'title', placeholder: t('pp.lineTitle'), value: line?.title ?? '', required: true },
@@ -85,8 +88,13 @@ const ProjectPrices: React.FC = () => {
   };
 
   const askReset = async () => {
-    const ok = await confirm({ title: t('pp.resetTitle'), message: t('pp.resetMsg'), confirmText: t('pe.reset'), tone: 'warning' });
-    if (ok) save({ ...pricing, overrides: {} });
+    const ok = await confirm({
+      title: t(worker ? 'pp.resetTitleWorker' : 'pp.resetTitle'),
+      message: t(worker ? 'pp.resetMsgWorker' : 'pp.resetMsg'),
+      confirmText: t('pe.reset'),
+      tone: 'warning',
+    });
+    if (ok) save(resetSideAll(pricing, items, side));
   };
 
   const linesCard = (key: LinesKey, titleKey: string) => (
@@ -107,23 +115,23 @@ const ProjectPrices: React.FC = () => {
     </div>
   );
 
-  const changedCount = items.filter(i => i.overridden).length;
+  const changedCount = items.filter(i => changedFor(i, side)).length;
 
   return (
     <IonPage>
-      <IonHeader className="blue-header">
+      <IonHeader className={`blue-header${worker ? ' prices-header--worker' : ''}`}>
         <IonToolbar>
           <IonButtons slot="start">
-            <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}/summary`} />
+            <IonBackButton text="" icon={chevronBackOutline} defaultHref={`/project/${id}/summary${worker ? '?tab=worker' : ''}`} />
           </IonButtons>
-          <IonTitle>{t('pp.title')}</IonTitle>
+          <IonTitle>{t(worker ? 'pp.titleWorker' : 'pp.title')}</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent className="prices-content">
+      <IonContent className={`prices-content${worker ? ' prices-content--worker' : ''}`}>
         <div className="prices-list">
           {/* ── Client adjustments ── */}
-          <div className="card prices-card">
+          {!worker && <div className="card prices-card">
             <div className="prices-card__label">{t('pp.clientAdj')}</div>
             <label className="prices-row prices-row--input">
               <span className="prices-row__name">{t('pp.discount')}</span>
@@ -139,10 +147,9 @@ const ProjectPrices: React.FC = () => {
             {est.discount > 0 && (
               <div className="prices-hint">{t('sum.subtotal')} {fmtRub(est.clientSubtotal)} · −{fmtRub(est.discount)}</div>
             )}
-          </div>
+          </div>}
 
-          {linesCard('clientLines', 'pp.clientLines')}
-          {linesCard('workerLines', 'pp.workerLines')}
+          {worker ? linesCard('workerLines', 'pp.workerLines') : linesCard('clientLines', 'pp.clientLines')}
 
           {/* ── Item prices ── */}
           <div className="card prices-card">
@@ -157,12 +164,18 @@ const ProjectPrices: React.FC = () => {
                   <button className="prices-row" onClick={() => setEditing(item)}>
                     <span className="prices-row__name">
                       {itemTitle(item, t)}
-                      {item.overridden && <span className="prices-badge">{t('pp.changed')}</span>}
-                      <small>{t('pp.install', { v: `${fmtRub(item.prices.priceInstall)}/${u}` })}</small>
+                      {changedFor(item, side) && <span className="prices-badge">{t('pp.changed')}</span>}
+                      <small>
+                        {worker
+                          ? t('pp.clientPrice', { v: `${fmtRub(item.prices.price)}/${u}` })
+                          : t('pp.install', { v: `${fmtRub(item.prices.priceInstall)}/${u}` })}
+                      </small>
                     </span>
                     <span className="prices-row__value">
-                      {fmtRub(item.prices.price)}/{u}
-                      {item.overridden && <small>{t('pp.catalog', { v: fmtRub(item.base.price) })}</small>}
+                      {fmtRub(worker ? item.prices.priceInstall : item.prices.price)}/{u}
+                      {changedFor(item, side) && (
+                        <small>{t('pp.catalog', { v: fmtRub(worker ? item.base.priceInstall : item.base.price) })}</small>
+                      )}
                     </span>
                     <IonIcon icon={chevronForwardOutline} className="prices-row__chevron" />
                   </button>
@@ -172,7 +185,7 @@ const ProjectPrices: React.FC = () => {
           </div>
 
           {changedCount > 0 && (
-            <button className="prices-reset" onClick={() => askReset()}>{t('pp.resetAll')}</button>
+            <button className="prices-reset" onClick={() => askReset()}>{t(worker ? 'pp.resetAllWorker' : 'pp.resetAll')}</button>
           )}
         </div>
 
@@ -180,8 +193,8 @@ const ProjectPrices: React.FC = () => {
           item={editing}
           roomsCount={editing ? roomsUsing(est, editing.itemId) : 0}
           onClose={() => setEditing(null)}
+          side={side}
           onSave={prices => editing && savePrices(editing, prices)}
-          onReset={() => editing && savePrices(editing, editing.base)}
         />
       </IonContent>
 

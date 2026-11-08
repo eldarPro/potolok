@@ -320,3 +320,76 @@
   padding-top: 9px;
   margin-top: 2px;
 }
+
+/* ── Advance ── */
+.summary-total__advance {
+  align-self: flex-start;
+  margin-top: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: #DCFCE7;
+  color: #15803D;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.summary-sums__advance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--color-success);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-sums__advance span {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-sums__advance small {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.summary-sums__advance b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.summary-sums__advance ion-icon {
+  font-size: 15px;
+  color: var(--color-text-muted);
+}
+
+.summary-margin__row--advance {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* ── Own lines block ── */
+.summary-extra {
+  padding-bottom: 8px;
+}
+
+.summary-extra .summary-room__head {
+  padding-bottom: 4px;
+}
+
+.summary-line__total--minus {
+  color: var(--color-success);
+}

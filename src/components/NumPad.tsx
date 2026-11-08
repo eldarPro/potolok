@@ -37,8 +37,9 @@ export interface NumInputProps {
   decimal?: boolean;
   /** what's being typed, shown in the pad's header */
   label?: React.ReactNode;
-  /** replace «Назад»/«Далее» with own keys (up to 3: two in the right column + bottom-right) */
-  actions?: PadAction[];
+  /** replace «Назад»/«Далее» with own keys (up to 3: two in the right column + bottom-right);
+   *  an undefined slot stays empty */
+  actions?: (PadAction | undefined)[];
   autoFocus?: boolean;
   /** the pad stays while this field is mounted: no «hide» key, a tap elsewhere doesn't close it */
   pinned?: boolean;

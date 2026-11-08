@@ -15,6 +15,8 @@ import { fmtRub, itemTitle, lineCalc, sectionedItems } from '../lib/estimateForm
 import { buildEstimatePdf, loadPdfFonts } from '../lib/estimatePdf';
 import { savePdf, sharePdf } from '../lib/sharePdf';
 import PriceEditSheet from '../components/PriceEditSheet';
+import AdvanceSheet from '../components/AdvanceSheet';
+import { advanceOf, fmtAdvanceDate, remainingAfter } from '../lib/advance';
 import { useT } from '../lib/i18n';
 import './Summary.css';
 
@@ -32,6 +34,7 @@ const Summary: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [side, setSide] = useState<EstimateSide>(query.get('tab') === 'worker' ? 'worker' : 'client');
   const [editing, setEditing] = useState<EstimateItem | null>(null);
+  const [showAdvance, setShowAdvance] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     if (!focusRoomId) return {};
     const rooms = getProject(id)?.rooms ?? [];
@@ -59,7 +62,12 @@ const Summary: React.FC = () => {
   const { pricing } = est;
   const worker = side === 'worker';
   const totalSqm = est.rooms.reduce((s, r) => s + r.room.areaSqm, 0);
-  const total = worker ? est.workerTotal : est.clientTotal;
+  const advance = advanceOf(project);
+  const left = remainingAfter(est.clientTotal, advance);
+  const total = worker ? est.workerTotal : advance ? left : est.clientTotal;
+  // own lines of this side: shown as a block of works after the rooms
+  const lines = worker ? pricing.workerLines : pricing.clientLines;
+  const linesSum = lines.reduce((sum, l) => sum + l.amount, 0);
 
   const savePrices = (item: EstimateItem, prices: ItemPrices) => {
     setProject(saveProjectPricing(project, withPrices(pricing, item, prices)));
@@ -71,7 +79,7 @@ const Summary: React.FC = () => {
   const handlePDF = async () => savePdf(await buildEstimatePdf(project, est, side, t), pdfFileName, pdfTitle);
   const handleShare = async () => sharePdf(await buildEstimatePdf(project, est, side, t), pdfFileName, pdfTitle);
 
-  const openPrices = () => router.push(`/project/${id}/prices`, 'forward', 'push');
+  const openPrices = () => router.push(`/project/${id}/prices${worker ? '?side=worker' : ''}`, 'forward', 'push');
   const date = new Date().toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
@@ -120,8 +128,15 @@ const Summary: React.FC = () => {
             <small>
               {worker
                 ? t('sum.toWorker')
-                : `${t('sum.toPay')} · ${totalSqm.toFixed(1)} м² · ${est.rooms.length} ${nRooms(est.rooms.length)}`}
+                : advance
+                  ? t('adv.leftOf', { total: fmtRub(est.clientTotal) })
+                  : `${t('sum.toPay')} · ${totalSqm.toFixed(1)} м² · ${est.rooms.length} ${nRooms(est.rooms.length)}`}
             </small>
+            {!worker && advance && (
+              <button className="summary-total__advance" onClick={() => setShowAdvance(true)}>
+                ✓ {t('adv.received', { v: fmtRub(advance.amount) })}
+              </button>
+            )}
           </div>
           <button className="summary-total__prices" onClick={openPrices}>
             <IonIcon icon={createOutline} />
@@ -138,6 +153,12 @@ const Summary: React.FC = () => {
                 <b>{fmtRub(est.clientTotal - est.workerTotal)}</b>
               </div>
               <small><IonIcon icon={lockClosedOutline} />{t('sum.marginHint')}</small>
+              {advance && (
+                <div className="summary-margin__row summary-margin__row--advance">
+                  <span>{t('adv.clientPaid')}</span>
+                  <b>{fmtRub(advance.amount)}</b>
+                </div>
+              )}
             </div>
           )}
 
@@ -186,38 +207,68 @@ const Summary: React.FC = () => {
             );
           })}
 
-          {/* ── Adjustments and the final sum ── */}
+          {/* ── Own lines: works without a room (road, debris…), a block of their own ── */}
+          {lines.length > 0 && (
+            <div className="card summary-room summary-extra">
+              <button className="summary-room__head" onClick={openPrices}>
+                <span className="summary-room__name">{t('sum.extra')}</span>
+                <span className="summary-room__total">{signedRub(linesSum).replace(/^\+/, '')}</span>
+              </button>
+              {lines.map(l => (
+                <button key={l.id} className="summary-line" onClick={openPrices}>
+                  <span className="summary-line__name">{l.title}</span>
+                  <span className={`summary-line__total${l.amount < 0 ? ' summary-line__total--minus' : ''}`}>
+                    {l.amount < 0 ? `−${fmtRub(-l.amount)}` : fmtRub(l.amount)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── The sums: rooms, discount (rooms only), extra, advance ── */}
           {!worker ? (
             <div className="card summary-sums">
-              {(est.discount > 0 || pricing.clientLines.length > 0) && (
+              {(est.discount > 0 || lines.length > 0) && (
                 <>
-                  <div className="summary-sums__row"><span>{t('sum.subtotal')}</span><span>{fmtRub(est.clientSubtotal)}</span></div>
+                  <div className="summary-sums__row"><span>{t('sum.rooms')}</span><span>{fmtRub(est.clientSubtotal)}</span></div>
                   {est.discount > 0 && (
                     <div className="summary-sums__row summary-sums__row--minus">
-                      <span>{t('sum.discount', { pct: pricing.discountPct })}</span><span>−{fmtRub(est.discount)}</span>
+                      <span>{t('sum.discountRooms', { pct: pricing.discountPct })}</span><span>−{fmtRub(est.discount)}</span>
                     </div>
                   )}
-                  {pricing.clientLines.map(l => (
-                    <div key={l.id} className={`summary-sums__row${l.amount < 0 ? ' summary-sums__row--minus' : ''}`}>
-                      <span>{l.title}</span><span>{signedRub(l.amount)}</span>
-                    </div>
-                  ))}
+                  {lines.length > 0 && (
+                    <div className="summary-sums__row"><span>{t('sum.extra')}</span><span>{signedRub(linesSum)}</span></div>
+                  )}
                 </>
               )}
-              <div className="summary-sums__row summary-sums__row--final">
-                <span>{t('sum.totalLabel')}</span><span>{fmtRub(est.clientTotal)}</span>
-              </div>
+              {advance ? (
+                <>
+                  <div className="summary-sums__row">
+                    <span>{t(est.discount > 0 || lines.length > 0 ? 'sum.total' : 'adv.cost')}</span><span>{fmtRub(est.clientTotal)}</span>
+                  </div>
+                  <button className="summary-sums__advance" onClick={() => setShowAdvance(true)}>
+                    <span>
+                      {t('adv.title')}
+                      <small>{fmtAdvanceDate(advance.date)} · {t(`adv.m.${advance.method}`).toLowerCase()}</small>
+                    </span>
+                    <b>−{fmtRub(advance.amount)}<IonIcon icon={createOutline} /></b>
+                  </button>
+                  <div className="summary-sums__row summary-sums__row--final">
+                    <span>{t('adv.left')}</span><span>{fmtRub(left)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="summary-sums__row summary-sums__row--final">
+                  <span>{t('sum.totalLabel')}</span><span>{fmtRub(est.clientTotal)}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="card summary-sums">
-              {pricing.workerLines.length > 0 && (
+              {lines.length > 0 && (
                 <>
-                  <div className="summary-sums__row"><span>{t('sum.subtotal')}</span><span>{fmtRub(est.workerSubtotal)}</span></div>
-                  {pricing.workerLines.map(l => (
-                    <div key={l.id} className={`summary-sums__row${l.amount < 0 ? ' summary-sums__row--minus' : ''}`}>
-                      <span>{l.title}</span><span>{signedRub(l.amount)}</span>
-                    </div>
-                  ))}
+                  <div className="summary-sums__row"><span>{t('sum.rooms')}</span><span>{fmtRub(est.workerSubtotal)}</span></div>
+                  <div className="summary-sums__row"><span>{t('sum.extra')}</span><span>{signedRub(linesSum)}</span></div>
                 </>
               )}
               <div className="summary-sums__row summary-sums__row--final">
@@ -227,12 +278,20 @@ const Summary: React.FC = () => {
           )}
         </div>
 
+        <AdvanceSheet
+          project={project}
+          total={est.clientTotal}
+          isOpen={showAdvance}
+          onClose={() => setShowAdvance(false)}
+          onSaved={setProject}
+        />
+
         <PriceEditSheet
           item={editing}
           roomsCount={editing ? roomsUsing(est, editing.itemId) : 0}
           onClose={() => setEditing(null)}
+          side={side}
           onSave={prices => editing && savePrices(editing, prices)}
-          onReset={() => editing && savePrices(editing, editing.base)}
         />
       </IonContent>
     </IonPage>

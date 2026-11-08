@@ -1,8 +1,9 @@
 import React from 'react';
 import { IonModal } from '@ionic/react';
 import {
-  DEFAULT_FILTERS, DrawingFilter, PeriodFilter, ProjectFilters, ProjectSort,
+  AdvanceFilter, DEFAULT_FILTERS, DrawingFilter, PeriodFilter, ProjectFilters, ProjectSort,
 } from '../lib/projectFilter';
+import { STATUSES, STATUS_COLORS, StatusTab } from '../lib/projectStatus';
 import { useT } from '../lib/i18n';
 import ActionButton from './ActionButton';
 import './ProjectFilterSheet.css';
@@ -10,14 +11,20 @@ import './ProjectFilterSheet.css';
 interface Props {
   isOpen: boolean;
   filters: ProjectFilters;
-  /** projects matching the current filters */
+  /** projects matching the current filters and status */
   found: number;
+  /** the status tab of the list — the same choice, kept in sync */
+  status: StatusTab;
+  statusCounts: Record<StatusTab, number>;
+  onStatus: (s: StatusTab) => void;
   onChange: (f: ProjectFilters) => void;
   onClose: () => void;
 }
 
-const PERIODS: PeriodFilter[] = ['all', 'today', 'week', 'month', 'quarter'];
+const PERIODS: PeriodFilter[] = ['all', 'today', 'week', 'month', 'quarter', 'custom'];
 const DRAWINGS: DrawingFilter[] = ['all', 'without', 'with'];
+const ADVANCES: AdvanceFilter[] = ['all', 'with', 'without'];
+const STATUS_TABS: StatusTab[] = ['all', ...STATUSES];
 const SORTS: ProjectSort[] = ['new', 'old', 'sumDesc', 'sumAsc', 'name'];
 
 const parseSum = (s: string) => {
@@ -26,11 +33,11 @@ const parseSum = (s: string) => {
 };
 
 /** Bottom sheet with the project list filters; changes apply immediately */
-const ProjectFilterSheet: React.FC<Props> = ({ isOpen, filters, found, onChange, onClose }) => {
+const ProjectFilterSheet: React.FC<Props> = ({ isOpen, filters, found, status, statusCounts, onStatus, onChange, onClose }) => {
   const { t } = useT();
   const set = (patch: Partial<ProjectFilters>) => onChange({ ...filters, ...patch });
 
-  const chips = <T extends string>(values: T[], current: T, label: (v: T) => string, pick: (v: T) => void) => (
+  const chips = <T extends string>(values: T[], current: T, label: (v: T) => React.ReactNode, pick: (v: T) => void) => (
     <div className="filter-sheet__chips">
       {values.map(v => (
         <button
@@ -42,6 +49,25 @@ const ProjectFilterSheet: React.FC<Props> = ({ isOpen, filters, found, onChange,
         </button>
       ))}
     </div>
+  );
+
+  const statusLabel = (s: StatusTab) => (
+    <>
+      {s !== 'all' && <i className="filter-sheet__dot" style={{ background: STATUS_COLORS[s].dot }} />}
+      {t(s === 'all' ? 'ps.all' : `ps.${s}`)}
+      <b className="filter-sheet__count">{statusCounts[s]}</b>
+    </>
+  );
+
+  const dateInput = (key: 'dateFrom' | 'dateTo') => (
+    <input
+      className="filter-sheet__input filter-sheet__input--date"
+      type="date"
+      value={filters[key] ?? ''}
+      min={key === 'dateTo' ? filters.dateFrom ?? undefined : undefined}
+      max={key === 'dateFrom' ? filters.dateTo ?? undefined : undefined}
+      onChange={e => set({ [key]: e.target.value || null })}
+    />
   );
 
   const sumInput = (key: 'sumMin' | 'sumMax', placeholder: string) => (
@@ -66,13 +92,27 @@ const ProjectFilterSheet: React.FC<Props> = ({ isOpen, filters, found, onChange,
       <div className="filter-sheet__content">
         <div className="filter-sheet__head">
           <div className="filter-sheet__title">{t('pf.title')}</div>
-          <button className="filter-sheet__reset" onClick={() => onChange(DEFAULT_FILTERS)}>
+          <button className="filter-sheet__reset" onClick={() => { onChange(DEFAULT_FILTERS); onStatus('all'); }}>
             {t('pf.reset')}
           </button>
         </div>
 
+        <div className="filter-sheet__group">{t('pf.status')}</div>
+        {chips(STATUS_TABS, status, statusLabel, onStatus)}
+
         <div className="filter-sheet__group">{t('pf.period')}</div>
         {chips(PERIODS, filters.period, v => t(`pf.period.${v}`), period => set({ period }))}
+        {filters.period === 'custom' && (
+          <div className="filter-sheet__range">
+            <span className="filter-sheet__dash">{t('pf.from')}</span>
+            {dateInput('dateFrom')}
+            <span className="filter-sheet__dash">{t('pf.to')}</span>
+            {dateInput('dateTo')}
+          </div>
+        )}
+
+        <div className="filter-sheet__group">{t('pf.advance')}</div>
+        {chips(ADVANCES, filters.advance, v => t(`pf.advance.${v}`), advance => set({ advance }))}
 
         <div className="filter-sheet__group">{t('pf.drawing')}</div>
         {chips(DRAWINGS, filters.drawing, v => t(`pf.drawing.${v}`), drawing => set({ drawing }))}
@@ -84,11 +124,6 @@ const ProjectFilterSheet: React.FC<Props> = ({ isOpen, filters, found, onChange,
           {sumInput('sumMax', t('pf.to'))}
           <span className="filter-sheet__unit">₽</span>
         </div>
-
-        <div className="filter-sheet__group">{t('pf.other')}</div>
-        {chips(['off', 'on'] as const, filters.incomplete ? 'on' : 'off',
-          v => t(v === 'on' ? 'pf.incomplete' : 'pf.anyContacts'),
-          v => set({ incomplete: v === 'on' }))}
 
         <div className="filter-sheet__group">{t('pf.sort')}</div>
         {chips(SORTS, filters.sort, v => t(`pf.sort.${v}`), sort => set({ sort }))}

@@ -49,8 +49,18 @@ describe('filterProjects', () => {
     expect(ids(filterProjects(list, f, price, now))).toEqual(['a', 'b']);
   });
 
-  it('keeps projects missing a phone or address', () => {
-    expect(ids(filterProjects(list, { ...DEFAULT_FILTERS, incomplete: true }, price, now))).toEqual(['b']);
+  it('filters by a custom period, both days included', () => {
+    const f = { ...DEFAULT_FILTERS, period: 'custom' as const };
+    expect(ids(filterProjects(list, { ...f, dateFrom: '2026-09-01', dateTo: '2026-10-24' }, price, now))).toEqual(['b', 'c']);
+    expect(ids(filterProjects(list, { ...f, dateFrom: '2026-10-01' }, price, now))).toEqual(['a', 'b']);
+    expect(ids(filterProjects(list, { ...f, dateTo: '2026-09-01' }, price, now))).toEqual(['c', 'd']);
+    expect(activeFilterCount(f)).toBe(0); // «Период» picked, no dates yet
+  });
+
+  it('filters by advance', () => {
+    const withAdv = list.map(p => p.id === 'b' ? { ...p, advance: { amount: 3000, date: '2026-10-24', method: 'cash' as const } } : p);
+    expect(ids(filterProjects(withAdv, { ...DEFAULT_FILTERS, advance: 'with' }, price, now))).toEqual(['b']);
+    expect(ids(filterProjects(withAdv, { ...DEFAULT_FILTERS, advance: 'without' }, price, now))).toEqual(['a', 'c', 'd']);
   });
 
   it('counts active filters without sort', () => {

@@ -17,6 +17,8 @@ import ProjectFilterSheet from '../components/ProjectFilterSheet';
 import { StatusPill, useStatusMenu } from '../components/ProjectStatus';
 import { STATUSES, StatusTab, byStatusTab, countByStatus, statusOf } from '../lib/projectStatus';
 import { DEFAULT_FILTERS, ProjectFilters, activeFilterCount, filterProjects, projectDate } from '../lib/projectFilter';
+import AdvanceSheet from '../components/AdvanceSheet';
+import { advanceOf, remainingAfter } from '../lib/advance';
 import { useT } from '../lib/i18n';
 import './ProjectList.css';
 
@@ -79,6 +81,9 @@ const ProjectList: React.FC = () => {
   const [shown, setShown] = useState(PAGE_SIZE);
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const statusMenu = useStatusMenu();
+  // the last project stays mounted in the sheet so it can animate out
+  const [advTarget, setAdvTarget] = useState<Project | null>(null);
+  const [advOpen, setAdvOpen] = useState(false);
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -144,6 +149,12 @@ const ProjectList: React.FC = () => {
   const changeStatus = (p: Project, slider: HTMLIonItemSlidingElement | null) => {
     slider?.close();
     statusMenu(p, updated => setProjects(list => list.map(x => (x.id === updated.id ? updated : x))));
+  };
+
+  const openAdvance = (p: Project, slider: HTMLIonItemSlidingElement | null) => {
+    slider?.close();
+    setAdvTarget(p);
+    setAdvOpen(true);
   };
 
   const loadMore = (e: CustomEvent<void>) => {
@@ -238,6 +249,7 @@ const ProjectList: React.FC = () => {
                 const sqm = projectArea(p);
                 const price = priceOf(p);
                 const status = statusOf(p);
+                const advance = advanceOf(p);
                 return (
                   <IonItemSliding key={p.id}>
                     <IonItem
@@ -273,13 +285,26 @@ const ProjectList: React.FC = () => {
                                 ? <span className="chip">{t('proj.noRooms')}</span>
                                 : sqm > 0 && <span className="chip">{sqm.toFixed(1)} м²</span>}
                             </div>
-                            {price > 0 && <div className="project-card__sum">{formatRub(price)}</div>}
+                            {price > 0 && (
+                              <div className="project-card__sum">
+                                {formatRub(price)}
+                                {advance && status !== 'cancelled' && (
+                                  <small>{t('adv.leftShort', { v: Math.round(remainingAfter(price, advance)).toLocaleString('ru') })}</small>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     </IonItem>
 
                     <IonItemOptions side="end">
+                      <IonItemOption className="project-swipe-advance" onClick={e => openAdvance(p, (e.currentTarget as HTMLElement).closest('ion-item-sliding'))}>
+                        <div className="project-swipe-option">
+                          <b className="project-swipe-option__rub">₽</b>
+                          {t('adv.title')}
+                        </div>
+                      </IonItemOption>
                       <IonItemOption color="primary" onClick={e => changeStatus(p, (e.currentTarget as HTMLElement).closest('ion-item-sliding'))}>
                         <div className="project-swipe-option">
                           <IonIcon icon={flagOutline} />
@@ -304,10 +329,23 @@ const ProjectList: React.FC = () => {
           </>
         )}
 
+        {advTarget && (
+          <AdvanceSheet
+            project={advTarget}
+            total={priceOf(advTarget)}
+            isOpen={advOpen}
+            onClose={() => setAdvOpen(false)}
+            onSaved={updated => setProjects(list => list.map(x => (x.id === updated.id ? updated : x)))}
+          />
+        )}
+
         <ProjectFilterSheet
           isOpen={filtersOpen}
           filters={filters}
-          found={filtered.length}
+          found={visible.length}
+          status={statusTab}
+          statusCounts={counts}
+          onStatus={setStatusTab}
           onChange={setFilters}
           onClose={() => setFiltersOpen(false)}
         />

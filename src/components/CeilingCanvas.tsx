@@ -2053,13 +2053,6 @@ const CeilingCanvas: React.FC<Props> = ({
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <StartOption
-                icon={createOutline}
-                color="#1E88E5"
-                title="Начертить самому"
-                subtitle="Ставьте точки на холсте вручную"
-                onClick={() => setManualStarted(true)}
-              />
               {onOpenManualMeasure && (
                 <StartOption
                   icon={shapesOutline}
@@ -2069,6 +2062,13 @@ const CeilingCanvas: React.FC<Props> = ({
                   onClick={onOpenManualMeasure}
                 />
               )}
+              <StartOption
+                icon={createOutline}
+                color="#1E88E5"
+                title="Начертить самому"
+                subtitle="Ставьте точки на холсте вручную"
+                onClick={() => setManualStarted(true)}
+              />
               {onOpenBluetooth && (
                 <StartOption
                   icon={bluetoothOutline}
