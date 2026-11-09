@@ -1,4 +1,4 @@
-System.register(["./index-legacy-w6NRxFjp.js"],function(t,e){"use strict";var n,i,r,a,s,o,l,c;return{setters:[t=>{n=t.h,i=t.C,r=t.D,a=t.n,s=t.E,o=t.G,l=t.F,c=t.x}],execute:function(){t("v",xc);
+System.register(["./index-legacy-DrCIqZey.js"],function(t,e){"use strict";var n,i,r,a,s,o,l,c;return{setters:[t=>{n=t.h,i=t.C,r=t.D,a=t.n,s=t.E,o=t.G,l=t.F,c=t.x}],execute:function(){t("v",xc);
 /**
 			 * @license
 			 * Copyright 2010-2024 Three.js Authors
